@@ -23,7 +23,7 @@ pub enum Unit {
 
 impl Unit {
     pub fn from_str(val: &str) -> Result<Unit, SimpleError> {
-        match val.to_lowercase().as_str() {
+        match val {
             "Atto" | "atto" | "a" => Ok(Unit::Atto),
             "Femto" | "femto" | "f" => Ok(Unit::Femto),
             "Pico" | "pico" | "p" => Ok(Unit::Pico),
@@ -184,10 +184,79 @@ impl RFDataFormat {
             RFDataFormat::DB => c64::from_polar(10_f64.powf(x / 20.0), f64::to_radians(y)),
         }
     }
+
+    pub fn parse_tuple(&self, xy: (f64, f64)) -> c64 {
+        self.parse(xy.0, xy.1)
+    }
 }
 
 impl fmt::Display for RFDataFormat {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.to_str())
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::math::comp_point_c64;
+
+    #[test]
+    fn parse_unit() {
+        assert_eq!(Unit::Base, Unit::from_str("").unwrap());
+        assert_eq!(Unit::Base, Unit::from_str("x").unwrap());
+        assert_eq!(Unit::Atto, Unit::from_str("atto").unwrap());
+        assert_eq!(Unit::Atto, Unit::from_str("Atto").unwrap());
+        assert_eq!(Unit::Atto, Unit::from_str("a").unwrap());
+        assert_eq!(Unit::Femto, Unit::from_str("Femto").unwrap());
+        assert_eq!(Unit::Femto, Unit::from_str("femto").unwrap());
+        assert_eq!(Unit::Femto, Unit::from_str("f").unwrap());
+        assert_eq!(Unit::Pico, Unit::from_str("Pico").unwrap());
+        assert_eq!(Unit::Pico, Unit::from_str("pico").unwrap());
+        assert_eq!(Unit::Pico, Unit::from_str("p").unwrap());
+        assert_eq!(Unit::Nano, Unit::from_str("Nano").unwrap());
+        assert_eq!(Unit::Nano, Unit::from_str("nano").unwrap());
+        assert_eq!(Unit::Nano, Unit::from_str("n").unwrap());
+        assert_eq!(Unit::Micro, Unit::from_str("Micro").unwrap());
+        assert_eq!(Unit::Micro, Unit::from_str("micro").unwrap());
+        assert_eq!(Unit::Micro, Unit::from_str("u").unwrap());
+        assert_eq!(Unit::Milli, Unit::from_str("Milli").unwrap());
+        assert_eq!(Unit::Milli, Unit::from_str("milli").unwrap());
+        assert_eq!(Unit::Milli, Unit::from_str("Mil").unwrap());
+        assert_eq!(Unit::Milli, Unit::from_str("mil").unwrap());
+        assert_eq!(Unit::Milli, Unit::from_str("m").unwrap());
+        assert_eq!(Unit::Centi, Unit::from_str("Centi").unwrap());
+        assert_eq!(Unit::Centi, Unit::from_str("centi").unwrap());
+        assert_eq!(Unit::Centi, Unit::from_str("c").unwrap());
+        assert_eq!(Unit::Kilo, Unit::from_str("Kilo").unwrap());
+        assert_eq!(Unit::Kilo, Unit::from_str("kilo").unwrap());
+        assert_eq!(Unit::Kilo, Unit::from_str("k").unwrap());
+        assert_eq!(Unit::Mega, Unit::from_str("Mega").unwrap());
+        assert_eq!(Unit::Mega, Unit::from_str("mega").unwrap());
+        assert_eq!(Unit::Mega, Unit::from_str("M").unwrap());
+        assert_eq!(Unit::Giga, Unit::from_str("Giga").unwrap());
+        assert_eq!(Unit::Giga, Unit::from_str("giga").unwrap());
+        assert_eq!(Unit::Giga, Unit::from_str("G").unwrap());
+        assert_eq!(Unit::Tera, Unit::from_str("Tera").unwrap());
+        assert_eq!(Unit::Tera, Unit::from_str("tera").unwrap());
+        assert_eq!(Unit::Tera, Unit::from_str("T").unwrap());
+    }
+
+    #[test]
+    fn parse_parameters() {
+        let input_ri = (0.958, -0.263);
+        let input_db = (55.620, -11.574);
+        let input_ma = (0.9997, -4.5700);
+
+        let exemplar_ri = c64::new(0.958, -0.263);
+        let exemplar_db = c64::new(591.668176509173182421586464390458, -121.172256857407207350291917811354);
+        let exemplar_ma = c64::new(0.996521687656456974473555257676358, -0.0796530980585618737370302058833604);
+
+        comp_point_c64(&exemplar_ri, &RFDataFormat::RI.parse(input_ri.0, input_ri.1), "RI.parse()", String::from(""));
+        comp_point_c64(&exemplar_ri, &RFDataFormat::RI.parse_tuple(input_ri), "RI.parse_tuple()", String::from(""));
+        comp_point_c64(&exemplar_db, &RFDataFormat::DB.parse(input_db.0, input_db.1), "DB.parse()", String::from(""));
+        comp_point_c64(&exemplar_db, &RFDataFormat::DB.parse_tuple(input_db), "DB.parse_tuple()", String::from(""));
+        comp_point_c64(&exemplar_ma, &RFDataFormat::MA.parse(input_ma.0, input_ma.1), "MA.parse()", String::from(""));
+        comp_point_c64(&exemplar_ma, &RFDataFormat::MA.parse_tuple(input_ma), "MA.parse_tuple()", String::from(""));
     }
 }

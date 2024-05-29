@@ -1,0 +1,37 @@
+!File name = EG0520F_1010_6x25_2SDBCB2EV_191593406_RC6642_2p5V_11p25mA.s2p
+!Base file name = EG0520F_1010_6x25_2SDBCB2EV_191593406_RC6642
+!Date = 10/8/2019
+!Time = 7:43 AM
+!Test duration(min) = 0.15
+!Test = S-Parameters
+!MPTS version = 8.91.5
+!Cal File = 
+!ComputerName = CMPE-LAB-6
+!Comments = 
+!Z0 = 50
+!Input Power(dBm) = -13.00
+!Device ID = EG0520F_1010_6x25_2SDBCB2EV
+!Row = 66
+!Column = 42
+!Technology = QPHT09BCB
+!Lot/Wafer = 191593406
+!Gate Size = 150
+!Mask = EG0520
+!Cal Standards = EG2306 GaAs
+!Cal Kit = EG2308
+!Job Number = 20191002105035
+!Device Type = FET
+!set_Vg(v) = -1.500
+!set_Vd(v) = 2.500
+!set_Vd(mA) = 11.250
+!file_name = EG0520F_1010_6x25_2SDBCB2EV_191593406_RC6642_2p5V_11p25mA.s2p
+!Vg(V) = -0.520
+!Vg(mA) = -0.001
+!Vd(V) = 2.500
+!Vd(mA) = 11.076
+# GHz   S   DB   R   50
+!%	Freq(GHz)	     s11(dB)	    s11(deg)	     s21(dB)	    s21(deg)	     s12(dB)	    s12(deg)	     s22(dB)	    s22(deg)
+	0.500000000	      -0.024	      -7.747	      17.378	     174.768	     -38.995	      84.712	      -5.014	      -6.818
+	1.000000000	      -0.058	     -15.372	      17.210	     169.451	     -33.064	      80.362	      -5.059	     -13.322
+	1.500000000	      -0.077	     -22.862	      17.081	     165.404	     -29.655	      75.852	      -5.089	     -19.835
+	2.000000000	      -0.147	     -30.281	      17.038	     160.159	     -27.314	      71.303	      -5.148	     -26.624

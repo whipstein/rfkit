@@ -5,6 +5,7 @@ extern crate faer;
 extern crate regex;
 
 mod enums;
+mod file;
 mod frequency;
 mod network;
 mod math;

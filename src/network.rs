@@ -3,7 +3,6 @@ use crate::enums::{Unit, RFDataFormat, RFParameter};
 use crate::frequency::Frequency;
 use crate::math::sqrt_phase_unwrap;
 use std::fmt;
-use faer::io::Npy;
 use regex::{Regex, RegexBuilder};
 use simple_error::SimpleError;
 use std::error::Error;
@@ -143,6 +142,12 @@ trait NetworkPoint
     fn db(&self) -> Pointf64;
 
     fn deg(&self) -> Pointf64;
+
+    fn from_db(data: &Vec<(f64, f64)>) -> Point;
+
+    fn from_ma(data: &Vec<(f64, f64)>) -> Point;
+
+    fn from_ri(data: &Vec<(f64, f64)>) -> Point;
 
     // fn from_row_iterator(data: Vec<c64>) -> Point;
 
@@ -422,6 +427,45 @@ impl NetworkPoint for Point
         for i in 0..self.nrows() {
             for j in 0..self.ncols() {
                 pt.write(i, j, (self.get(i, j)).arg() * 180.0 / PI);
+            }
+        }
+
+        pt
+    }
+
+    fn from_db(data: &Vec<(f64, f64)>) -> Point {
+        let nports = (data.len() as f64).sqrt() as usize;
+        let mut pt= Point::zeros(nports, nports);
+
+        for i in 0..nports {
+            for j in 0..nports {
+                pt.write(i, j, c64::from_polar(10.0_f64.powf(data[i * nports + j].0 / 20.0), f64::to_radians(data[i * nports + j].1)));
+            }
+        }
+
+        pt
+    }
+
+    fn from_ma(data: &Vec<(f64, f64)>) -> Point {
+        let nports = (data.len() as f64).sqrt() as usize;
+        let mut pt= Point::zeros(nports, nports);
+
+        for i in 0..nports {
+            for j in 0..nports {
+                pt.write(i, j, c64::from_polar(data[i * nports + j].0, f64::to_radians(data[i * nports + j].1)));
+            }
+        }
+
+        pt
+    }
+
+    fn from_ri(data: &Vec<(f64, f64)>) -> Point {
+        let nports = (data.len() as f64).sqrt() as usize;
+        let mut pt= Point::zeros(nports, nports);
+
+        for i in 0..nports {
+            for j in 0..nports {
+                pt.write(i, j, c64::new(data[i * nports + j].0, data[i * nports + j].1));
             }
         }
 
@@ -1271,6 +1315,12 @@ trait NetworkPoints
 
     fn deg(&self) -> Pointsf64;
 
+    fn from_db(data: Vec<Vec<(f64, f64)>>) -> Points;
+
+    fn from_ma(data: Vec<Vec<(f64, f64)>>) -> Points;
+
+    fn from_ri(data: Vec<Vec<(f64, f64)>>) -> Points;
+
     // fn from_row_iterator(data: Vec<c64>) -> Points;
 
     // fn from_vec(data: Vec<c64>) -> Points;
@@ -1505,6 +1555,30 @@ impl NetworkPoints for Points
         let mut out: Pointsf64 = vec![];
         for pt in self.iter() {
             out.push(pt.deg());
+        }
+        out
+    }
+
+    fn from_db(data: Vec<Vec<(f64, f64)>>) -> Points {
+        let mut out: Points = vec![];
+        for pt in data.iter() {
+            out.push(Point::from_db(pt));
+        }
+        out
+    }
+
+    fn from_ma(data: Vec<Vec<(f64, f64)>>) -> Points {
+        let mut out: Points = vec![];
+        for pt in data.iter() {
+            out.push(Point::from_ma(pt));
+        }
+        out
+    }
+
+    fn from_ri(data: Vec<Vec<(f64, f64)>>) -> Points {
+        let mut out: Points = vec![];
+        for pt in data.iter() {
+            out.push(Point::from_ri(pt));
         }
         out
     }
@@ -2356,6 +2430,34 @@ impl Network
         )
     }
 
+    pub fn new_from(
+        freq: Frequency,
+        z0: Row<c64>,
+        param: RFParameter,
+        format: RFDataFormat,
+        net: Vec<Vec<(f64, f64)>>,
+        name: String,
+        comments: String,
+    ) -> Network {
+        let net_recalc = match format {
+            RFDataFormat::DB => Points::from_db(net),
+            RFDataFormat::MA => Points::from_ma(net),
+            RFDataFormat::RI => Points::from_ri(net),
+        };
+
+        let nports = net_recalc[0].nrows();
+
+        Network::new_w_port_names(
+            freq,
+            z0,
+            param,
+            net_recalc,
+            name,
+            comments,
+            vec![String::from(""); nports],
+        )
+    }
+
     pub fn new_w_port_names(
         freq: Frequency,
         z0: Row<c64>,
@@ -2512,148 +2614,6 @@ impl Network
 
         out
     }
-
-    // //TODO cleanup the ability to import various files
-    // pub fn read_touchstone(file_path: &String) -> Result<Network, Box<dyn Error>> {
-    //     // Regex patterns
-    //     let re_file_ext = Regex::new(r"\d+").expect("Invalid regex!");
-    //     let re_file_opts = Regex::new(r"^\[(w+)\]\s+(\w+)").expect("Invalid regex!");
-    //     let re_comment = Regex::new(r"^!").expect("Invalid regex!");
-    //     let re_port_name = RegexBuilder::new(r"^!\s*Port\[(\d+)\]\s*=\s?(\w+)")
-    //         .case_insensitive(true)
-    //         .build()
-    //         .expect("Invalid regex!");
-
-    //     // file reading variables
-    //     let content = fs::read_to_string(&file_path)?;
-    //     let mut file_path_split = file_path.split('.').rev();
-    //     let file_ext = file_path_split.next().unwrap();
-    //     let filename = file_path_split.next().unwrap().split('/').last().unwrap();
-    //     let mut lines = content.lines();
-
-    //     // Network values
-    //     let nports: usize = re_file_ext
-    //         .find(&file_ext)
-    //         .expect("Invalid file extension")
-    //         .as_str()
-    //         .parse()
-    //         .unwrap();
-    //     let mut port_names: Vec<String> = vec![String::from(""); nports];
-    //     let mut freq_unit = FreqUnit::GHz;
-    //     let mut parameter = RFParameter::S;
-    //     let mut format = RFDataFormat::RI;
-    //     let mut impedance = na::Complex { re: 50.0, im: 0.0 };
-    //     let mut z0: Vec<c64> = Vec::new();
-    //     let mut freq_tmp: Vec<f64> = Vec::new();
-    //     let mut point_tmp = Point::zeros();
-    //     let mut data: Vec<Mat<c64>> = Vec::new();
-    //     let mut comments = String::new();
-
-    //     let mut caps: Option<regex::Captures>;
-    //     let mut nfreq_check: Option<usize>;
-    //     let mut nfreq_noise_check: Option<usize>;
-
-    //     loop {
-    //         let line = unwrap_or_break!(lines.next());
-
-    //         if line.starts_with("!") || line.starts_with("!%") {
-    //             //
-    //             // comment line
-    //             //
-    //             if data.len() > 0 || z0.len() > 0 {
-    //                 continue;
-    //             }
-    //             if comments != "" {
-    //                 comments += "\n";
-    //             }
-    //             comments += line.strip_prefix("!").unwrap();
-    //         } else if line.starts_with("[") {
-    //             let cap = re_file_opts.captures(line);
-
-    //             if cap.is_none() {
-    //                 continue;
-    //             }
-
-    //             let caps = cap.unwrap();
-
-    //             match caps.get(1).unwrap().as_str() {
-    //                 // TODO: Add additional Version 2.0 options handling
-    //                 "[Number of Frequencies]" => {
-    //                     nfreq_check = Some(caps.get(2).unwrap().as_str().parse::<usize>().unwrap());
-    //                 }
-    //                 "[Number of Noise Frequencies]" => {
-    //                     nfreq_noise_check =
-    //                         Some(caps.get(2).unwrap().as_str().parse::<usize>().unwrap());
-    //                 }
-    //                 "[End]" => break,
-    //                 _ => continue,
-    //             }
-    //         } else if line.starts_with("#") {
-    //             //
-    //             // File format line
-    //             //
-    //             let mut vals = line.strip_prefix("#").unwrap().split_whitespace();
-
-    //             freq_unit = FreqUnit::from_str(vals.next().unwrap())?;
-    //             parameter = RFParameter::from_str(vals.next().unwrap())?;
-    //             format = RFDataFormat::from_str(vals.next().unwrap())?;
-    //             impedance = vals.last().unwrap().to_string().parse().unwrap();
-    //             for i in 0..nports {
-    //                 z0.push(impedance);
-    //             }
-    //         } else {
-    //             //
-    //             // data line
-    //             //
-    //             let mut fields = line.trim().split_whitespace();
-    //             let mut val = fields.next();
-    //             if val == None {
-    //                 continue;
-    //             }
-
-    //             if nports <= 2 {
-    //                 freq_tmp.push(val.unwrap().parse().unwrap());
-
-    //                 for i in 0..nports * nports {
-    //                     point_tmp[i] = format.parse(
-    //                         fields.next().unwrap().parse().unwrap(),
-    //                         fields.next().unwrap().parse().unwrap(),
-    //                     );
-    //                 }
-    //             } else {
-    //                 for j in 0..nports {
-    //                     if j == 0 {
-    //                         freq_tmp.push(val.unwrap().parse().unwrap());
-    //                     } else {
-    //                         let line = lines.next();
-    //                         if line == None {
-    //                             break;
-    //                         }
-    //                         fields = line.unwrap().trim().split_whitespace();
-    //                     }
-    //                     for k in 0..nports {
-    //                         point_tmp[(j, k)] = format.parse(
-    //                             fields.next().unwrap().parse().unwrap(),
-    //                             fields.next().unwrap().parse().unwrap(),
-    //                         );
-    //                     }
-    //                 }
-    //             }
-
-    //             data.push(point_tmp.clone());
-    //         }
-    //     }
-
-    //     Ok(Network {
-    //         name: String::from(filename),
-    //         comments: comments,
-    //         port_names: vec![String::from(""); nports],
-    //         freq: Frequency::from_vec(freq_tmp, freq_unit),
-    //         z0: z0,
-    //         param: parameter,
-    //         net: data,
-    //     })
-    // }
 
     pub fn s(&self) -> &Points {
         &self.s.as_ref().unwrap()
@@ -2853,11 +2813,12 @@ impl fmt::Debug for Network {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::math::{comp_point, comp_points_c64, comp_points_f64};
 
     #[test]
     fn network_reciprocity() {
         let calc = Network::new(
-            Frequency::new(row![1.0], Unit::Giga),
+            Frequency::new_scaled(row![1.0], Unit::Giga),
             row![
                 c64::from(50.0),
                 c64::from(50.0),
@@ -2875,11 +2836,11 @@ mod test {
             [0.0, 0.0],
             [0.0, 0.0],
         ]];
-        comp_point_f64(&exemplar, &calc.reciprocity(), "reciprocity(1)");
+        comp_points_f64(&exemplar, &calc.reciprocity(), "reciprocity(1)");
         assert_eq!(true, calc.is_reciprocal());
 
         let calc = Network::new(
-            Frequency::new(row![1.0], Unit::Giga),
+            Frequency::new_scaled(row![1.0], Unit::Giga),
             row![
                 c64::from(50.0),
                 c64::from(50.0),
@@ -2898,7 +2859,7 @@ mod test {
             [0.860811245279707, 0.0],
         ]];
 
-        comp_point_f64(&exemplar, &calc.reciprocity(), "reciprocity(2)");
+        comp_points_f64(&exemplar, &calc.reciprocity(), "reciprocity(2)");
         assert_eq!(false, calc.is_reciprocal());
     }
 
@@ -2963,7 +2924,7 @@ mod test {
     #[should_panic(expected = "ABCD parameters do not exist for network with 1 port(s)")]
     fn network_a() {
         let net = Network::new(
-            Frequency::new(row![1.0], Unit::Giga),
+            Frequency::new_scaled(row![1.0], Unit::Giga),
             row![c64::from(50.0)],
             RFParameter::A,
             vec![mat![
@@ -2995,7 +2956,7 @@ mod test {
         ];
 
         let calc = Network::new(
-            Frequency::new(row![1.0, 2.0, 3.0], Unit::Giga),
+            Frequency::new_scaled(row![1.0, 2.0, 3.0], Unit::Giga),
             row![
                 c64::from(50.0),
                 c64::from(50.0),
@@ -3098,32 +3059,32 @@ mod test {
             ],
         ];
 
-        comp_point_c64(&exemplar_a, &calc.net(RFParameter::A), "net(A)");
-        comp_point_c64(&exemplar_a, &calc.a(), "a()");
+        comp_points_c64(&exemplar_a, &calc.net(RFParameter::A), "net(A)");
+        comp_points_c64(&exemplar_a, &calc.a(), "a()");
 
-        comp_point_c64(&exemplar_g, &calc.net(RFParameter::G), "net(G)");
-        comp_point_c64(&exemplar_g, &calc.g(), "g()");
+        comp_points_c64(&exemplar_g, &calc.net(RFParameter::G), "net(G)");
+        comp_points_c64(&exemplar_g, &calc.g(), "g()");
 
-        comp_point_c64(&exemplar_h, &calc.net(RFParameter::H), "net(H)");
-        comp_point_c64(&exemplar_h, &calc.h(), "h()");
+        comp_points_c64(&exemplar_h, &calc.net(RFParameter::H), "net(H)");
+        comp_points_c64(&exemplar_h, &calc.h(), "h()");
 
-        comp_point_c64(&exemplar_s, &calc.net(RFParameter::S), "net(S)");
-        comp_point_c64(&exemplar_s, &calc.s(), "s()");
+        comp_points_c64(&exemplar_s, &calc.net(RFParameter::S), "net(S)");
+        comp_points_c64(&exemplar_s, &calc.s(), "s()");
 
-        comp_point_c64(&exemplar_t, &calc.net(RFParameter::T), "net(T)");
-        comp_point_c64(&exemplar_t, &calc.t(), "t()");
+        comp_points_c64(&exemplar_t, &calc.net(RFParameter::T), "net(T)");
+        comp_points_c64(&exemplar_t, &calc.t(), "t()");
 
-        comp_point_c64(&exemplar_y, &calc.net(RFParameter::Y), "net(Y)");
-        comp_point_c64(&exemplar_y, &calc.y(), "y()");
+        comp_points_c64(&exemplar_y, &calc.net(RFParameter::Y), "net(Y)");
+        comp_points_c64(&exemplar_y, &calc.y(), "y()");
 
-        comp_point_c64(&exemplar_z, &calc.net(RFParameter::Z), "net(Z)");
-        comp_point_c64(&exemplar_z, &calc.z(), "z()");
+        comp_points_c64(&exemplar_z, &calc.net(RFParameter::Z), "net(Z)");
+        comp_points_c64(&exemplar_z, &calc.z(), "z()");
     }
 
     #[test]
     fn network_chop_in_half() {
         let base = Network::new(
-            Frequency::new(row![1.0], Unit::Giga),
+            Frequency::new_scaled(row![1.0], Unit::Giga),
             row![
                 c64::from(50.0),
                 c64::from(50.0),
@@ -3144,14 +3105,14 @@ mod test {
 
         let calc = base.chop_in_half();
 
-        comp_point_c64(&exemplar, &calc.s(), "chop_in_half");
+        comp_points_c64(&exemplar, &calc.s(), "chop_in_half");
     }
 
     #[test]
     #[should_panic(expected = "Inverse Hybrid (g) parameters do not exist for network with 1 port(s)")]
     fn network_g() {
         let net = Network::new(
-            Frequency::new(row![1.0], Unit::Giga),
+            Frequency::new_scaled(row![1.0], Unit::Giga),
             row![c64::from(50.0)],
             RFParameter::G,
             vec![mat![
@@ -3183,7 +3144,7 @@ mod test {
         ];
 
         let calc = Network::new(
-            Frequency::new(row![1.0, 2.0, 3.0], Unit::Giga),
+            Frequency::new_scaled(row![1.0, 2.0, 3.0], Unit::Giga),
             row![
                 c64::from(50.0),
                 c64::from(50.0),
@@ -3286,33 +3247,33 @@ mod test {
             ],
         ];
 
-        comp_point_c64(&exemplar_a, &calc.net(RFParameter::A), "net(A)");
-        comp_point_c64(&exemplar_a, &calc.a(), "a()");
+        comp_points_c64(&exemplar_a, &calc.net(RFParameter::A), "net(A)");
+        comp_points_c64(&exemplar_a, &calc.a(), "a()");
 
-        comp_point_c64(&exemplar_g, &calc.net(RFParameter::G), "net(G)");
-        comp_point_c64(&exemplar_g, &calc.g(), "g()");
+        comp_points_c64(&exemplar_g, &calc.net(RFParameter::G), "net(G)");
+        comp_points_c64(&exemplar_g, &calc.g(), "g()");
 
-        comp_point_c64(&exemplar_h, &calc.net(RFParameter::H), "net(H)");
-        comp_point_c64(&exemplar_h, &calc.h(), "h()");
+        comp_points_c64(&exemplar_h, &calc.net(RFParameter::H), "net(H)");
+        comp_points_c64(&exemplar_h, &calc.h(), "h()");
 
-        comp_point_c64(&exemplar_s, &calc.net(RFParameter::S), "net(S)");
-        comp_point_c64(&exemplar_s, &calc.s(), "s()");
+        comp_points_c64(&exemplar_s, &calc.net(RFParameter::S), "net(S)");
+        comp_points_c64(&exemplar_s, &calc.s(), "s()");
 
-        comp_point_c64(&exemplar_t, &calc.net(RFParameter::T), "net(T)");
-        comp_point_c64(&exemplar_t, &calc.t(), "t()");
+        comp_points_c64(&exemplar_t, &calc.net(RFParameter::T), "net(T)");
+        comp_points_c64(&exemplar_t, &calc.t(), "t()");
 
-        comp_point_c64(&exemplar_y, &calc.net(RFParameter::Y), "net(Y)");
-        comp_point_c64(&exemplar_y, &calc.y(), "y()");
+        comp_points_c64(&exemplar_y, &calc.net(RFParameter::Y), "net(Y)");
+        comp_points_c64(&exemplar_y, &calc.y(), "y()");
 
-        comp_point_c64(&exemplar_z, &calc.net(RFParameter::Z), "net(Z)");
-        comp_point_c64(&exemplar_z, &calc.z(), "z()");
+        comp_points_c64(&exemplar_z, &calc.net(RFParameter::Z), "net(Z)");
+        comp_points_c64(&exemplar_z, &calc.z(), "z()");
     }
 
     #[test]
     #[should_panic(expected = "Hybrid (h) parameters do not exist for network with 1 port(s)")]
     fn network_h() {
         let net = Network::new(
-            Frequency::new(row![1.0], Unit::Giga),
+            Frequency::new_scaled(row![1.0], Unit::Giga),
             row![c64::from(50.0)],
             RFParameter::H,
             vec![mat![
@@ -3344,7 +3305,7 @@ mod test {
         ];
 
         let calc = Network::new(
-            Frequency::new(row![1.0, 2.0, 3.0], Unit::Giga),
+            Frequency::new_scaled(row![1.0, 2.0, 3.0], Unit::Giga),
             row![
                 c64::from(50.0),
                 c64::from(50.0),
@@ -3447,241 +3408,27 @@ mod test {
             ],
         ];
 
-        comp_point_c64(&exemplar_a, &calc.net(RFParameter::A), "net(A)");
-        comp_point_c64(&exemplar_a, &calc.a(), "a()");
+        comp_points_c64(&exemplar_a, &calc.net(RFParameter::A), "net(A)");
+        comp_points_c64(&exemplar_a, &calc.a(), "a()");
 
-        comp_point_c64(&exemplar_g, &calc.net(RFParameter::G), "net(G)");
-        comp_point_c64(&exemplar_g, &calc.g(), "g()");
+        comp_points_c64(&exemplar_g, &calc.net(RFParameter::G), "net(G)");
+        comp_points_c64(&exemplar_g, &calc.g(), "g()");
 
-        comp_point_c64(&exemplar_h, &calc.net(RFParameter::H), "net(H)");
-        comp_point_c64(&exemplar_h, &calc.h(), "h()");
+        comp_points_c64(&exemplar_h, &calc.net(RFParameter::H), "net(H)");
+        comp_points_c64(&exemplar_h, &calc.h(), "h()");
 
-        comp_point_c64(&exemplar_s, &calc.net(RFParameter::S), "net(S)");
-        comp_point_c64(&exemplar_s, &calc.s(), "s()");
+        comp_points_c64(&exemplar_s, &calc.net(RFParameter::S), "net(S)");
+        comp_points_c64(&exemplar_s, &calc.s(), "s()");
 
-        comp_point_c64(&exemplar_t, &calc.net(RFParameter::T), "net(T)");
-        comp_point_c64(&exemplar_t, &calc.t(), "t()");
+        comp_points_c64(&exemplar_t, &calc.net(RFParameter::T), "net(T)");
+        comp_points_c64(&exemplar_t, &calc.t(), "t()");
 
-        comp_point_c64(&exemplar_y, &calc.net(RFParameter::Y), "net(Y)");
-        comp_point_c64(&exemplar_y, &calc.y(), "y()");
+        comp_points_c64(&exemplar_y, &calc.net(RFParameter::Y), "net(Y)");
+        comp_points_c64(&exemplar_y, &calc.y(), "y()");
 
-        comp_point_c64(&exemplar_z, &calc.net(RFParameter::Z), "net(Z)");
-        comp_point_c64(&exemplar_z, &calc.z(), "z()");
+        comp_points_c64(&exemplar_z, &calc.net(RFParameter::Z), "net(Z)");
+        comp_points_c64(&exemplar_z, &calc.z(), "z()");
     }
-
-    // #[test]
-    // fn network_read_touchstone() {
-    //     let filename = "./data/test.s1p".to_string();
-    //     let net = Network::<na::Const<1>>::read_touchstone(&filename).unwrap();
-    //     let exemplar: Network<na::Const<1>> = Network::<na::Const<1>>::new(
-    //         Frequency::from_vec(vec![75.0, 75.175, 75.35, 75.525], FreqUnit::GHz),
-    //         vec![c64::new(50.0, 0.0)],
-    //         RFParameter::S,
-    //         vec![
-    //             Point::<na::Const<1>>::from_vec(vec![c64::new(
-    //                 0.45345337996,
-    //                 0.891279996524,
-    //             )]),
-    //             Point::<na::Const<1>>::from_vec(vec![c64::new(
-    //                 0.464543921496,
-    //                 0.885550080459,
-    //             )]),
-    //             Point::<na::Const<1>>::from_vec(vec![c64::new(
-    //                 0.475521092896,
-    //                 0.879704319764,
-    //             )]),
-    //             Point::<na::Const<1>>::from_vec(vec![c64::new(
-    //                 0.486384743723,
-    //                 0.873744745949,
-    //             )]),
-    //         ],
-    //         String::from("test"),
-    //         String::from("Created with mwavepy."),
-    //     );
-    //     assert_eq!(exemplar.name, net.name);
-    //     assert_eq!(exemplar.comments, net.comments);
-    //     assert_eq!(exemplar.nports, net.nports);
-    //     assert_eq!(exemplar.npoints, net.npoints);
-    //     for i in 0..exemplar.nports {
-    //         assert_eq!(exemplar.z0[i], net.z0[i]);
-    //         assert_eq!(exemplar.z0[i], net.z0_at_pidx(i).clone());
-    //     }
-    //     for i in 0..exemplar.npoints {
-    //         assert_eq!(exemplar.freq.freq_at(i), net.freq.freq_at(i));
-    //         for j in 0..exemplar.nports {
-    //             for k in 0..exemplar.nports {
-    //                 assert_eq!(exemplar.net[i][(j, k)], net.net(RFParameter::S)[i][(j, k)]);
-    //                 assert_eq!(
-    //                     exemplar.net[i][(j, k)],
-    //                     net.net_at_fidx(RFParameter::S, i)[(j, k)]
-    //                 );
-    //                 assert_eq!(
-    //                     exemplar.net[i][(j, k)],
-    //                     net.net_at_pidx(RFParameter::S, j, k)[i]
-    //                 );
-    //                 assert_eq!(
-    //                     exemplar.net[i][(j, k)],
-    //                     net.net_at_idx(RFParameter::S, i, j, k)
-    //                 );
-    //             }
-    //         }
-    //     }
-
-    //     let filename = "./data/test.s2p".to_string();
-    //     let net = Network::<na::Const<2>>::read_touchstone(&filename).unwrap();
-    //     let exemplar: Network<na::Const<2>> = Network::<na::Const<2>>::new(
-    //         Frequency::from_vec(vec![0.5, 1.0, 1.5, 2.0], FreqUnit::GHz),
-    //         vec![
-    //             c64::new(50.0, 0.0),
-    //             c64::new(50.0, 0.0),
-    //         ],
-    //         RFParameter::S,
-    //         vec![
-    //             Point::<na::Const<2>>::from_vec(vec![
-    //                 c64::new(0.9881388526914863, -0.13442709904013195),
-    //                 c64::new(-7.363542304219899, 0.6742816969789206),
-    //                 c64::new(0.0010346705444205045, 0.011178864909012504),
-    //                 c64::new(0.5574653418486702, -0.06665134724424635),
-    //             ]),
-    //             Point::<na::Const<2>>::from_vec(vec![
-    //                 c64::new(0.9578079036840927, -0.2633207328693372),
-    //                 c64::new(-7.130124628011368, 1.3277987152036197),
-    //                 c64::new(0.0037206104781559784, 0.021909191616475577),
-    //                 c64::new(0.5435045929943587, -0.12869941397967788),
-    //             ]),
-    //             Point::<na::Const<2>>::from_vec(vec![
-    //                 c64::new(0.9133108288727866, -0.38508398385543624),
-    //                 c64::new(-6.9151682810378095, 1.800750901131042),
-    //                 c64::new(0.008042664765986755, 0.03190603796445517),
-    //                 c64::new(0.5235871604669029, -0.18886435408156288),
-    //             ]),
-    //             Point::<na::Const<2>>::from_vec(vec![
-    //                 c64::new(0.849070850314753, -0.49577931076259807),
-    //                 c64::new(-6.688405272002992, 2.4133819411904995),
-    //                 c64::new(0.01381064392153511, 0.04080882571424955),
-    //                 c64::new(0.4942211124266797, -0.24774648346309974),
-    //             ]),
-    //         ],
-    //         String::from("test"),
-    //         String::from("File name = EG0520F_1010_6x25_2SDBCB2EV_191593406_RC6642_2p5V_11p25mA.s2p\nBase file name = EG0520F_1010_6x25_2SDBCB2EV_191593406_RC6642\nDate = 10/8/2019\nTime = 7:43 AM\nTest duration(min) = 0.15\nTest = S-Parameters\nMPTS version = 8.91.5\nState File = C:\\Data\\PNA\\20191002105035\\S-Parameters_2019-10-04.sta\nCal File = \nComputerName = CMPE-LAB-6\nComments = \nZ0 = 50\nInput Power(dBm) = -13.00\nDevice ID = EG0520F_1010_6x25_2SDBCB2EV\nRow = 66\nColumn = 42\nTechnology = QPHT09BCB\nLot/Wafer = 191593406\nGate Size = 150\nMask = EG0520\nCal Standards = EG2306 GaAs\nCal Kit = EG2308\nJob Number = 20191002105035\nDevice Type = FET\nset_Vg(v) = -1.500\nset_Vd(v) = 2.500\nset_Vd(mA) = 11.250\nfile_name = EG0520F_1010_6x25_2SDBCB2EV_191593406_RC6642_2p5V_11p25mA.s2p\nVg(V) = -0.520\nVg(mA) = -0.001\nVd(V) = 2.500\nVd(mA) = 11.076"),
-    //     );
-    //     assert_eq!(exemplar.name, net.name);
-    //     assert_eq!(exemplar.comments, net.comments);
-    //     assert_eq!(exemplar.nports, net.nports);
-    //     assert_eq!(exemplar.npoints, net.npoints);
-    //     for i in 0..exemplar.nports {
-    //         assert_eq!(exemplar.z0[i], net.z0[i]);
-    //         assert_eq!(exemplar.z0[i], net.z0_at_pidx(i).clone());
-    //     }
-    //     for i in 0..exemplar.npoints {
-    //         assert_eq!(exemplar.freq.freq_at(i), net.freq.freq_at(i));
-    //         for j in 0..exemplar.nports {
-    //             for k in 0..exemplar.nports {
-    //                 assert_eq!(exemplar.net[i][(j, k)], net.net(RFParameter::S)[i][(j, k)]);
-    //                 assert_eq!(
-    //                     exemplar.net[i][(j, k)],
-    //                     net.net_at_fidx(RFParameter::S, i)[(j, k)]
-    //                 );
-    //                 assert_eq!(
-    //                     exemplar.net[i][(j, k)],
-    //                     net.net_at_pidx(RFParameter::S, j, k)[i]
-    //                 );
-    //                 assert_eq!(
-    //                     exemplar.net[i][(j, k)],
-    //                     net.net_at_idx(RFParameter::S, i, j, k)
-    //                 );
-    //             }
-    //         }
-    //     }
-
-    //     let filename = "./data/test.s3p".to_string();
-    //     let net = Network::<na::Const<3>>::read_touchstone(&filename).unwrap();
-    //     let exemplar: Network<na::Const<3>> = Network::<na::Const<3>>::new(
-    //         Frequency::from_vec(vec![330.0, 330.85, 331.7, 332.55], FreqUnit::GHz),
-    //         vec![
-    //             c64::new(50.0, 0.0),
-    //             c64::new(50.0, 0.0),
-    //             c64::new(50.0, 0.0),
-    //         ],
-    //         RFParameter::S,
-    //         vec![
-    //             Point::<na::Const<3>>::from_vec(vec![
-    //                 c64::new(-0.333333333333, 0.0),
-    //                 c64::new(0.666666666667, 0.0),
-    //                 c64::new(0.666666666667, 0.0),
-    //                 c64::new(0.666666666667, 0.0),
-    //                 c64::new(-0.333333333333, 0.0),
-    //                 c64::new(0.666666666667, 0.0),
-    //                 c64::new(0.666666666667, 0.0),
-    //                 c64::new(0.666666666667, 0.0),
-    //                 c64::new(-0.333333333333, 0.0),
-    //             ]),
-    //             Point::<na::Const<3>>::from_vec(vec![
-    //                 c64::new(-0.333333333333, 0.0),
-    //                 c64::new(0.666666666667, 0.0),
-    //                 c64::new(0.666666666667, 0.0),
-    //                 c64::new(0.666666666667, 0.0),
-    //                 c64::new(-0.333333333333, 0.0),
-    //                 c64::new(0.666666666667, 0.0),
-    //                 c64::new(0.666666666667, 0.0),
-    //                 c64::new(0.666666666667, 0.0),
-    //                 c64::new(-0.333333333333, 0.0),
-    //             ]),
-    //             Point::<na::Const<3>>::from_vec(vec![
-    //                 c64::new(-0.333333333333, 0.0),
-    //                 c64::new(0.666666666667, 0.0),
-    //                 c64::new(0.666666666667, 0.0),
-    //                 c64::new(0.666666666667, 0.0),
-    //                 c64::new(-0.333333333333, 0.0),
-    //                 c64::new(0.666666666667, 0.0),
-    //                 c64::new(0.666666666667, 0.0),
-    //                 c64::new(0.666666666667, 0.0),
-    //                 c64::new(-0.333333333333, 0.0),
-    //             ]),
-    //             Point::<na::Const<3>>::from_vec(vec![
-    //                 c64::new(-0.333333333333, 0.0),
-    //                 c64::new(0.666666666667, 0.0),
-    //                 c64::new(0.666666666667, 0.0),
-    //                 c64::new(0.666666666667, 0.0),
-    //                 c64::new(-0.333333333333, 0.0),
-    //                 c64::new(0.666666666667, 0.0),
-    //                 c64::new(0.666666666667, 0.0),
-    //                 c64::new(0.666666666667, 0.0),
-    //                 c64::new(-0.333333333333, 0.0),
-    //             ]),
-    //         ],
-    //         String::from("test"),
-    //         String::from("Created with skrf (http://scikit-rf.org)."),
-    //     );
-    //     assert_eq!(exemplar.name, net.name);
-    //     assert_eq!(exemplar.comments, net.comments);
-    //     assert_eq!(exemplar.nports, net.nports);
-    //     assert_eq!(exemplar.npoints, net.npoints);
-    //     for i in 0..exemplar.nports {
-    //         assert_eq!(exemplar.z0[i], net.z0[i]);
-    //         assert_eq!(exemplar.z0[i], net.z0_at_pidx(i).clone());
-    //     }
-    //     for i in 0..exemplar.npoints {
-    //         assert_eq!(exemplar.freq.freq_at(i), net.freq.freq_at(i));
-    //         for j in 0..exemplar.nports {
-    //             for k in 0..exemplar.nports {
-    //                 assert_eq!(exemplar.net[i][(j, k)], net.net(RFParameter::S)[i][(j, k)]);
-    //                 assert_eq!(
-    //                     exemplar.net[i][(j, k)],
-    //                     net.net_at_fidx(RFParameter::S, i)[(j, k)]
-    //                 );
-    //                 assert_eq!(
-    //                     exemplar.net[i][(j, k)],
-    //                     net.net_at_pidx(RFParameter::S, j, k)[i]
-    //                 );
-    //                 assert_eq!(
-    //                     exemplar.net[i][(j, k)],
-    //                     net.net_at_idx(RFParameter::S, i, j, k)
-    //                 );
-    //             }
-    //         }
-    //     }
-    // }
 
     #[test]
     fn network_s_db() {
@@ -3703,7 +3450,7 @@ mod test {
         ];
 
         let calc = Network::new(
-            Frequency::new(row![1.0, 2.0, 3.0], Unit::Giga),
+            Frequency::new_scaled(row![1.0, 2.0, 3.0], Unit::Giga),
             row![
                 c64::from(50.0),
                 c64::from(50.0),
@@ -3730,10 +3477,10 @@ mod test {
             ],
         ];
 
-        comp_point_c64(&exemplar_s, &calc.net(RFParameter::S), "net(S)");
-        comp_point_f64(&exemplar_s_db, &calc.net_db(RFParameter::S), "net_db(S)");
-        comp_point_c64(&exemplar_s, &calc.s(), "s()");
-        comp_point_f64(&exemplar_s_db, &calc.s_db(), "s_db()");
+        comp_points_c64(&exemplar_s, &calc.net(RFParameter::S), "net(S)");
+        comp_points_f64(&exemplar_s_db, &calc.net_db(RFParameter::S), "net_db(S)");
+        comp_points_c64(&exemplar_s, &calc.s(), "s()");
+        comp_points_f64(&exemplar_s_db, &calc.s_db(), "s_db()");
     }
 
     #[test]
@@ -3756,7 +3503,7 @@ mod test {
         ];
 
         let calc = Network::new(
-            Frequency::new(row![1.0, 2.0, 3.0], Unit::Giga),
+            Frequency::new_scaled(row![1.0, 2.0, 3.0], Unit::Giga),
             row![
                 c64::from(50.0),
                 c64::from(50.0),
@@ -3783,10 +3530,10 @@ mod test {
             ],
         ];
 
-        comp_point_c64(&exemplar_s, &calc.net(RFParameter::S), "net(S)");
-        comp_point_f64(&exemplar_s_deg, &calc.net_deg(RFParameter::S), "net_deg(S)");
-        comp_point_c64(&exemplar_s, &calc.s(), "s()");
-        comp_point_f64(&exemplar_s_deg, &calc.s_deg(), "s_deg()");
+        comp_points_c64(&exemplar_s, &calc.net(RFParameter::S), "net(S)");
+        comp_points_f64(&exemplar_s_deg, &calc.net_deg(RFParameter::S), "net_deg(S)");
+        comp_points_c64(&exemplar_s, &calc.s(), "s()");
+        comp_points_f64(&exemplar_s_deg, &calc.s_deg(), "s_deg()");
     }
 
     #[test]
@@ -3809,7 +3556,7 @@ mod test {
         ];
 
         let calc = Network::new(
-            Frequency::new(row![1.0, 2.0, 3.0], Unit::Giga),
+            Frequency::new_scaled(row![1.0, 2.0, 3.0], Unit::Giga),
             row![
                 c64::from(50.0),
                 c64::from(50.0),
@@ -3836,10 +3583,10 @@ mod test {
             ],
         ];
 
-        comp_point_c64(&exemplar_s, &calc.net(RFParameter::S), "net(S)");
-        comp_point_f64(&exemplar_s_im, &calc.net_im(RFParameter::S), "net_im(S)");
-        comp_point_c64(&exemplar_s, &calc.s(), "s()");
-        comp_point_f64(&exemplar_s_im, &calc.s_im(), "s_im()");
+        comp_points_c64(&exemplar_s, &calc.net(RFParameter::S), "net(S)");
+        comp_points_f64(&exemplar_s_im, &calc.net_im(RFParameter::S), "net_im(S)");
+        comp_points_c64(&exemplar_s, &calc.s(), "s()");
+        comp_points_f64(&exemplar_s_im, &calc.s_im(), "s_im()");
     }
 
     #[test]
@@ -3862,7 +3609,7 @@ mod test {
         ];
 
         let calc = Network::new(
-            Frequency::new(row![1.0, 2.0, 3.0], Unit::Giga),
+            Frequency::new_scaled(row![1.0, 2.0, 3.0], Unit::Giga),
             row![
                 c64::from(50.0),
                 c64::from(50.0),
@@ -3889,10 +3636,10 @@ mod test {
             ],
         ];
 
-        comp_point_c64(&exemplar_s, &calc.net(RFParameter::S), "net(S)");
-        comp_point_f64(&exemplar_s_mag, &calc.net_mag(RFParameter::S), "net_mag(S)");
-        comp_point_c64(&exemplar_s, &calc.s(), "s()");
-        comp_point_f64(&exemplar_s_mag, &calc.s_mag(), "s_mag()");
+        comp_points_c64(&exemplar_s, &calc.net(RFParameter::S), "net(S)");
+        comp_points_f64(&exemplar_s_mag, &calc.net_mag(RFParameter::S), "net_mag(S)");
+        comp_points_c64(&exemplar_s, &calc.s(), "s()");
+        comp_points_f64(&exemplar_s_mag, &calc.s_mag(), "s_mag()");
     }
 
     #[test]
@@ -3915,7 +3662,7 @@ mod test {
         ];
 
         let calc = Network::new(
-            Frequency::new(row![1.0, 2.0, 3.0], Unit::Giga),
+            Frequency::new_scaled(row![1.0, 2.0, 3.0], Unit::Giga),
             row![
                 c64::from(50.0),
                 c64::from(50.0),
@@ -3942,10 +3689,10 @@ mod test {
             ],
         ];
 
-        comp_point_c64(&exemplar_s, &calc.net(RFParameter::S), "net(S)");
-        comp_point_f64(&exemplar_s_rad, &calc.net_rad(RFParameter::S), "net_rad(S)");
-        comp_point_c64(&exemplar_s, &calc.s(), "s()");
-        comp_point_f64(&exemplar_s_rad, &calc.s_rad(), "s_rad()");
+        comp_points_c64(&exemplar_s, &calc.net(RFParameter::S), "net(S)");
+        comp_points_f64(&exemplar_s_rad, &calc.net_rad(RFParameter::S), "net_rad(S)");
+        comp_points_c64(&exemplar_s, &calc.s(), "s()");
+        comp_points_f64(&exemplar_s_rad, &calc.s_rad(), "s_rad()");
     }
 
     #[test]
@@ -3968,7 +3715,7 @@ mod test {
         ];
 
         let calc = Network::new(
-            Frequency::new(row![1.0, 2.0, 3.0], Unit::Giga),
+            Frequency::new_scaled(row![1.0, 2.0, 3.0], Unit::Giga),
             row![
                 c64::from(50.0),
                 c64::from(50.0),
@@ -3995,10 +3742,10 @@ mod test {
             ],
         ];
 
-        comp_point_c64(&exemplar_s, &calc.net(RFParameter::S), "net(S)");
-        comp_point_f64(&exemplar_s_re, &calc.net_re(RFParameter::S), "net_re(S)");
-        comp_point_c64(&exemplar_s, &calc.s(), "s()");
-        comp_point_f64(&exemplar_s_re, &calc.s_re(), "s_re()");
+        comp_points_c64(&exemplar_s, &calc.net(RFParameter::S), "net(S)");
+        comp_points_f64(&exemplar_s_re, &calc.net_re(RFParameter::S), "net_re(S)");
+        comp_points_c64(&exemplar_s, &calc.s(), "s()");
+        comp_points_f64(&exemplar_s_re, &calc.s_re(), "s_re()");
     }
 
     #[test]
@@ -4011,7 +3758,7 @@ mod test {
         ]];
 
         let calc = Network::new(
-            Frequency::new(row![1.0], Unit::Giga),
+            Frequency::new_scaled(row![1.0], Unit::Giga),
             row![c64::from(50.0)],
             param,
             exemplar.clone(),
@@ -4029,14 +3776,14 @@ mod test {
             [c64::new(9.2108045620515583043706421493683, -370.772419043322540157375538364691)],
         ]];
 
-        comp_point_c64(&exemplar_s, &calc.net(RFParameter::S), "net(S)");
-        comp_point_c64(&exemplar_s, &calc.s(), "s()");
+        comp_points_c64(&exemplar_s, &calc.net(RFParameter::S), "net(S)");
+        comp_points_c64(&exemplar_s, &calc.s(), "s()");
 
-        comp_point_c64(&exemplar_y, &calc.net(RFParameter::Y), "net(Y)");
-        comp_point_c64(&exemplar_y, &calc.y(), "y()");
+        comp_points_c64(&exemplar_y, &calc.net(RFParameter::Y), "net(Y)");
+        comp_points_c64(&exemplar_y, &calc.y(), "y()");
 
-        comp_point_c64(&exemplar_z, &calc.net(RFParameter::Z), "net(Z)");
-        comp_point_c64(&exemplar_z, &calc.z(), "z()");
+        comp_points_c64(&exemplar_z, &calc.net(RFParameter::Z), "net(Z)");
+        comp_points_c64(&exemplar_z, &calc.z(), "z()");
     }
 
     #[test]
@@ -4060,7 +3807,7 @@ mod test {
         ];
 
         let calc = Network::new(
-            Frequency::new(row![1.0, 2.0, 3.0], Unit::Giga),
+            Frequency::new_scaled(row![1.0, 2.0, 3.0], Unit::Giga),
             row![
                 c64::from(50.0),
                 c64::from(50.0),
@@ -4163,26 +3910,26 @@ mod test {
             ],
         ];
 
-        comp_point_c64(&exemplar_a, &calc.net(RFParameter::A), "net(A)");
-        comp_point_c64(&exemplar_a, &calc.a(), "a()");
+        comp_points_c64(&exemplar_a, &calc.net(RFParameter::A), "net(A)");
+        comp_points_c64(&exemplar_a, &calc.a(), "a()");
 
-        comp_point_c64(&exemplar_g, &calc.net(RFParameter::G), "net(G)");
-        comp_point_c64(&exemplar_g, &calc.g(), "g()");
+        comp_points_c64(&exemplar_g, &calc.net(RFParameter::G), "net(G)");
+        comp_points_c64(&exemplar_g, &calc.g(), "g()");
 
-        comp_point_c64(&exemplar_h, &calc.net(RFParameter::H), "net(H)");
-        comp_point_c64(&exemplar_h, &calc.h(), "h()");
+        comp_points_c64(&exemplar_h, &calc.net(RFParameter::H), "net(H)");
+        comp_points_c64(&exemplar_h, &calc.h(), "h()");
 
-        comp_point_c64(&exemplar_s, &calc.net(RFParameter::S), "net(S)");
-        comp_point_c64(&exemplar_s, &calc.s(), "s()");
+        comp_points_c64(&exemplar_s, &calc.net(RFParameter::S), "net(S)");
+        comp_points_c64(&exemplar_s, &calc.s(), "s()");
 
-        comp_point_c64(&exemplar_t, &calc.net(RFParameter::T), "net(T)");
-        comp_point_c64(&exemplar_t, &calc.t(), "t()");
+        comp_points_c64(&exemplar_t, &calc.net(RFParameter::T), "net(T)");
+        comp_points_c64(&exemplar_t, &calc.t(), "t()");
 
-        comp_point_c64(&exemplar_y, &calc.net(RFParameter::Y), "net(Y)");
-        comp_point_c64(&exemplar_y, &calc.y(), "y()");
+        comp_points_c64(&exemplar_y, &calc.net(RFParameter::Y), "net(Y)");
+        comp_points_c64(&exemplar_y, &calc.y(), "y()");
 
-        comp_point_c64(&exemplar_z, &calc.net(RFParameter::Z), "net(Z)");
-        comp_point_c64(&exemplar_z, &calc.z(), "z()");
+        comp_points_c64(&exemplar_z, &calc.net(RFParameter::Z), "net(Z)");
+        comp_points_c64(&exemplar_z, &calc.z(), "z()");
     }
 
     #[test]
@@ -4196,7 +3943,7 @@ mod test {
         ]];
 
         let calc = Network::new(
-            Frequency::new(row![1.0], Unit::Giga),
+            Frequency::new_scaled(row![1.0], Unit::Giga),
             row![
                 c64::from(50.0),
                 c64::from(50.0),
@@ -4222,21 +3969,21 @@ mod test {
             [c64::new(-1.47024768885943474951312984751034, -0.977859220813742090612346050886296), c64::new(3.17553247082047295210262230384999, 0.400195488821662924393599582218776), c64::new(-50.0057989787936055145108624132913, -0.00256592432461927395675931817564063)],
         ]];
 
-        comp_point_c64(&exemplar_s, &calc.net(RFParameter::S), "net(S)");
-        comp_point_c64(&exemplar_s, &calc.s(), "s()");
+        comp_points_c64(&exemplar_s, &calc.net(RFParameter::S), "net(S)");
+        comp_points_c64(&exemplar_s, &calc.s(), "s()");
 
-        comp_point_c64(&exemplar_y, &calc.net(RFParameter::Y), "net(Y)");
-        comp_point_c64(&exemplar_y, &calc.y(), "y()");
+        comp_points_c64(&exemplar_y, &calc.net(RFParameter::Y), "net(Y)");
+        comp_points_c64(&exemplar_y, &calc.y(), "y()");
 
-        comp_point_c64(&exemplar_z, &calc.net(RFParameter::Z), "net(Z)");
-        comp_point_c64(&exemplar_z, &calc.z(), "z()");
+        comp_points_c64(&exemplar_z, &calc.net(RFParameter::Z), "net(Z)");
+        comp_points_c64(&exemplar_z, &calc.z(), "z()");
 }
 
     #[test]
     #[should_panic(expected = "ABCD parameters do not exist for network with 1 port(s)")]
     fn network_s_to_a() {
         let net = Network::new(
-            Frequency::new(row![1.0], Unit::Giga),
+            Frequency::new_scaled(row![1.0], Unit::Giga),
             row![c64::from(50.0)],
             RFParameter::S,
             vec![mat![
@@ -4253,7 +4000,7 @@ mod test {
     #[should_panic(expected = "Inverse Hybrid (g) parameters do not exist for network with 1 port(s)")]
     fn network_s_to_g() {
         let net = Network::new(
-            Frequency::new(row![1.0], Unit::Giga),
+            Frequency::new_scaled(row![1.0], Unit::Giga),
             row![c64::from(50.0)],
             RFParameter::S,
             vec![mat![
@@ -4270,7 +4017,7 @@ mod test {
     #[should_panic(expected = "Hybrid (h) parameters do not exist for network with 1 port(s)")]
     fn network_s_to_h() {
         let net = Network::new(
-            Frequency::new(row![1.0], Unit::Giga),
+            Frequency::new_scaled(row![1.0], Unit::Giga),
             row![c64::from(50.0)],
             RFParameter::S,
             vec![mat![
@@ -4287,7 +4034,7 @@ mod test {
     #[should_panic(expected = "T parameters do not exist for network with 1 port(s)")]
     fn network_s_to_t() {
         let net = Network::new(
-            Frequency::new(row![1.0], Unit::Giga),
+            Frequency::new_scaled(row![1.0], Unit::Giga),
             row![c64::from(50.0)],
             RFParameter::S,
             vec![mat![
@@ -4320,7 +4067,7 @@ mod test {
         ];
 
         let calc = Network::new(
-            Frequency::new(row![1.0, 2.0, 3.0], Unit::Giga),
+            Frequency::new_scaled(row![1.0, 2.0, 3.0], Unit::Giga),
             row![
                 c64::from(50.0),
                 c64::from(50.0),
@@ -4423,26 +4170,26 @@ mod test {
             ],
         ];
 
-        comp_point_c64(&exemplar_a, &calc.net(RFParameter::A), "net(A)");
-        comp_point_c64(&exemplar_a, &calc.a(), "a()");
+        comp_points_c64(&exemplar_a, &calc.net(RFParameter::A), "net(A)");
+        comp_points_c64(&exemplar_a, &calc.a(), "a()");
 
-        comp_point_c64(&exemplar_g, &calc.net(RFParameter::G), "net(G)");
-        comp_point_c64(&exemplar_g, &calc.g(), "g()");
+        comp_points_c64(&exemplar_g, &calc.net(RFParameter::G), "net(G)");
+        comp_points_c64(&exemplar_g, &calc.g(), "g()");
 
-        comp_point_c64(&exemplar_h, &calc.net(RFParameter::H), "net(H)");
-        comp_point_c64(&exemplar_h, &calc.h(), "h()");
+        comp_points_c64(&exemplar_h, &calc.net(RFParameter::H), "net(H)");
+        comp_points_c64(&exemplar_h, &calc.h(), "h()");
 
-        comp_point_c64(&exemplar_s, &calc.net(RFParameter::S), "net(S)");
-        comp_point_c64(&exemplar_s, &calc.s(), "s()");
+        comp_points_c64(&exemplar_s, &calc.net(RFParameter::S), "net(S)");
+        comp_points_c64(&exemplar_s, &calc.s(), "s()");
 
-        comp_point_c64(&exemplar_t, &calc.net(RFParameter::T), "net(T)");
-        comp_point_c64(&exemplar_t, &calc.t(), "t()");
+        comp_points_c64(&exemplar_t, &calc.net(RFParameter::T), "net(T)");
+        comp_points_c64(&exemplar_t, &calc.t(), "t()");
 
-        comp_point_c64(&exemplar_y, &calc.net(RFParameter::Y), "net(Y)");
-        comp_point_c64(&exemplar_y, &calc.y(), "y()");
+        comp_points_c64(&exemplar_y, &calc.net(RFParameter::Y), "net(Y)");
+        comp_points_c64(&exemplar_y, &calc.y(), "y()");
 
-        comp_point_c64(&exemplar_z, &calc.net(RFParameter::Z), "net(Z)");
-        comp_point_c64(&exemplar_z, &calc.z(), "z()");
+        comp_points_c64(&exemplar_z, &calc.net(RFParameter::Z), "net(Z)");
+        comp_points_c64(&exemplar_z, &calc.z(), "z()");
 }
 
     #[test]
@@ -4454,7 +4201,7 @@ mod test {
         ]];
 
         let calc = Network::new(
-            Frequency::new(row![1.0], Unit::Giga),
+            Frequency::new_scaled(row![1.0], Unit::Giga),
             row![c64::from(50.0)],
             param,
             exemplar.clone(),
@@ -4472,14 +4219,14 @@ mod test {
             [c64::new(0.970683926872442228782866863616166, 0.266482121886693452315693978414556)],
         ]];
 
-        comp_point_c64(&exemplar_s, &calc.net(RFParameter::S), "net(S)");
-        comp_point_c64(&exemplar_s, &calc.s(), "s()");
+        comp_points_c64(&exemplar_s, &calc.net(RFParameter::S), "net(S)");
+        comp_points_c64(&exemplar_s, &calc.s(), "s()");
 
-        comp_point_c64(&exemplar_y, &calc.net(RFParameter::Y), "net(Y)");
-        comp_point_c64(&exemplar_y, &calc.y(), "y()");
+        comp_points_c64(&exemplar_y, &calc.net(RFParameter::Y), "net(Y)");
+        comp_points_c64(&exemplar_y, &calc.y(), "y()");
 
-        comp_point_c64(&exemplar_z, &calc.net(RFParameter::Z), "net(Z)");
-        comp_point_c64(&exemplar_z, &calc.z(), "z()");
+        comp_points_c64(&exemplar_z, &calc.net(RFParameter::Z), "net(Z)");
+        comp_points_c64(&exemplar_z, &calc.z(), "z()");
     }
 
     #[test]
@@ -4503,7 +4250,7 @@ mod test {
         ];
 
         let calc = Network::new(
-            Frequency::new(row![1.0, 2.0, 3.0], Unit::Giga),
+            Frequency::new_scaled(row![1.0, 2.0, 3.0], Unit::Giga),
             row![
                 c64::from(50.0),
                 c64::from(50.0),
@@ -4606,26 +4353,26 @@ mod test {
             ],
         ];
 
-        comp_point_c64(&exemplar_a, &calc.net(RFParameter::A), "net(A)");
-        comp_point_c64(&exemplar_a, &calc.a(), "a()");
+        comp_points_c64(&exemplar_a, &calc.net(RFParameter::A), "net(A)");
+        comp_points_c64(&exemplar_a, &calc.a(), "a()");
 
-        comp_point_c64(&exemplar_g, &calc.net(RFParameter::G), "net(G)");
-        comp_point_c64(&exemplar_g, &calc.g(), "g()");
+        comp_points_c64(&exemplar_g, &calc.net(RFParameter::G), "net(G)");
+        comp_points_c64(&exemplar_g, &calc.g(), "g()");
 
-        comp_point_c64(&exemplar_h, &calc.net(RFParameter::H), "net(H)");
-        comp_point_c64(&exemplar_h, &calc.h(), "h()");
+        comp_points_c64(&exemplar_h, &calc.net(RFParameter::H), "net(H)");
+        comp_points_c64(&exemplar_h, &calc.h(), "h()");
 
-        comp_point_c64(&exemplar_s, &calc.net(RFParameter::S), "net(S)");
-        comp_point_c64(&exemplar_s, &calc.s(), "s()");
+        comp_points_c64(&exemplar_s, &calc.net(RFParameter::S), "net(S)");
+        comp_points_c64(&exemplar_s, &calc.s(), "s()");
 
-        comp_point_c64(&exemplar_t, &calc.net(RFParameter::T), "net(T)");
-        comp_point_c64(&exemplar_t, &calc.t(), "t()");
+        comp_points_c64(&exemplar_t, &calc.net(RFParameter::T), "net(T)");
+        comp_points_c64(&exemplar_t, &calc.t(), "t()");
 
-        comp_point_c64(&exemplar_y, &calc.net(RFParameter::Y), "net(Y)");
-        comp_point_c64(&exemplar_y, &calc.y(), "y()");
+        comp_points_c64(&exemplar_y, &calc.net(RFParameter::Y), "net(Y)");
+        comp_points_c64(&exemplar_y, &calc.y(), "y()");
 
-        comp_point_c64(&exemplar_z, &calc.net(RFParameter::Z), "net(Z)");
-        comp_point_c64(&exemplar_z, &calc.z(), "z()");
+        comp_points_c64(&exemplar_z, &calc.net(RFParameter::Z), "net(Z)");
+        comp_points_c64(&exemplar_z, &calc.z(), "z()");
     }
     
     #[test]
@@ -4640,7 +4387,7 @@ mod test {
         ]];
 
         let calc = Network::new(
-            Frequency::new(row![1.0], Unit::Giga),
+            Frequency::new_scaled(row![1.0], Unit::Giga),
             row![
                 c64::from(50.0),
                 c64::from(50.0),
@@ -4666,21 +4413,21 @@ mod test {
             [c64::new(-0.0216692279986209777014548005583422, -0.00240358862780036489256153967367999), c64::new(-0.0333025210001457217302023425409882, -0.00511723009911371458159157586576231), c64::new(-0.0000185573287372341018227283282793895, -0.000255194829519354977260741165527909)],
         ]];
 
-        comp_point_c64(&exemplar_s, &calc.net(RFParameter::S), "net(S)");
-        comp_point_c64(&exemplar_s, &calc.s(), "s()");
+        comp_points_c64(&exemplar_s, &calc.net(RFParameter::S), "net(S)");
+        comp_points_c64(&exemplar_s, &calc.s(), "s()");
 
-        comp_point_c64(&exemplar_y, &calc.net(RFParameter::Y), "net(Y)");
-        comp_point_c64(&exemplar_y, &calc.y(), "y()");
+        comp_points_c64(&exemplar_y, &calc.net(RFParameter::Y), "net(Y)");
+        comp_points_c64(&exemplar_y, &calc.y(), "y()");
 
-        comp_point_c64(&exemplar_z, &calc.net(RFParameter::Z), "net(Z)");
-        comp_point_c64(&exemplar_z, &calc.z(), "z()");
+        comp_points_c64(&exemplar_z, &calc.net(RFParameter::Z), "net(Z)");
+        comp_points_c64(&exemplar_z, &calc.z(), "z()");
     }
 
-#[test]
+    #[test]
     #[should_panic(expected = "ABCD parameters do not exist for network with 1 port(s)")]
     fn network_y_to_a() {
         let net = Network::new(
-            Frequency::new(row![1.0], Unit::Giga),
+            Frequency::new_scaled(row![1.0], Unit::Giga),
             row![c64::from(50.0)],
             RFParameter::Y,
             vec![mat![
@@ -4697,7 +4444,7 @@ mod test {
     #[should_panic(expected = "Inverse Hybrid (g) parameters do not exist for network with 1 port(s)")]
     fn network_y_to_g() {
         let net = Network::new(
-            Frequency::new(row![1.0], Unit::Giga),
+            Frequency::new_scaled(row![1.0], Unit::Giga),
             row![c64::from(50.0)],
             RFParameter::Y,
             vec![mat![
@@ -4714,7 +4461,7 @@ mod test {
     #[should_panic(expected = "Hybrid (h) parameters do not exist for network with 1 port(s)")]
     fn network_y_to_h() {
         let net = Network::new(
-            Frequency::new(row![1.0], Unit::Giga),
+            Frequency::new_scaled(row![1.0], Unit::Giga),
             row![c64::from(50.0)],
             RFParameter::Y,
             vec![mat![
@@ -4731,7 +4478,7 @@ mod test {
     #[should_panic(expected = "T parameters do not exist for network with 1 port(s)")]
     fn network_y_to_t() {
         let net = Network::new(
-            Frequency::new(row![1.0], Unit::Giga),
+            Frequency::new_scaled(row![1.0], Unit::Giga),
             row![c64::from(50.0)],
             RFParameter::Y,
             vec![mat![
@@ -4754,7 +4501,7 @@ mod test {
         ]];
 
         let calc = Network::new(
-            Frequency::new(row![1.0], Unit::Giga),
+            Frequency::new_scaled(row![1.0], Unit::Giga),
             row![c64::from(50.0)],
             param,
             exemplar.clone(),
@@ -4772,14 +4519,14 @@ mod test {
 
         let exemplar_z = exemplar;
 
-        comp_point_c64(&exemplar_s, &calc.net(RFParameter::S), "net(S)");
-        comp_point_c64(&exemplar_s, &calc.s(), "s()");
+        comp_points_c64(&exemplar_s, &calc.net(RFParameter::S), "net(S)");
+        comp_points_c64(&exemplar_s, &calc.s(), "s()");
 
-        comp_point_c64(&exemplar_y, &calc.net(RFParameter::Y), "net(Y)");
-        comp_point_c64(&exemplar_y, &calc.y(), "y()");
+        comp_points_c64(&exemplar_y, &calc.net(RFParameter::Y), "net(Y)");
+        comp_points_c64(&exemplar_y, &calc.y(), "y()");
 
-        comp_point_c64(&exemplar_z, &calc.net(RFParameter::Z), "net(Z)");
-        comp_point_c64(&exemplar_z, &calc.z(), "z()");
+        comp_points_c64(&exemplar_z, &calc.net(RFParameter::Z), "net(Z)");
+        comp_points_c64(&exemplar_z, &calc.z(), "z()");
     }
 
     #[test]
@@ -4803,7 +4550,7 @@ mod test {
         ];
 
         let calc = Network::new(
-            Frequency::new(row![1.0, 2.0, 3.0], Unit::Giga),
+            Frequency::new_scaled(row![1.0, 2.0, 3.0], Unit::Giga),
             row![
                 c64::from(50.0),
                 c64::from(50.0),
@@ -4906,26 +4653,26 @@ mod test {
 
         let exemplar_z = exemplar;
 
-        comp_point_c64(&exemplar_a, &calc.net(RFParameter::A), "net(A)");
-        comp_point_c64(&exemplar_a, &calc.a(), "a()");
+        comp_points_c64(&exemplar_a, &calc.net(RFParameter::A), "net(A)");
+        comp_points_c64(&exemplar_a, &calc.a(), "a()");
 
-        comp_point_c64(&exemplar_g, &calc.net(RFParameter::G), "net(G)");
-        comp_point_c64(&exemplar_g, &calc.g(), "g()");
+        comp_points_c64(&exemplar_g, &calc.net(RFParameter::G), "net(G)");
+        comp_points_c64(&exemplar_g, &calc.g(), "g()");
 
-        comp_point_c64(&exemplar_h, &calc.net(RFParameter::H), "net(H)");
-        comp_point_c64(&exemplar_h, &calc.h(), "h()");
+        comp_points_c64(&exemplar_h, &calc.net(RFParameter::H), "net(H)");
+        comp_points_c64(&exemplar_h, &calc.h(), "h()");
 
-        comp_point_c64(&exemplar_s, &calc.net(RFParameter::S), "net(S)");
-        comp_point_c64(&exemplar_s, &calc.s(), "s()");
+        comp_points_c64(&exemplar_s, &calc.net(RFParameter::S), "net(S)");
+        comp_points_c64(&exemplar_s, &calc.s(), "s()");
 
-        comp_point_c64(&exemplar_t, &calc.net(RFParameter::T), "net(T)");
-        comp_point_c64(&exemplar_t, &calc.t(), "t()");
+        comp_points_c64(&exemplar_t, &calc.net(RFParameter::T), "net(T)");
+        comp_points_c64(&exemplar_t, &calc.t(), "t()");
 
-        comp_point_c64(&exemplar_y, &calc.net(RFParameter::Y), "net(Y)");
-        comp_point_c64(&exemplar_y, &calc.y(), "y()");
+        comp_points_c64(&exemplar_y, &calc.net(RFParameter::Y), "net(Y)");
+        comp_points_c64(&exemplar_y, &calc.y(), "y()");
 
-        comp_point_c64(&exemplar_z, &calc.net(RFParameter::Z), "net(Z)");
-        comp_point_c64(&exemplar_z, &calc.z(), "z()");
+        comp_points_c64(&exemplar_z, &calc.net(RFParameter::Z), "net(Z)");
+        comp_points_c64(&exemplar_z, &calc.z(), "z()");
     }
 
     #[test]
@@ -4940,7 +4687,7 @@ mod test {
         ]];
 
         let calc = Network::new(
-            Frequency::new(row![1.0], Unit::Giga),
+            Frequency::new_scaled(row![1.0], Unit::Giga),
             row![
                 c64::from(50.0),
                 c64::from(50.0),
@@ -4966,21 +4713,21 @@ mod test {
 
         let exemplar_z = exemplar;
 
-        comp_point_c64(&exemplar_s, &calc.net(RFParameter::S), "net(S)");
-        comp_point_c64(&exemplar_s, &calc.s(), "s()");
+        comp_points_c64(&exemplar_s, &calc.net(RFParameter::S), "net(S)");
+        comp_points_c64(&exemplar_s, &calc.s(), "s()");
 
-        comp_point_c64(&exemplar_y, &calc.net(RFParameter::Y), "net(Y)");
-        comp_point_c64(&exemplar_y, &calc.y(), "y()");
+        comp_points_c64(&exemplar_y, &calc.net(RFParameter::Y), "net(Y)");
+        comp_points_c64(&exemplar_y, &calc.y(), "y()");
 
-        comp_point_c64(&exemplar_z, &calc.net(RFParameter::Z), "net(Z)");
-        comp_point_c64(&exemplar_z, &calc.z(), "z()");
+        comp_points_c64(&exemplar_z, &calc.net(RFParameter::Z), "net(Z)");
+        comp_points_c64(&exemplar_z, &calc.z(), "z()");
     }
 
     #[test]
     #[should_panic(expected = "ABCD parameters do not exist for network with 1 port(s)")]
     fn network_z_to_a() {
         let net = Network::new(
-            Frequency::new(row![1.0], Unit::Giga),
+            Frequency::new_scaled(row![1.0], Unit::Giga),
             row![c64::from(50.0)],
             RFParameter::Z,
             vec![mat![
@@ -4997,7 +4744,7 @@ mod test {
     #[should_panic(expected = "Inverse Hybrid (g) parameters do not exist for network with 1 port(s)")]
     fn network_z_to_g() {
         let net = Network::new(
-            Frequency::new(row![1.0], Unit::Giga),
+            Frequency::new_scaled(row![1.0], Unit::Giga),
             row![c64::from(50.0)],
             RFParameter::Z,
             vec![mat![
@@ -5014,7 +4761,7 @@ mod test {
     #[should_panic(expected = "Hybrid (h) parameters do not exist for network with 1 port(s)")]
     fn network_z_to_h() {
         let net = Network::new(
-            Frequency::new(row![1.0], Unit::Giga),
+            Frequency::new_scaled(row![1.0], Unit::Giga),
             row![c64::from(50.0)],
             RFParameter::Z,
             vec![mat![
@@ -5031,7 +4778,7 @@ mod test {
     #[should_panic(expected = "T parameters do not exist for network with 1 port(s)")]
     fn network_z_to_t() {
         let net = Network::new(
-            Frequency::new(row![1.0], Unit::Giga),
+            Frequency::new_scaled(row![1.0], Unit::Giga),
             row![c64::from(50.0)],
             RFParameter::Z,
             vec![mat![
@@ -5044,53 +4791,43 @@ mod test {
         net.t();
     }
 
-    fn comp_point_c64(exemplar: &Vec<Point>, calc: &Vec<Point>, test: &str) {
-        for i in 0..calc.len() {
-            for j in 0..calc[i].nrows() {
-                for k in 0..calc[i].ncols() {
-                    comp_point(exemplar[i][(j, k)].re, calc[i][(j, k)].re, test, format!("re({},{},{})", i, j, k));
-                    comp_point(exemplar[i][(j, k)].im, calc[i][(j, k)].im, test, format!("im({},{},{})", i, j, k));
-                }
-            }
-        }
-    }
+    // fn comp_points_c64(exemplar: &Vec<Point>, calc: &Vec<Point>, test: &str) {
+    //     for i in 0..calc.len() {
+    //         for j in 0..calc[i].nrows() {
+    //             for k in 0..calc[i].ncols() {
+    //                 comp_point(exemplar[i][(j, k)].re, calc[i][(j, k)].re, test, format!("re({},{},{})", i, j, k));
+    //                 comp_point(exemplar[i][(j, k)].im, calc[i][(j, k)].im, test, format!("im({},{},{})", i, j, k));
+    //             }
+    //         }
+    //     }
+    // }
 
-    fn comp_point_f64(
-        exemplar: &Vec<Pointf64>,
-        calc: &Vec<Pointf64>,
-        test: &str,
-    ) {
-        for i in 0..calc.len() {
-            for j in 0..calc[i].nrows() {
-                for k in 0..calc[i].ncols() {
-                    comp_point(exemplar[i][(j, k)], calc[i][(j, k)], test, format!("({},{},{})", i, j, k));
-                }
-            }
-        }
-    }
+    // fn comp_points_f64(
+    //     exemplar: &Vec<Pointf64>,
+    //     calc: &Vec<Pointf64>,
+    //     test: &str,
+    // ) {
+    //     for i in 0..calc.len() {
+    //         for j in 0..calc[i].nrows() {
+    //             for k in 0..calc[i].ncols() {
+    //                 comp_point(exemplar[i][(j, k)], calc[i][(j, k)], test, format!("({},{},{})", i, j, k));
+    //             }
+    //         }
+    //     }
+    // }
 
-    fn comp_point(exemplar: f64, calc: f64, test: &str, idx: String) {
-        if exemplar == calc {
-            return ();
-        }
+    // fn comp_point(exemplar: f64, calc: f64, test: &str, idx: String) {
+    //     if exemplar == calc {
+    //         return ();
+    //     }
 
-        // let base: f64 = 2.0;
-        // let eps = base.powi(-53);
-        let base: f64 = 10.0;
-        let eps = base.powi(-10);
+    //     // let base: f64 = 2.0;
+    //     // let eps = base.powi(-53);
+    //     let base: f64 = 10.0;
+    //     let eps = base.powi(-10);
 
-        let val = (calc - exemplar).abs() / (eps * exemplar);
-        debug_assert!((calc - exemplar).abs() < (eps * exemplar).abs(), " Failed test {} at location {}\n  exemplar: {}\n      calc: {}", test, idx, exemplar, calc);
-        // debug_assert!(val * eps.sqrt() < 1.0, " Failed test {} at location {}\n  left: {}\n right: {}", test, idx, exemplar, calc);
-    }
-
-    fn calc_err(a: Row<f64>, b: Row<f64>) {
-        let base: f64 = 2.0;
-        let eps = base.powi(-53);
-    
-        for i in 0..a.nrows() {
-          let val = (a.get(i) - b.get(i)).abs() / (eps * a.get(i));
-          assert!(val * eps.sqrt() < 1.0);
-        }
-    }
+    //     let val = (calc - exemplar).abs() / (eps * exemplar);
+    //     debug_assert!((calc - exemplar).abs() < (eps * exemplar).abs(), " Failed test {} at location {}\n  exemplar: {}\n      calc: {}", test, idx, exemplar, calc);
+    //     // debug_assert!(val * eps.sqrt() < 1.0, " Failed test {} at location {}\n  left: {}\n right: {}", test, idx, exemplar, calc);
+    // }
 }
