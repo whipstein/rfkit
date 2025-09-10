@@ -1,274 +1,619 @@
-use faer::{scale, Row};
+use crate::scale::Scale;
+use crate::unit::{Sweep, Unit, UnitVal, UnitValBuilder};
+use float_cmp::{F64Margin, approx_eq};
+use ndarray::concatenate;
+use ndarray::prelude::*;
+use rug::Assign;
 use std::f64::consts::PI;
-use crate::enums::Unit;
+use std::str::FromStr;
 
-// Frequency stores values in Hz
+/// Representation of a set of frequencies
 #[derive(Clone, Debug, PartialEq)]
 pub struct Frequency {
-    pts: Row<f64>,
+    vals: Array1<f64>,
+    scale: Scale,
+    unit: Unit,
 }
 
 impl Frequency {
-    fn f_scaled(&self, unit: Unit) -> Row<f64> {
-        &self.pts * scale(1.0 / unit.scale())
-    }
-
-    pub fn freq(&self) -> &Row<f64> {
-        &self.pts
-    }
-
-    pub fn freq_at(&self, pt: usize) -> &f64 {
-        &self.pts.get(pt)
-    }
-
-    pub fn freq_scaled_at(&self, pt: usize, unit: Unit) -> f64 {
-        self.pts.get(pt) / unit.scale()
-    }
-
-    pub fn from_row(f: Row<f64>, unit: Unit) -> Frequency {
-        Frequency{
-            pts: &f * scale(unit.scale()),
+    /// Create a new Frequency from base scale frequencies
+    pub fn new(vals: Array1<f64>, scale: Scale) -> Frequency {
+        Frequency {
+            vals,
+            scale,
+            unit: Unit::Hz,
         }
     }
 
-    pub fn from_lin_range(start: f64, stop: f64, step: f64, unit: Unit) -> Frequency {
-        let n = ((stop - start) / step) as usize + 1;
+    /// Create a new Frequency from scaled frequencies based on scale
+    pub fn new_scaled(vals: Array1<f64>, scale: Scale) -> Frequency {
+        let freqs = Array1::<f64>::from_shape_fn(vals.dim(), |i| scale.unscale(vals[i]));
 
         Frequency {
-            pts: Row::<f64>::from_fn(n, |i| (start + (i as f64)*step) * unit.scale()),
+            vals: freqs,
+            scale,
+            unit: Unit::Hz,
         }
     }
 
-    pub fn from_vec(f: Vec<f64>, unit: Unit) -> Frequency {
-        let mut freq: Row<f64> = Row::zeros(f.len());
-        for i in 0..freq.ncols() {
-            freq.write(i, f[i] * unit.scale());
-        }
-        Frequency{
-            pts: freq,
-        }
-    }
-
-    pub fn get_ghz(&self, pt: usize) -> f64 {
-        self.freq_at(pt) / Unit::Giga.scale()
-    }
-
-    pub fn get_hz(&self, pt: usize) -> f64 {
-        *self.freq_at(pt)
-    }
-
-    pub fn get_khz(&self, pt: usize) -> f64 {
-        self.freq_at(pt) / Unit::Kilo.scale()
-    }
-
-    pub fn get_mhz(&self, pt: usize) -> f64 {
-        self.freq_at(pt) / Unit::Mega.scale()
-    }
-
-    pub fn get_thz(&self, pt: usize) -> f64 {
-        self.freq_at(pt) / Unit::Tera.scale()
-    }
-
-    pub fn ghz(&self) -> Row<f64> {
-        self.f_scaled(Unit::Giga)
-    }
-
-    pub fn hz(&self) -> Row<f64> {
-        self.f_scaled(Unit::Base)
-    }
-
-    pub fn idx_at(&self, freq: f64, unit: Unit)  -> Option<usize> {
-        self.pts.as_slice().iter().position(|x| *x == freq * unit.scale())
-    }
-
-    pub fn khz(&self) -> Row<f64> {
-        self.f_scaled(Unit::Kilo)
-    }
-
-    pub fn mhz(&self) -> Row<f64> {
-        self.f_scaled(Unit::Mega)
-    }
-
-    pub fn new(pts: Row<f64>) -> Frequency {
+    /// Create a new Frequency from a UnitVal
+    pub fn from_unitval(val: &UnitVal) -> Frequency {
         Frequency {
-            pts: pts,
+            vals: array![val.val()],
+            scale: val.scale(),
+            unit: val.unit(),
         }
     }
 
-    pub fn new_scaled(pts: Row<f64>, unit: Unit) -> Frequency {
-        Frequency {
-            pts: pts * scale(unit.scale()),
-        }
+    /// Retrieve single frequency at pt unscaled
+    pub fn freq(&self, pt: usize) -> f64 {
+        self.vals[pt]
     }
 
+    /// Retrieve single frequency at pt in scaled scale
+    pub fn freq_scaled(&self, pt: usize) -> f64 {
+        self.scale.scale(self.vals[pt])
+    }
+
+    /// Retrieve frequencies unscaled
+    pub fn freqs(&self) -> Array1<f64> {
+        self.vals.clone()
+    }
+
+    /// Retrieve frequencies in scaled scale
+    pub fn freqs_scaled(&self) -> Array1<f64> {
+        Array1::<f64>::from_shape_fn(self.vals.dim(), |i| self.scale.scale(self.vals[i]))
+    }
+
+    /// Retrieve single frequency at pt as UnitVal
+    pub fn unitval(&self, pt: usize) -> UnitVal {
+        UnitValBuilder::new()
+            .val(self.vals[pt])
+            .scale(self.scale)
+            .build()
+    }
+
+    /// Retrieve Unit of Frequency
+    pub fn scale(&self) -> Scale {
+        self.scale
+    }
+
+    /// Retrieve number of frequency points
     pub fn npts(&self) -> usize {
-        self.pts.ncols()
+        self.vals.len()
     }
 
-    pub fn thz(&self) -> Row<f64> {
-        self.f_scaled(Unit::Tera)
+    /// Set single frequency at pt unscaled
+    pub fn set_freq(&mut self, val: f64, pt: usize) -> &Self {
+        self.vals[pt] = val;
+        self
     }
 
-    pub fn w(&self) -> Row<f64> {
-        &self.pts * scale(2.0*PI)
+    /// Set single frequency at pt in scaled scale
+    pub fn set_freq_scaled(&mut self, val: f64, pt: usize) -> &Self {
+        self.vals[pt] = self.scale.unscale(val);
+        self
+    }
+
+    /// Set frequencies unscaled
+    pub fn set_freqs(&mut self, vals: Array1<f64>) -> &Self {
+        self.vals = vals;
+        self
+    }
+
+    /// Set frequencies in scaled scale
+    pub fn set_freqs_scaled(&mut self, vals: Array1<f64>) -> &Self {
+        self.vals = vals;
+        for val in &mut self.vals {
+            *val = self.scale.unscale(*val);
+        }
+
+        self
+    }
+
+    /// Set Unit of Frequency
+    pub fn set_unit(&mut self, scale: Scale) -> &Self {
+        self.scale = scale;
+        self
+    }
+
+    /// Set Unit of Frequency
+    pub fn set_unit_str(&mut self, scale: &str) -> &Self {
+        self.scale = Scale::from_str(scale).unwrap();
+        self
+    }
+
+    /// Retrieve angular frequencies
+    pub fn w(&self) -> Array1<f64> {
+        Array1::<f64>::from_shape_fn(self.vals.dim(), |i| self.vals[i] * 2.0 * PI)
+    }
+
+    /// Retrieve angular frequency at pt
+    pub fn w_pt(&self, pt: usize) -> f64 {
+        self.vals[pt] * 2.0 * PI
+    }
+
+    /// Retrieve wavelengths of Frequency
+    pub fn wavelengths(&self, er: f64) -> Array1<f64> {
+        Array1::<f64>::from_shape_fn(self.vals.dim(), |i| 3e8 / (self.vals[i] * er.sqrt()))
+    }
+
+    /// Retrieve wavelength of Frequency at pt
+    pub fn wavelength(&self, er: f64, pt: usize) -> f64 {
+        3e8 / (self.vals[pt] * er.sqrt())
+    }
+}
+
+impl Default for Frequency {
+    fn default() -> Self {
+        Frequency {
+            vals: array![1e9],
+            scale: Scale::Giga,
+            unit: Unit::Hz,
+        }
+    }
+}
+
+/// Builder design pattern for Frequency
+///
+/// ## Example
+/// ```
+/// use ndarray::prelude::*;
+/// use rfkit_base_ndarray::prelude::*;
+///
+/// let freq1 = FrequencyBuilder::new().freqs_scaled(array![1.0, 2.0, 3.0], Unit::Giga).build();
+///
+/// let freq2 = FrequencyBuilder::new().start_stop_step_scaled(1.0, 3.0, 1.0, Unit::Giga).build();
+/// ```
+#[derive(Default)]
+pub struct FrequencyBuilder {
+    step: Option<(f64, f64, f64)>,
+    pts: Option<(f64, f64, usize, Sweep)>,
+    vals: Array1<f64>,
+    scale: Scale,
+}
+
+impl FrequencyBuilder {
+    pub fn new() -> Self {
+        FrequencyBuilder {
+            step: None,
+            pts: None,
+            vals: array![1e9],
+            scale: Scale::Giga,
+        }
+    }
+
+    /// Provide Array1<f64> of frequency values in Hz
+    pub fn freqs(mut self, vals: Array1<f64>) -> Self {
+        self.vals = vals;
+        self
+    }
+
+    /// Provide Array1<f64> of frequency values in scaled scale
+    pub fn freqs_scaled(mut self, vals: Array1<f64>, scale: Scale) -> Self {
+        self.vals = Array1::<f64>::from_shape_fn(vals.dim(), |i| scale.unscale(vals[i]));
+        self.scale = scale;
+
+        self
+    }
+
+    /// Provide frequency from start, stop and step in Hz
+    pub fn start_stop_step(mut self, start: f64, stop: f64, step: f64) -> Self {
+        self.step = Some((start, stop, step));
+        self
+    }
+
+    /// Provide frequency from start, stop and step in scaled scale
+    pub fn start_stop_step_scaled(
+        mut self,
+        start: f64,
+        stop: f64,
+        step: f64,
+        scale: Scale,
+    ) -> Self {
+        self.scale = scale;
+        self.step = Some((
+            self.scale.unscale(start),
+            self.scale.unscale(stop),
+            self.scale.unscale(step),
+        ));
+        self
+    }
+
+    /// Provide frequency from start, stop, number of points and sweep type in Hz
+    pub fn start_stop_npts(mut self, start: f64, stop: f64, npts: usize, sweep: Sweep) -> Self {
+        self.pts = Some((start, stop, npts, sweep));
+        self
+    }
+
+    /// Provide frequency from start, stop, number of points and sweep type in scaled scale
+    pub fn start_stop_npts_scaled(
+        mut self,
+        start: f64,
+        stop: f64,
+        npts: usize,
+        scale: Scale,
+        sweep: Sweep,
+    ) -> Self {
+        self.scale = scale;
+        self.pts = Some((
+            self.scale.unscale(start),
+            self.scale.unscale(stop),
+            npts,
+            sweep,
+        ));
+        self
+    }
+
+    /// Provide scale for frequencies
+    pub fn scale(mut self, scale: Scale) -> Self {
+        self.scale = scale;
+        self
+    }
+
+    pub fn build(self) -> Frequency {
+        let mut last_val = 0.0;
+        match (self.step, self.pts) {
+            (Some(x), _) => {
+                let npts: usize = ((x.1 - x.0) / x.2).floor() as usize + 1;
+                let mut out = Array1::<f64>::zeros(npts);
+
+                for (i, pt) in out.iter_mut().enumerate() {
+                    if i == 0 {
+                        pt.assign(x.0);
+                        last_val = x.0;
+                        continue;
+                    }
+                    pt.assign(last_val + x.2);
+                    last_val += x.2;
+                }
+                if !approx_eq!(f64, out[npts - 1], x.1, F64Margin::default()) {
+                    out = concatenate![Axis(0), out, array![x.1]];
+                }
+
+                Frequency {
+                    vals: out,
+                    scale: self.scale,
+                    unit: Unit::Hz,
+                }
+            }
+            (_, Some(x)) => {
+                let mut out = Array1::<f64>::zeros(x.2);
+
+                let step = (x.1 - x.0) / (x.2 - 1) as f64;
+                for (i, pt) in out.iter_mut().enumerate() {
+                    if i == 0 {
+                        pt.assign(x.0);
+                        last_val = x.0;
+                        continue;
+                    }
+                    match x.3 {
+                        Sweep::Linear => {
+                            pt.assign(last_val + step);
+                            last_val += step;
+                        }
+                        Sweep::Log => {
+                            pt.assign(10_f64.powf(
+                                ((x.1).log10() - x.0.log10()) / (x.2 - 1) as f64 * i as f64
+                                    + x.0.log10(),
+                            ));
+                            last_val = 10_f64.powf(
+                                ((x.1).log10() - x.0.log10()) / (x.2 - 1) as f64 * i as f64
+                                    + x.0.log10(),
+                            );
+                        }
+                    }
+                }
+                out[x.2 - 1] = x.1;
+
+                Frequency {
+                    vals: out,
+                    scale: self.scale,
+                    unit: Unit::Hz,
+                }
+            }
+            (_, _) => Frequency {
+                vals: self.vals,
+                scale: self.scale,
+                unit: Unit::Hz,
+            },
+        }
     }
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use super::*;
-    use faer::row;
-    use crate::math::comp_row_f64;
+    use crate::util::{comp_array_f64, comp_f64};
+    use float_cmp::F64Margin;
 
     #[test]
-    fn frequency_equal() {
-        let freq = Frequency::from_row(row![1.0, 2.0, 3.0], Unit::Giga);
-        let freq_eq = Frequency::from_row(row![1.0, 2.0, 3.0], Unit::Giga);
-        let freq_ne = Frequency::from_row(row![1.0, 2.0, 3.0, 4.0], Unit::Giga);
-        let freq_ne2 = Frequency::from_row(row![1.0, 3.0, 4.0], Unit::Giga);
+    fn test_frequency() {
+        let vals = array![280e9, 300e9, 350e9, 500e9];
+        let vals_scaled = array![280.0, 300.0, 350.0, 500.0];
+        let w = array![
+            1759291886010.2842,
+            1884955592153.876,
+            2199114857512.855,
+            3141592653589.793,
+        ];
+        let er = 3.4;
+        let wavelength = array![
+            0.0005810637262999719,
+            0.0005423261445466404,
+            0.00046485098103997755,
+            0.0003253956867279843,
+        ];
+        let scale = Scale::Giga;
 
-        assert_eq!(freq, freq_eq);
-        assert_ne!(freq, freq_ne);
-        assert_ne!(freq, freq_ne2);
+        let freq = Frequency::new(vals.clone(), scale);
+        comp_f64(
+            &vals[0],
+            &freq.freq(0),
+            F64Margin::default(),
+            "frequency::freq()",
+            "0",
+        );
+        comp_f64(
+            &vals_scaled[0],
+            &&freq.freq_scaled(0),
+            F64Margin::default(),
+            "frequency::freq_scaled()",
+            "0",
+        );
+        comp_array_f64(
+            &vals,
+            &freq.freqs(),
+            F64Margin::default(),
+            "frequency::freqs()",
+        );
+        comp_array_f64(
+            &vals_scaled,
+            &freq.freqs_scaled(),
+            F64Margin::default(),
+            "frequency::freqs_scaled()",
+        );
+        comp_array_f64(&w, &freq.w(), F64Margin::default(), "frequency::w()");
+        comp_f64(
+            &w[0],
+            &freq.w_pt(0),
+            F64Margin::default(),
+            "frequency::w_pt()",
+            "0",
+        );
+        comp_array_f64(
+            &wavelength,
+            &freq.wavelengths(er),
+            F64Margin::default(),
+            "frequency::wavelengths()",
+        );
+        comp_f64(
+            &wavelength[0],
+            &freq.wavelength(er, 0),
+            F64Margin::default(),
+            "frequency::wavelength()",
+            "0",
+        );
+
+        let freq = Frequency::new_scaled(vals_scaled.clone(), scale);
+        comp_array_f64(
+            &vals,
+            &freq.freqs(),
+            F64Margin::default(),
+            "frequency_scaled::freqs()",
+        );
+        comp_array_f64(
+            &vals_scaled,
+            &freq.freqs_scaled(),
+            F64Margin::default(),
+            "frequency_scaled::freqs_scaled()",
+        );
+        comp_array_f64(&freq.w(), &w, F64Margin::default(), "frequency::w()");
+        comp_array_f64(
+            &wavelength,
+            &freq.wavelengths(er),
+            F64Margin::default(),
+            "frequency_scaled::wavelengths()",
+        );
+
+        let mut freq = Frequency::new(vals.clone(), scale);
+        let freq_vals = array![290e9, 300e9, 350e9, 500e9];
+        freq.set_freq(290e9, 0);
+        comp_array_f64(
+            &freq_vals,
+            &freq.freqs(),
+            F64Margin::default(),
+            "frequency::set_freq()",
+        );
+
+        let freq_vals2 = array![250e9, 300e9, 350e9, 500e9];
+        freq.set_freq_scaled(250.0, 0);
+        comp_array_f64(
+            &freq_vals2,
+            &freq.freqs(),
+            F64Margin::default(),
+            "frequency::set_freq_scaled()",
+        );
+
+        let freq_vals_new = array![200e9, 320e9, 310e9, 550e9];
+        freq.set_freqs(freq_vals_new.clone());
+        comp_array_f64(
+            &freq_vals_new,
+            &freq.freqs(),
+            F64Margin::default(),
+            "frequency::set_freqs()",
+        );
+
+        let freq_vals_new_scaled = array![210.0, 340.0, 400.0, 510.0];
+        freq.set_freqs_scaled(freq_vals_new_scaled.clone());
+        comp_array_f64(
+            &freq_vals_new_scaled,
+            &freq.freqs_scaled(),
+            F64Margin::default(),
+            "frequency::set_freqs_scaled()",
+        );
+
+        let freq_vals_new_scaled = array![210e3, 340e3, 400e3, 510e3];
+        freq.set_unit(Scale::Mega);
+        comp_array_f64(
+            &freq_vals_new_scaled,
+            &freq.freqs_scaled(),
+            F64Margin::default(),
+            "frequency::set_unit()",
+        );
+
+        let freq_vals_new_scaled = array![210e6, 340e6, 400e6, 510e6];
+        freq.set_unit_str("kHz");
+        comp_array_f64(
+            &freq_vals_new_scaled,
+            &freq.freqs_scaled(),
+            F64Margin::default(),
+            "frequency::set_unit_str()",
+        );
+
+        let mut val = UnitVal::new(300e9, Scale::Giga, Unit::Hz);
+        val.set_scale(Scale::Giga);
+        val.set_unit(Unit::Hz);
+        let freq_unitval = Frequency::from_unitval(&val);
+        comp_array_f64(
+            &array![300e9],
+            &freq_unitval.freqs(),
+            F64Margin::default(),
+            "frequency::from_unitval()",
+        );
+        assert_eq!(Scale::Giga, freq_unitval.scale);
+        assert_eq!(Unit::Hz, freq_unitval.unit);
     }
 
     #[test]
-    fn frequency_from_row() {
-        let data = row![1.0, 2.0, 3.0];
-        let freq_hz = Frequency::from_row(data.clone(), Unit::Base);
-        let freq_khz = Frequency::from_row(data.clone(), Unit::Kilo);
-        let freq_mhz = Frequency::from_row(data.clone(), Unit::Mega);
-        let freq_ghz = Frequency::from_row(data.clone(), Unit::Giga);
-        let freq_thz = Frequency::from_row(data.clone(), Unit::Tera);
+    fn test_frequencybuilder() {
+        let vals = array![280e9, 300e9, 350e9, 500e9];
+        let vals_scaled = array![280.0, 300.0, 350.0, 500.0];
+        let vals_linear = array![280e9, 335e9, 390e9, 445e9, 500e9];
+        let vals_log = array![
+            280e9,
+            323.6763921413955e9,
+            374.1657386773942e9,
+            432.53077270721106e9,
+            500e9,
+        ];
+        let vals_linear2 = array![280e9, 330e9, 380e9, 430e9, 480e9, 500e9];
+        let scale = Scale::Giga;
 
-        for i in 0..data.ncols() {
-            assert_eq!(data.get(i) * Unit::Base.scale(), *freq_hz.pts.get(i));
-            assert_eq!(data.get(i) * Unit::Kilo.scale(), *freq_khz.pts.get(i));
-            assert_eq!(data.get(i) * Unit::Mega.scale(), *freq_mhz.pts.get(i));
-            assert_eq!(data.get(i) * Unit::Giga.scale(), *freq_ghz.pts.get(i));
-            assert_eq!(data.get(i) * Unit::Tera.scale(), *freq_thz.pts.get(i));
-        }
+        let freq = FrequencyBuilder::new()
+            .freqs(vals.clone())
+            .scale(scale)
+            .build();
+        assert_eq!(
+            freq,
+            Frequency {
+                vals: vals.clone(),
+                scale: scale,
+                unit: Unit::Hz,
+            }
+        );
 
-        assert_eq!(data.ncols(), freq_hz.npts());
-        assert_eq!(data.ncols(), freq_khz.npts());
-        assert_eq!(data.ncols(), freq_mhz.npts());
-        assert_eq!(data.ncols(), freq_ghz.npts());
-        assert_eq!(data.ncols(), freq_thz.npts());
-    }
+        let freq = FrequencyBuilder::new()
+            .freqs_scaled(vals_scaled.clone(), scale)
+            .build();
+        assert_eq!(
+            freq,
+            Frequency {
+                vals: vals.clone(),
+                scale: scale,
+                unit: Unit::Hz,
+            }
+        );
 
-    #[test]
-    fn frequency_from_lin_range() {
-        let data = row![1.0, 2.0, 3.0];
-        let freq_hz = Frequency::from_lin_range(1.0, 3.0, 1.0, Unit::Base);
-        let freq_khz = Frequency::from_lin_range(1.0, 3.0, 1.0, Unit::Kilo);
-        let freq_mhz = Frequency::from_lin_range(1.0, 3.0, 1.0, Unit::Mega);
-        let freq_ghz = Frequency::from_lin_range(1.0, 3.0, 1.0, Unit::Giga);
-        let freq_thz = Frequency::from_lin_range(1.0, 3.0, 1.0, Unit::Tera);
+        let freq = FrequencyBuilder::new()
+            .start_stop_step(280e9, 500e9, 55e9)
+            .scale(scale)
+            .build();
+        assert_eq!(
+            freq,
+            Frequency {
+                vals: vals_linear.clone(),
+                scale: scale,
+                unit: Unit::Hz,
+            }
+        );
 
-        for i in 0..data.ncols() {
-            assert_eq!(data.get(i) * Unit::Base.scale(), *freq_hz.pts.get(i));
-            assert_eq!(data.get(i) * Unit::Kilo.scale(), *freq_khz.pts.get(i));
-            assert_eq!(data.get(i) * Unit::Mega.scale(), *freq_mhz.pts.get(i));
-            assert_eq!(data.get(i) * Unit::Giga.scale(), *freq_ghz.pts.get(i));
-            assert_eq!(data.get(i) * Unit::Tera.scale(), *freq_thz.pts.get(i));
-        }
+        let freq = FrequencyBuilder::new()
+            .start_stop_step(280e9, 500e9, 50e9)
+            .scale(scale)
+            .build();
+        assert_eq!(
+            freq,
+            Frequency {
+                vals: vals_linear2.clone(),
+                scale: scale,
+                unit: Unit::Hz,
+            }
+        );
 
-        assert_eq!(data.ncols(), freq_hz.npts());
-        assert_eq!(data.ncols(), freq_khz.npts());
-        assert_eq!(data.ncols(), freq_mhz.npts());
-        assert_eq!(data.ncols(), freq_ghz.npts());
-        assert_eq!(data.ncols(), freq_thz.npts());
-    }
+        let freq = FrequencyBuilder::new()
+            .start_stop_step_scaled(280.0, 500.0, 55.0, scale)
+            .scale(scale)
+            .build();
+        assert_eq!(
+            freq,
+            Frequency {
+                vals: vals_linear.clone(),
+                scale: scale,
+                unit: Unit::Hz,
+            }
+        );
 
-    #[test]
-    fn frequency_from_vec() {
-        let data = vec![1.0, 2.0, 3.0];
-        let freq_hz = Frequency::from_vec(data.clone(), Unit::Base);
-        let freq_khz = Frequency::from_vec(data.clone(), Unit::Kilo);
-        let freq_mhz = Frequency::from_vec(data.clone(), Unit::Mega);
-        let freq_ghz = Frequency::from_vec(data.clone(), Unit::Giga);
-        let freq_thz = Frequency::from_vec(data.clone(), Unit::Tera);
+        let freq = FrequencyBuilder::new()
+            .start_stop_npts(280e9, 500e9, 5, Sweep::Linear)
+            .scale(scale)
+            .build();
+        assert_eq!(
+            freq,
+            Frequency {
+                vals: vals_linear.clone(),
+                scale: scale,
+                unit: Unit::Hz,
+            }
+        );
 
-        for i in 0..data.len() {
-            assert_eq!(data[i] * Unit::Base.scale(), *freq_hz.pts.get(i));
-            assert_eq!(data[i] * Unit::Kilo.scale(), *freq_khz.pts.get(i));
-            assert_eq!(data[i] * Unit::Mega.scale(), *freq_mhz.pts.get(i));
-            assert_eq!(data[i] * Unit::Giga.scale(), *freq_ghz.pts.get(i));
-            assert_eq!(data[i] * Unit::Tera.scale(), *freq_thz.pts.get(i));
-        }
+        let freq = FrequencyBuilder::new()
+            .start_stop_npts(280e9, 500e9, 5, Sweep::Log)
+            .scale(scale)
+            .build();
+        assert_eq!(
+            freq,
+            Frequency {
+                vals: vals_log.clone(),
+                scale: scale,
+                unit: Unit::Hz,
+            }
+        );
 
-        assert_eq!(data.len(), freq_hz.npts());
-        assert_eq!(data.len(), freq_khz.npts());
-        assert_eq!(data.len(), freq_mhz.npts());
-        assert_eq!(data.len(), freq_ghz.npts());
-        assert_eq!(data.len(), freq_thz.npts());
-    }
+        let freq = FrequencyBuilder::new()
+            .start_stop_npts_scaled(280.0, 500.0, 5, scale, Sweep::Linear)
+            .scale(scale)
+            .build();
+        assert_eq!(
+            freq,
+            Frequency {
+                vals: vals_linear.clone(),
+                scale: scale,
+                unit: Unit::Hz,
+            }
+        );
 
-    #[test]
-    fn frequency_freq_scaled() {
-        let data_hz = row![1.0e9, 2.0e9, 3.0e9];
-        let data_khz = row![1.0e6, 2.0e6, 3.0e6];
-        let data_mhz = row![1.0e3, 2.0e3, 3.0e3];
-        let data_ghz = row![1.0, 2.0, 3.0];
-        let data_thz = row![1.0e-3, 2.0e-3, 3.0e-3];
-
-        let freq_hz = Frequency::from_row(data_hz.clone(), Unit::Base);
-        let freq_khz = Frequency::from_row(data_khz.clone(), Unit::Kilo);
-        let freq_mhz = Frequency::from_row(data_mhz.clone(), Unit::Mega);
-        let freq_ghz = Frequency::from_row(data_ghz.clone(), Unit::Giga);
-        let freq_thz = Frequency::from_row(data_thz.clone(), Unit::Tera);
-
-        //TODO Fix Comparison Logic
-        comp_row_f64(&data_hz, &freq_hz.hz(), "freq_scaled(hz)->hz");
-        comp_row_f64(&data_hz, &freq_khz.hz(), "freq_scaled(khz)->hz");
-        comp_row_f64(&data_hz, &freq_mhz.hz(), "freq_scaled(mhz)->hz");
-        comp_row_f64(&data_hz, &freq_ghz.hz(), "freq_scaled(ghz)->hz");
-        comp_row_f64(&data_hz, &freq_thz.hz(), "freq_scaled(thz)->hz");
-
-        comp_row_f64(&data_khz, &freq_hz.khz(), "freq_scaled(hz)->khz");
-        comp_row_f64(&data_khz, &freq_khz.khz(), "freq_scaled(khz)->khz");
-        comp_row_f64(&data_khz, &freq_mhz.khz(), "freq_scaled(mhz)->khz");
-        comp_row_f64(&data_khz, &freq_ghz.khz(), "freq_scaled(ghz)->khz");
-        comp_row_f64(&data_khz, &freq_thz.khz(), "freq_scaled(thz)->khz");
-
-        comp_row_f64(&data_mhz, &freq_hz.mhz(), "freq_scaled(hz)->mhz");
-        comp_row_f64(&data_mhz, &freq_khz.mhz(), "freq_scaled(khz)->mhz");
-        comp_row_f64(&data_mhz, &freq_mhz.mhz(), "freq_scaled(mhz)->mhz");
-        comp_row_f64(&data_mhz, &freq_ghz.mhz(), "freq_scaled(ghz)->mhz");
-        comp_row_f64(&data_mhz, &freq_thz.mhz(), "freq_scaled(thz)->mhz");
-
-        comp_row_f64(&data_ghz, &freq_hz.ghz(), "freq_scaled(hz)->ghz");
-        comp_row_f64(&data_ghz, &freq_khz.ghz(), "freq_scaled(khz)->ghz");
-        comp_row_f64(&data_ghz, &freq_mhz.ghz(), "freq_scaled(mhz)->ghz");
-        comp_row_f64(&data_ghz, &freq_ghz.ghz(), "freq_scaled(ghz)->ghz");
-        comp_row_f64(&data_ghz, &freq_thz.ghz(), "freq_scaled(thz)->ghz");
-
-        comp_row_f64(&data_thz, &freq_hz.thz(), "freq_scaled(hz)->thz");
-        comp_row_f64(&data_thz, &freq_khz.thz(), "freq_scaled(khz)->thz");
-        comp_row_f64(&data_thz, &freq_mhz.thz(), "freq_scaled(mhz)->thz");
-        comp_row_f64(&data_thz, &freq_ghz.thz(), "freq_scaled(ghz)->thz");
-        comp_row_f64(&data_thz, &freq_thz.thz(), "freq_scaled(thz)->thz");
-    }
-
-    #[test]
-    fn frequency_idx_at() {
-        let data = row![1.0, 2.0, 3.0];
-        let freq = Frequency::from_row(data.clone(), Unit::Giga);
-
-        assert_eq!(0, freq.idx_at(1.0, Unit::Giga).unwrap());
-        assert_eq!(0, freq.idx_at(1.0e9, Unit::Base).unwrap());
-        assert_eq!(2, freq.idx_at(3.0, Unit::Giga).unwrap());
-        assert_eq!(None, freq.idx_at(1.5, Unit::Giga));
-    }
-
-    #[test]
-    fn frequency_w() {
-        let data = row![1.0, 2.0, 3.0];
-        let freq = Frequency::from_row(data.clone(), Unit::Giga);
-        let w = freq.w();
-
-        for i in 0..w.nrows() {
-            assert_eq!(data.get(i) * 2.0 * PI * Unit::Giga.scale(), *w.get(i));
-        }
+        let freq = FrequencyBuilder::new()
+            .start_stop_npts_scaled(280.0, 500.0, 5, scale, Sweep::Log)
+            .scale(scale)
+            .build();
+        assert_eq!(
+            freq,
+            Frequency {
+                vals: vals_log.clone(),
+                scale: scale,
+                unit: Unit::Hz,
+            }
+        );
     }
 }

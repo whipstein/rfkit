@@ -1,1 +1,1 @@
-Implementation of core RF objects and transformations.
+Rust code library for various RF circuit implementations and calculations.

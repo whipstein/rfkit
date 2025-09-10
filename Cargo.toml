@@ -1,9 +1,37 @@
 [package]
-name = "rfkit"
-version = "0.1.0"
-edition = "2021"
+name = "rfkit-base"
+version = "0.2.0"
+edition = "2025"
+
+[profile.release]
+codegen-units=1
+lto="fat"
+panic="abort"
 
 [dependencies]
-faer = "0.18.2"
-regex = "1.10.4"
-simple-error = "0.3.0"
+anyhow = "1.0.98"
+approx = "0.5.1"
+dyn-clone = "1.0.19"
+fastrand = "2.0"
+float-cmp = "0.10.0"
+ndarray = "0.16.1"
+ndarray-linalg = { version = "0.17.0", features = ["openblas-static"] }
+num = { version = "0.4.3", features = ["serde"] }
+num-traits = "0.2.19"
+rand = "0.9.2"
+regex = "1.11.1"
+rug = { version = "1.27.0", features = ["float", "complex"] }
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = "1.0.140"
+simple-error = "0.3.1"
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+fastrand = "2.0"
+
+[[bench]]
+name = "nelder_mead_benchmarks"
+harness = false
+
+[profile.bench]
+debug = true
