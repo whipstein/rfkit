@@ -2,10 +2,10 @@
 #![allow(unused_assignments)]
 use crate::minimize::{
     MinimizerError,
-    f64::{Constraint, HF1dim, Matrix, ObjHessFn, Vector},
+    f64::{Constraint, HF1dim, ObjHessFn, Vector},
 };
+use ndarray::prelude::*;
 use std::fmt;
-// use ndarray::prelude::*;
 
 /// Result of interior point optimization
 #[derive(Debug, Clone)]
@@ -332,7 +332,7 @@ impl InteriorPoint {
             // Solve for Newton step
             let step_result = if m == 0 {
                 // Unconstrained Newton step
-                Matrix::solve_linear_system(hess, Vector::scalar_vector_multiply(-1.0, &grad))
+                self.solve_linear_system(&hess, &Vector::scalar_vector_multiply(-1.0, &grad))
             } else {
                 // Constrained Newton step (solve KKT system)
                 self.solve_kkt_system(&hess, &grad, eq, &x)
@@ -394,7 +394,7 @@ impl InteriorPoint {
     /// Solve KKT system for equality constrained problems
     fn solve_kkt_system(
         &self,
-        hessian: &[Vec<f64>],
+        hessian: &Array2<f64>,
         gradient: &Vec<f64>,
         eq: &[Box<dyn Constraint>],
         x: &Vec<f64>,
@@ -403,35 +403,36 @@ impl InteriorPoint {
         let m = eq.len();
 
         if m == 0 {
-            return Matrix::solve_linear_system(
-                hessian.to_vec(),
-                Vector::scalar_vector_multiply(-1.0, gradient),
-            );
+            return self
+                .solve_linear_system(&hessian, &Vector::scalar_vector_multiply(-1.0, gradient));
         }
 
         // Build constraint Jacobian
-        let mut jacobian = vec![vec![0.0; n]; m];
+        let mut jacobian = Array2::zeros((m, n));
         for (i, constraint) in eq.iter().enumerate() {
             let constraint_grad = constraint.gradient(x);
-            jacobian[i] = constraint_grad;
+            // jacobian[i] = constraint_grad;
+            jacobian
+                .row_mut(i)
+                .assign(&Array1::from_vec(constraint_grad));
         }
 
         // Build KKT matrix: [H  A^T]
         //                   [A   0 ]
-        let mut kkt_matrix = vec![vec![0.0; n + m]; n + m];
+        let mut kkt_matrix = Array2::zeros((n + m, n + m));
 
         // Copy Hessian to top-left block
         for i in 0..n {
             for j in 0..n {
-                kkt_matrix[i][j] = hessian[i][j];
+                kkt_matrix[[i, j]] = hessian[[i, j]];
             }
         }
 
         // Copy Jacobian to bottom-left and top-right blocks
         for i in 0..m {
             for j in 0..n {
-                kkt_matrix[n + i][j] = jacobian[i][j]; // Bottom-left: A
-                kkt_matrix[j][n + i] = jacobian[i][j]; // Top-right: A^T
+                kkt_matrix[[n + i, j]] = jacobian[[i, j]]; // Bottom-left: A
+                kkt_matrix[[j, n + i]] = jacobian[[i, j]]; // Top-right: A^T
             }
         }
 
@@ -445,7 +446,7 @@ impl InteriorPoint {
         }
 
         // Solve KKT system
-        let solution = Matrix::solve_linear_system(kkt_matrix, rhs)?;
+        let solution = self.solve_linear_system(&kkt_matrix, &rhs)?;
 
         // Extract step (first n components)
         Ok(solution[0..n].to_vec())
@@ -560,6 +561,65 @@ impl InteriorPoint {
     ) -> Result<InteriorPointResult, MinimizerError> {
         self.log_barrier_method(initial_point, None)
     }
+
+    /// Simple Gaussian elimination with partial pivoting
+    fn solve_linear_system(
+        &self,
+        a: &Array2<f64>,
+        b: &Vec<f64>,
+    ) -> Result<Vec<f64>, MinimizerError> {
+        let mut ax = a.clone();
+        let mut bx = b.clone();
+        let n = ax.len();
+        if bx.len() != n {
+            return Err(MinimizerError::LinearSystemSingular);
+        }
+
+        // Forward elimination with partial pivoting
+        for k in 0..n {
+            // Find pivot
+            let mut max_row = k;
+            for i in k + 1..n {
+                if ax[[i, k]].abs() > ax[[max_row, k]].abs() {
+                    max_row = i;
+                }
+            }
+
+            // Swap rows
+            if max_row != k {
+                for j in 0..ax.ncols() {
+                    ax.swap((k, j), (max_row, j));
+                }
+                bx.swap(k, max_row);
+            }
+
+            // Check for singularity
+            if ax[[k, k]].abs() < 1e-14 {
+                return Err(MinimizerError::LinearSystemSingular);
+            }
+
+            // Eliminate below pivot
+            for i in k + 1..n {
+                let factor = ax[[i, k]] / ax[[k, k]];
+                for j in k..n {
+                    ax[[i, j]] -= factor * ax[[k, j]];
+                }
+                bx[i] -= factor * bx[k];
+            }
+        }
+
+        // Back substitution
+        let mut x = vec![0.0; n];
+        for i in (0..n).rev() {
+            x[i] = bx[i];
+            for j in i + 1..n {
+                x[i] -= ax[[i, j]] * x[j];
+            }
+            x[i] /= ax[[i, i]];
+        }
+
+        Ok(x)
+    }
 }
 
 impl fmt::Debug for InteriorPoint {
@@ -582,12 +642,7 @@ mod interiorpointf64_tests {
         // Start much closer to the optimum to see if the algorithm works at all
         let objective = |x: &Vec<f64>| x[0] * x[0] + x[1] * x[1];
         let obj_grad = |x: &Vec<f64>| vec![2.0 * x[0], 2.0 * x[1]];
-        let obj_hess = |x: &Vec<f64>| {
-            let n = x.len();
-            (0..n)
-                .map(|i| (0..n).map(|j| if i == j { 2.0 } else { 0.0 }).collect())
-                .collect()
-        };
+        let obj_hess = |x: &Vec<f64>| Array2::eye(x.len()) * 2.0;
         let obj = MultiDimHessFn::new(objective, obj_grad, Some(obj_hess));
 
         // Use create_box_constraints helper which might work better
@@ -662,12 +717,7 @@ mod interiorpointf64_tests {
         // Minimize (x1-1)² + (x2-1)² - should converge to (1,1) with f=0
         let objective = |x: &Vec<f64>| (x[0] - 1.0).powi(2) + (x[1] - 1.0).powi(2);
         let obj_grad = |x: &Vec<f64>| vec![2.0 * (x[0] - 1.0), 2.0 * (x[1] - 1.0)];
-        let obj_hess = |x: &Vec<f64>| {
-            let n = x.len();
-            (0..n)
-                .map(|i| (0..n).map(|j| if i == j { 2.0 } else { 0.0 }).collect())
-                .collect()
-        };
+        let obj_hess = |x: &Vec<f64>| Array2::eye(x.len()) * 2.0;
         let obj = MultiDimHessFn::new(objective, obj_grad, Some(obj_hess));
         let mut interiorpoint = InteriorPoint::new_w_constraints(obj, vec![], vec![]);
 
@@ -686,19 +736,6 @@ mod interiorpointf64_tests {
                 panic!("Unconstrained optimization failed: {}", e);
             }
         }
-    }
-
-    #[test]
-    fn test_matrix_operations() {
-        // Test linear system solver
-        let a = vec![vec![2.0, 1.0], vec![1.0, 3.0]];
-        let b = vec![3.0, 4.0];
-
-        let x = Matrix::solve_linear_system(a, b).unwrap();
-
-        // Solution should be approximately [1, 1]
-        assert!((x[0] - 1.0).abs() < 1e-10);
-        assert!((x[1] - 1.0).abs() < 1e-10);
     }
 
     #[test]

@@ -1,10 +1,7 @@
 #![allow(dead_code)]
-use crate::minimize::{
-    MinimizerError,
-    f64::{Constraint, Matrix},
-};
+use crate::minimize::{MinimizerError, f64::Constraint};
 use dyn_clone::DynClone;
-// use ndarray::prelude::*;
+use ndarray::prelude::*;
 
 // Define a trait for the objective function
 pub trait ObjFn: DynClone {
@@ -29,8 +26,8 @@ dyn_clone::clone_trait_object!(ObjGradFn);
 
 // Define a trait for the hessian function
 pub trait ObjHessFn: ObjGradFn + DynClone {
-    fn hessian(&self, x: &Vec<f64>) -> Vec<Vec<f64>>;
-    fn hessian_scalar(&self, x: f64) -> Vec<Vec<f64>>;
+    fn hessian(&self, x: &Vec<f64>) -> Array2<f64>;
+    fn hessian_scalar(&self, x: f64) -> Array2<f64>;
 }
 dyn_clone::clone_trait_object!(ObjHessFn);
 
@@ -351,14 +348,14 @@ pub struct MultiDimHessFn<F, GF, HF>(pub F, pub GF, pub Option<HF>)
 where
     F: Fn(&Vec<f64>) -> f64 + Clone,
     GF: Fn(&Vec<f64>) -> Vec<f64> + Clone,
-    HF: Fn(&Vec<f64>) -> Vec<Vec<f64>> + Clone;
+    HF: Fn(&Vec<f64>) -> Array2<f64> + Clone;
 
 // Convenience constructors
 impl<F, GF, HF> MultiDimHessFn<F, GF, HF>
 where
     F: Fn(&Vec<f64>) -> f64 + Clone,
     GF: Fn(&Vec<f64>) -> Vec<f64> + Clone,
-    HF: Fn(&Vec<f64>) -> Vec<Vec<f64>> + Clone,
+    HF: Fn(&Vec<f64>) -> Array2<f64> + Clone,
 {
     pub fn new(f: F, gf: GF, hf: Option<HF>) -> Self {
         MultiDimHessFn(f, gf, hf)
@@ -370,7 +367,7 @@ impl<F, GF, HF> ObjFn for MultiDimHessFn<F, GF, HF>
 where
     F: Fn(&Vec<f64>) -> f64 + Clone,
     GF: Fn(&Vec<f64>) -> Vec<f64> + Clone,
-    HF: Fn(&Vec<f64>) -> Vec<Vec<f64>> + Clone,
+    HF: Fn(&Vec<f64>) -> Array2<f64> + Clone,
 {
     fn call(&self, x: &Vec<f64>) -> f64 {
         (self.0)(x)
@@ -385,7 +382,7 @@ impl<F, GF, HF> ObjGradFn for MultiDimHessFn<F, GF, HF>
 where
     F: Fn(&Vec<f64>) -> f64 + Clone,
     GF: Fn(&Vec<f64>) -> Vec<f64> + Clone,
-    HF: Fn(&Vec<f64>) -> Vec<Vec<f64>> + Clone,
+    HF: Fn(&Vec<f64>) -> Array2<f64> + Clone,
 {
     fn grad(&self, x: &Vec<f64>) -> Vec<f64> {
         (self.1)(x)
@@ -400,19 +397,19 @@ impl<F, GF, HF> ObjHessFn for MultiDimHessFn<F, GF, HF>
 where
     F: Fn(&Vec<f64>) -> f64 + Clone,
     GF: Fn(&Vec<f64>) -> Vec<f64> + Clone,
-    HF: Fn(&Vec<f64>) -> Vec<Vec<f64>> + Clone,
+    HF: Fn(&Vec<f64>) -> Array2<f64> + Clone,
 {
-    fn hessian(&self, x: &Vec<f64>) -> Vec<Vec<f64>> {
+    fn hessian(&self, x: &Vec<f64>) -> Array2<f64> {
         match self.2.clone() {
             Some(hf) => (hf)(x),
-            _ => Matrix::identity(x.len()),
+            _ => Array2::eye(x.len()),
         }
     }
 
-    fn hessian_scalar(&self, x: f64) -> Vec<Vec<f64>> {
+    fn hessian_scalar(&self, x: f64) -> Array2<f64> {
         match self.2.clone() {
             Some(hf) => (hf)(&vec![x]),
-            _ => Matrix::identity(1),
+            _ => Array2::eye(1),
         }
     }
 }
@@ -545,7 +542,7 @@ impl HF1dim {
         grad
     }
 
-    pub fn hess(&self, x: &Vec<f64>) -> Vec<Vec<f64>> {
+    pub fn hess(&self, x: &Vec<f64>) -> Array2<f64> {
         let mut hess = self.f.hessian(x);
         let n = x.len();
 
@@ -554,8 +551,8 @@ impl HF1dim {
             let val = constraint.evaluate(x);
             if val >= -1e-12 {
                 // Return identity matrix with large diagonal (penalty)
-                let mut penalty_hess = Matrix::identity(n);
-                Matrix::scalar_multiply(&mut penalty_hess, 1e6);
+                let mut penalty_hess = Array2::eye(n);
+                penalty_hess *= 1e6;
                 return penalty_hess;
             }
 
@@ -568,7 +565,7 @@ impl HF1dim {
             // Add second derivative terms
             for i in 0..n {
                 for j in 0..n {
-                    hess[i][j] += factor1 * constraint_hess[i][j]
+                    hess[[i, j]] += factor1 * constraint_hess[i][j]
                         + factor2 * constraint_grad[i] * constraint_grad[j];
                 }
             }
@@ -599,11 +596,11 @@ impl ObjGradFn for HF1dim {
 }
 
 impl ObjHessFn for HF1dim {
-    fn hessian(&self, x: &Vec<f64>) -> Vec<Vec<f64>> {
+    fn hessian(&self, x: &Vec<f64>) -> Array2<f64> {
         self.hess(x)
     }
 
-    fn hessian_scalar(&self, x: f64) -> Vec<Vec<f64>> {
+    fn hessian_scalar(&self, x: f64) -> Array2<f64> {
         self.hess(&vec![x])
     }
 }

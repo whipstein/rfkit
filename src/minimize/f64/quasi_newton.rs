@@ -2,10 +2,10 @@
 #![allow(unused_assignments)]
 use crate::minimize::{
     MinimizerError,
-    f64::{LineSearchResult, Matrix, ObjGradFn, WolfeParams},
+    f64::{LineSearchResult, ObjGradFn, WolfeParams},
 };
+use ndarray::prelude::*;
 use std::fmt;
-// use ndarray::prelude::*;
 
 /// Result of quasi-Newton optimization
 #[derive(Debug, Clone)]
@@ -19,7 +19,8 @@ pub struct QuasiNewtonResult {
     pub converged: bool,
     pub convergence_history: Vec<f64>,
     pub gradient_norm_history: Vec<f64>,
-    pub final_hessian_approximation: Vec<Vec<f64>>,
+    // pub final_hessian_approximation: Vec<Vec<f64>>,
+    pub final_hessian_approximation: Array2<f64>,
     pub method_used: String,
 }
 
@@ -235,7 +236,7 @@ impl QuasiNewton {
         }
 
         // Initialize inverse Hessian approximation as identity
-        let mut h_inv = Matrix::identity(n);
+        let mut h_inv = Array2::eye(n);
 
         let mut function_evaluations = 1;
         let mut gradient_evaluations = 1;
@@ -250,7 +251,7 @@ impl QuasiNewton {
             iterations += 1;
 
             // Compute search direction: p = -H * grad
-            let mut search_direction = Matrix::multiply_vector(&h_inv, &grad_current);
+            let mut search_direction = h_inv.dot(&Array1::from(grad_current.to_vec())).to_vec();
             for d in &mut search_direction {
                 *d = -*d;
             }
@@ -260,7 +261,7 @@ impl QuasiNewton {
             if directional_derivative >= 0.0 {
                 // Reset to steepest descent if not descent direction
                 search_direction = grad_current.iter().map(|&g| -g).collect();
-                h_inv = Matrix::identity(n);
+                h_inv = Array2::eye(n);
             }
 
             // Line search
@@ -301,25 +302,25 @@ impl QuasiNewton {
             if sy > 1e-8 * self.vector_norm(&s) * self.vector_norm(&y) {
                 // Better curvature condition
                 // BFGS update: H_new = H + (sy + y^T H y)(s s^T)/(sy)^2 - (H y s^T + s y^T H)/(sy)
-                let hy = Matrix::multiply_vector(&h_inv, &y);
+                let hy = h_inv.dot(&Array1::from(y.to_vec())).to_vec();
                 let yhy = self.dot_product(&y, &hy);
 
                 // Compute the rank-2 update
-                let ss = Matrix::outer_product(&s, &s);
+                let ss = Array2::from_shape_fn((s.len(), s.len()), |(i, j)| s[i] * s[j]);
                 let mut term1 = ss;
-                Matrix::scalar_multiply(&mut term1, (sy + yhy) / (sy * sy));
+                term1 *= (sy + yhy) / (sy * sy);
 
-                let hs = Matrix::outer_product(&hy, &s);
-                let sh = Matrix::outer_product(&s, &hy);
+                let hs = Array2::from_shape_fn((hy.len(), s.len()), |(i, j)| hy[i] * s[j]);
+                let sh = Array2::from_shape_fn((s.len(), hy.len()), |(i, j)| s[i] * hy[j]);
                 let mut term2 = hs;
-                Matrix::add_matrix(&mut term2, &sh);
-                Matrix::scalar_multiply(&mut term2, 1.0 / sy);
+                term2 += &sh;
+                term2 *= 1.0 / sy;
 
-                Matrix::add_matrix(&mut h_inv, &term1);
-                Matrix::subtract_matrix(&mut h_inv, &term2);
+                h_inv += &term1;
+                h_inv -= &term2;
             } else if iterations % n == 0 {
                 // Reset Hessian approximation periodically if updates are skipped
-                h_inv = Matrix::identity(n);
+                h_inv = Array2::eye(n);
             }
 
             // Update for next iteration
@@ -360,7 +361,7 @@ impl QuasiNewton {
         let mut x = initial_point;
         let mut f_current = self.f.call(&x);
         let mut grad_current = self.f.grad(&x);
-        let mut h_inv = Matrix::identity(n);
+        let mut h_inv = Array2::eye(n);
 
         let mut function_evaluations = 1;
         let mut gradient_evaluations = 1;
@@ -374,7 +375,7 @@ impl QuasiNewton {
         while iterations < max_iters && grad_norm > tol {
             iterations += 1;
 
-            let search_direction = Matrix::multiply_vector(&h_inv, &grad_current);
+            let search_direction = h_inv.dot(&Array1::from(grad_current.to_vec())).to_vec();
             let search_direction: Vec<f64> = search_direction.iter().map(|&x| -x).collect();
 
             let line_result = self.wolfe_line_search(
@@ -405,20 +406,20 @@ impl QuasiNewton {
 
             // DFP update: H_new = H - (H y y^T H)/(y^T H y) + (s s^T)/(s^T y)
             if sy > 1e-14 {
-                let hy = Matrix::multiply_vector(&h_inv, &y);
+                let hy = h_inv.dot(&Array1::from(y.to_vec())).to_vec();
                 let yhy = self.dot_product(&y, &hy);
 
                 if yhy > 1e-14 {
-                    let hyhy = Matrix::outer_product(&hy, &hy);
+                    let hyhy = Array2::from_shape_fn((hy.len(), hy.len()), |(i, j)| hy[i] * hy[j]);
                     let mut term1 = hyhy;
-                    Matrix::scalar_multiply(&mut term1, 1.0 / yhy);
+                    term1 *= 1.0 / yhy;
 
-                    let ss = Matrix::outer_product(&s, &s);
+                    let ss = Array2::from_shape_fn((s.len(), s.len()), |(i, j)| s[i] * s[j]);
                     let mut term2 = ss;
-                    Matrix::scalar_multiply(&mut term2, 1.0 / sy);
+                    term2 *= 1.0 / sy;
 
-                    Matrix::subtract_matrix(&mut h_inv, &term1);
-                    Matrix::add_matrix(&mut h_inv, &term2);
+                    h_inv -= &term1;
+                    h_inv += &term2;
                 }
             }
 
@@ -459,7 +460,7 @@ impl QuasiNewton {
         let mut x = initial_point;
         let mut f_current = self.f.call(&x);
         let mut grad_current = self.f.grad(&x);
-        let mut h_inv = Matrix::identity(n);
+        let mut h_inv = Array2::eye(n);
 
         let mut function_evaluations = 1;
         let mut gradient_evaluations = 1;
@@ -473,7 +474,7 @@ impl QuasiNewton {
         while iterations < max_iters && grad_norm > tol {
             iterations += 1;
 
-            let search_direction = Matrix::multiply_vector(&h_inv, &grad_current);
+            let search_direction = h_inv.dot(&Array1::from(grad_current.to_vec())).to_vec();
             let search_direction: Vec<f64> = search_direction.iter().map(|&x| -x).collect();
 
             let line_result = self.wolfe_line_search(
@@ -500,16 +501,16 @@ impl QuasiNewton {
 
             let s = self.vector_subtract(&x_new, &x);
             let y = self.vector_subtract(&grad_new, &grad_current);
-            let hy = Matrix::multiply_vector(&h_inv, &y);
+            let hy = h_inv.dot(&Array1::from(y.to_vec())).to_vec();
             let v = self.vector_subtract(&s, &hy);
             let vy = self.dot_product(&v, &y);
 
             // SR1 update: H_new = H + (v v^T)/(v^T y)
             if vy.abs() > 1e-14 {
-                let vv = Matrix::outer_product(&v, &v);
+                let vv = Array2::from_shape_fn((v.len(), v.len()), |(i, j)| v[i] * v[j]);
                 let mut update = vv;
-                Matrix::scalar_multiply(&mut update, 1.0 / vy);
-                Matrix::add_matrix(&mut h_inv, &update);
+                update *= 1.0 / vy;
+                h_inv += &update;
             }
 
             x = x_new;
@@ -635,7 +636,7 @@ impl QuasiNewton {
             converged: grad_norm <= tol,
             convergence_history,
             gradient_norm_history,
-            final_hessian_approximation: Matrix::identity(n), // L-BFGS doesn't store full matrix
+            final_hessian_approximation: Array2::eye(n), // L-BFGS doesn't store full matrix
             method_used: format!("L-BFGS({})", m),
         })
     }
