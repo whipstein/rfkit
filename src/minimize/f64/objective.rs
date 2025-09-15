@@ -5,100 +5,100 @@ use ndarray::prelude::*;
 
 // Define a trait for the objective function
 pub trait ObjFn: DynClone {
-    fn call(&self, x: &Vec<f64>) -> f64;
+    fn call(&self, x: &Array1<f64>) -> f64;
     fn call_scalar(&self, x: f64) -> f64;
 }
 dyn_clone::clone_trait_object!(ObjFn);
 
 // Define a trait for the derivative function
 pub trait ObjDerFn: ObjFn + DynClone {
-    fn df(&self, x: &Vec<f64>) -> f64;
+    fn df(&self, x: &Array1<f64>) -> f64;
     fn df_scalar(&self, x: f64) -> f64;
 }
 dyn_clone::clone_trait_object!(ObjDerFn);
 
 // Define a trait for the gradient function
 pub trait ObjGradFn: ObjFn + DynClone {
-    fn grad(&self, x: &Vec<f64>) -> Vec<f64>;
-    fn grad_scalar(&self, x: f64) -> Vec<f64>;
+    fn grad(&self, x: &Array1<f64>) -> Array1<f64>;
+    fn grad_scalar(&self, x: f64) -> Array1<f64>;
 }
 dyn_clone::clone_trait_object!(ObjGradFn);
 
 // Define a trait for the hessian function
 pub trait ObjHessFn: ObjGradFn + DynClone {
-    fn hessian(&self, x: &Vec<f64>) -> Array2<f64>;
+    fn hessian(&self, x: &Array1<f64>) -> Array2<f64>;
     fn hessian_scalar(&self, x: f64) -> Array2<f64>;
 }
 dyn_clone::clone_trait_object!(ObjHessFn);
 
 impl<F> ObjFn for F
 where
-    F: Fn(&Vec<f64>) -> f64 + DynClone,
+    F: Fn(&Array1<f64>) -> f64 + DynClone,
 {
-    fn call(&self, x: &Vec<f64>) -> f64 {
+    fn call(&self, x: &Array1<f64>) -> f64 {
         self(x)
     }
 
     fn call_scalar(&self, x: f64) -> f64 {
-        self(&vec![x])
+        self(&array![x])
     }
 }
 
 impl<F, DF> ObjFn for (F, DF)
 where
-    F: Fn(&Vec<f64>) -> f64 + DynClone + Clone,
-    DF: Fn(&Vec<f64>) -> f64 + DynClone + Clone,
+    F: Fn(&Array1<f64>) -> f64 + DynClone + Clone,
+    DF: Fn(&Array1<f64>) -> f64 + DynClone + Clone,
 {
-    fn call(&self, x: &Vec<f64>) -> f64 {
+    fn call(&self, x: &Array1<f64>) -> f64 {
         self.0(x)
     }
 
     fn call_scalar(&self, x: f64) -> f64 {
-        self.0(&vec![x])
+        self.0(&array![x])
     }
 }
 
 impl<F, DF, GF> ObjFn for (F, DF, GF)
 where
-    F: Fn(&Vec<f64>) -> f64 + DynClone + Clone,
-    DF: Fn(&Vec<f64>) -> f64 + DynClone + Clone,
-    GF: Fn(&Vec<f64>) -> Vec<f64> + DynClone + Clone,
+    F: Fn(&Array1<f64>) -> f64 + DynClone + Clone,
+    DF: Fn(&Array1<f64>) -> f64 + DynClone + Clone,
+    GF: Fn(&Array1<f64>) -> Array1<f64> + DynClone + Clone,
 {
-    fn call(&self, x: &Vec<f64>) -> f64 {
+    fn call(&self, x: &Array1<f64>) -> f64 {
         self.0(x)
     }
 
     fn call_scalar(&self, x: f64) -> f64 {
-        self.0(&vec![x])
+        self.0(&array![x])
     }
 }
 
 impl<F, DF> ObjDerFn for (F, DF)
 where
-    F: Fn(&Vec<f64>) -> f64 + DynClone + Clone,
-    DF: Fn(&Vec<f64>) -> f64 + DynClone + Clone,
+    F: Fn(&Array1<f64>) -> f64 + DynClone + Clone,
+    DF: Fn(&Array1<f64>) -> f64 + DynClone + Clone,
 {
-    fn df(&self, x: &Vec<f64>) -> f64 {
+    fn df(&self, x: &Array1<f64>) -> f64 {
         self.1(x)
     }
 
     fn df_scalar(&self, x: f64) -> f64 {
-        self.1(&vec![x])
+        self.1(&array![x])
     }
 }
 
 // impl<F, DF, GF> ObjGradFn for (F, DF, GF)
 // where
-//     F: Fn(&Vec<f64>) -> f64 + DynClone + Clone,
-//     DF: Fn(&Vec<f64>) -> f64 + DynClone + Clone,
-//     GF: Fn(&Vec<f64>) -> Vec<f64> + DynClone + Clone,
+//     F: Fn(&Array1<f64>) -> f64 + DynClone + Clone,
+//     DF: Fn(&Array1<f64>) -> f64 + DynClone + Clone,
+//     GF: Fn(&Array1<f64>) -> Array1<f64> + DynClone + Clone,
 // {
-//     fn grad(&self, x: &Vec<f64>) -> Vec<f64> {
+//     fn grad(&self, x: &Array1<f64>) -> Array1<f64> {
 //         self.2(x)
 //     }
 
-//     fn grad_scalar(&self, x: f64) -> Vec<f64> {
-//         self.2(&vec![x])
+//     fn grad_scalar(&self, x: f64) -> Array1<f64> {
+//         self.2(&array![x])
 //     }
 // }
 
@@ -123,7 +123,7 @@ impl<F> ObjFn for SingleDimFn<F>
 where
     F: Fn(f64) -> f64 + Clone,
 {
-    fn call(&self, x: &Vec<f64>) -> f64 {
+    fn call(&self, x: &Array1<f64>) -> f64 {
         // Take the first element for single-dim functions
         (self.0)(x[0])
     }
@@ -157,7 +157,7 @@ where
     F: Fn(f64) -> f64 + Clone,
     DF: Fn(f64) -> f64 + Clone,
 {
-    fn call(&self, x: &Vec<f64>) -> f64 {
+    fn call(&self, x: &Array1<f64>) -> f64 {
         // Take the first element for single-dim functions
         (self.0)(x[0])
     }
@@ -172,7 +172,7 @@ where
     F: Fn(f64) -> f64 + Clone,
     DF: Fn(f64) -> f64 + Clone,
 {
-    fn df(&self, x: &Vec<f64>) -> f64 {
+    fn df(&self, x: &Array1<f64>) -> f64 {
         // Take the first element for single-dim functions
         (self.1)(x[0])
     }
@@ -186,12 +186,12 @@ where
 #[derive(Clone)]
 pub struct MultiDimFn<F>(pub F)
 where
-    F: Fn(&Vec<f64>) -> f64 + Clone;
+    F: Fn(&Array1<f64>) -> f64 + Clone;
 
 // Convenience constructors
 impl<F> MultiDimFn<F>
 where
-    F: Fn(&Vec<f64>) -> f64 + Clone,
+    F: Fn(&Array1<f64>) -> f64 + Clone,
 {
     pub fn new(f: F) -> Self {
         MultiDimFn(f)
@@ -201,27 +201,27 @@ where
 // Implementation for multi-dimensional functions
 impl<F> ObjFn for MultiDimFn<F>
 where
-    F: Fn(&Vec<f64>) -> f64 + Clone,
+    F: Fn(&Array1<f64>) -> f64 + Clone,
 {
-    fn call(&self, x: &Vec<f64>) -> f64 {
+    fn call(&self, x: &Array1<f64>) -> f64 {
         (self.0)(x)
     }
 
     fn call_scalar(&self, x: f64) -> f64 {
-        (self.0)(&vec![x])
+        (self.0)(&array![x])
     }
 }
 
 impl<F> ObjDerFn for MultiDimFn<F>
 where
-    F: Fn(&Vec<f64>) -> f64 + Clone,
+    F: Fn(&Array1<f64>) -> f64 + Clone,
 {
-    fn df(&self, x: &Vec<f64>) -> f64 {
+    fn df(&self, x: &Array1<f64>) -> f64 {
         (self.0)(x)
     }
 
     fn df_scalar(&self, x: f64) -> f64 {
-        (self.0)(&vec![x])
+        (self.0)(&array![x])
     }
 }
 
@@ -229,14 +229,14 @@ where
 #[derive(Clone)]
 pub struct MultiDimGradFn<F, GF>(pub F, pub GF)
 where
-    F: Fn(&Vec<f64>) -> f64 + Clone,
-    GF: Fn(&Vec<f64>) -> Vec<f64> + Clone;
+    F: Fn(&Array1<f64>) -> f64 + Clone,
+    GF: Fn(&Array1<f64>) -> Array1<f64> + Clone;
 
 // Convenience constructors
 impl<F, GF> MultiDimGradFn<F, GF>
 where
-    F: Fn(&Vec<f64>) -> f64 + Clone,
-    GF: Fn(&Vec<f64>) -> Vec<f64> + Clone,
+    F: Fn(&Array1<f64>) -> f64 + Clone,
+    GF: Fn(&Array1<f64>) -> Array1<f64> + Clone,
 {
     pub fn new(f: F, gf: GF) -> Self {
         MultiDimGradFn(f, gf)
@@ -246,29 +246,29 @@ where
 // Implementation for multi-dimensional function w/gradient
 impl<F, GF> ObjFn for MultiDimGradFn<F, GF>
 where
-    F: Fn(&Vec<f64>) -> f64 + Clone,
-    GF: Fn(&Vec<f64>) -> Vec<f64> + Clone,
+    F: Fn(&Array1<f64>) -> f64 + Clone,
+    GF: Fn(&Array1<f64>) -> Array1<f64> + Clone,
 {
-    fn call(&self, x: &Vec<f64>) -> f64 {
+    fn call(&self, x: &Array1<f64>) -> f64 {
         (self.0)(x)
     }
 
     fn call_scalar(&self, x: f64) -> f64 {
-        (self.0)(&vec![x])
+        (self.0)(&array![x])
     }
 }
 
 impl<F, GF> ObjGradFn for MultiDimGradFn<F, GF>
 where
-    F: Fn(&Vec<f64>) -> f64 + Clone,
-    GF: Fn(&Vec<f64>) -> Vec<f64> + Clone,
+    F: Fn(&Array1<f64>) -> f64 + Clone,
+    GF: Fn(&Array1<f64>) -> Array1<f64> + Clone,
 {
-    fn grad(&self, x: &Vec<f64>) -> Vec<f64> {
+    fn grad(&self, x: &Array1<f64>) -> Array1<f64> {
         (self.1)(x)
     }
 
-    fn grad_scalar(&self, x: f64) -> Vec<f64> {
-        (self.1)(&vec![x])
+    fn grad_scalar(&self, x: f64) -> Array1<f64> {
+        (self.1)(&array![x])
     }
 }
 
@@ -276,7 +276,7 @@ where
 #[derive(Clone)]
 pub struct MultiDimNumGradFn<F>
 where
-    F: Fn(&Vec<f64>) -> f64 + Clone,
+    F: Fn(&Array1<f64>) -> f64 + Clone,
 {
     f: F,
     step: f64,
@@ -286,7 +286,7 @@ where
 // Convenience constructors
 impl<F> MultiDimNumGradFn<F>
 where
-    F: Fn(&Vec<f64>) -> f64 + Clone,
+    F: Fn(&Array1<f64>) -> f64 + Clone,
 {
     pub fn new(f: F, step: Option<f64>, n: usize) -> Self {
         Self {
@@ -296,15 +296,15 @@ where
         }
     }
 
-    pub fn numerical_gradient(&self, x: &Vec<f64>) -> Vec<f64> {
-        let mut grad = vec![0.0; self.n];
+    pub fn numerical_gradient(&self, x: &Array1<f64>) -> Array1<f64> {
+        let mut grad = Array1::zeros(self.n);
 
         for i in 0..self.n {
-            let mut x_plus_h = x.to_vec();
+            let mut x_plus_h = x.clone();
             x_plus_h[i] += self.step;
             let f_plus_h = (self.f)(&x_plus_h);
 
-            let mut x_minus_h = x.to_vec();
+            let mut x_minus_h = x.clone();
             x_minus_h[i] -= self.step;
             let f_minus_h = (self.f)(&x_minus_h);
 
@@ -318,27 +318,27 @@ where
 // Implementation for multi-dimensional function w/gradient
 impl<F> ObjFn for MultiDimNumGradFn<F>
 where
-    F: Fn(&Vec<f64>) -> f64 + Clone,
+    F: Fn(&Array1<f64>) -> f64 + Clone,
 {
-    fn call(&self, x: &Vec<f64>) -> f64 {
+    fn call(&self, x: &Array1<f64>) -> f64 {
         (self.f)(x)
     }
 
     fn call_scalar(&self, x: f64) -> f64 {
-        (self.f)(&vec![x])
+        (self.f)(&array![x])
     }
 }
 
 impl<F> ObjGradFn for MultiDimNumGradFn<F>
 where
-    F: Fn(&Vec<f64>) -> f64 + Clone,
+    F: Fn(&Array1<f64>) -> f64 + Clone,
 {
-    fn grad(&self, x: &Vec<f64>) -> Vec<f64> {
+    fn grad(&self, x: &Array1<f64>) -> Array1<f64> {
         self.numerical_gradient(x)
     }
 
-    fn grad_scalar(&self, x: f64) -> Vec<f64> {
-        self.numerical_gradient(&vec![x])
+    fn grad_scalar(&self, x: f64) -> Array1<f64> {
+        self.numerical_gradient(&array![x])
     }
 }
 
@@ -346,16 +346,16 @@ where
 #[derive(Clone)]
 pub struct MultiDimHessFn<F, GF, HF>(pub F, pub GF, pub Option<HF>)
 where
-    F: Fn(&Vec<f64>) -> f64 + Clone,
-    GF: Fn(&Vec<f64>) -> Vec<f64> + Clone,
-    HF: Fn(&Vec<f64>) -> Array2<f64> + Clone;
+    F: Fn(&Array1<f64>) -> f64 + Clone,
+    GF: Fn(&Array1<f64>) -> Array1<f64> + Clone,
+    HF: Fn(&Array1<f64>) -> Array2<f64> + Clone;
 
 // Convenience constructors
 impl<F, GF, HF> MultiDimHessFn<F, GF, HF>
 where
-    F: Fn(&Vec<f64>) -> f64 + Clone,
-    GF: Fn(&Vec<f64>) -> Vec<f64> + Clone,
-    HF: Fn(&Vec<f64>) -> Array2<f64> + Clone,
+    F: Fn(&Array1<f64>) -> f64 + Clone,
+    GF: Fn(&Array1<f64>) -> Array1<f64> + Clone,
+    HF: Fn(&Array1<f64>) -> Array2<f64> + Clone,
 {
     pub fn new(f: F, gf: GF, hf: Option<HF>) -> Self {
         MultiDimHessFn(f, gf, hf)
@@ -365,41 +365,41 @@ where
 // Implementation for multi-dimensional function w/hessian
 impl<F, GF, HF> ObjFn for MultiDimHessFn<F, GF, HF>
 where
-    F: Fn(&Vec<f64>) -> f64 + Clone,
-    GF: Fn(&Vec<f64>) -> Vec<f64> + Clone,
-    HF: Fn(&Vec<f64>) -> Array2<f64> + Clone,
+    F: Fn(&Array1<f64>) -> f64 + Clone,
+    GF: Fn(&Array1<f64>) -> Array1<f64> + Clone,
+    HF: Fn(&Array1<f64>) -> Array2<f64> + Clone,
 {
-    fn call(&self, x: &Vec<f64>) -> f64 {
+    fn call(&self, x: &Array1<f64>) -> f64 {
         (self.0)(x)
     }
 
     fn call_scalar(&self, x: f64) -> f64 {
-        (self.0)(&vec![x])
+        (self.0)(&array![x])
     }
 }
 
 impl<F, GF, HF> ObjGradFn for MultiDimHessFn<F, GF, HF>
 where
-    F: Fn(&Vec<f64>) -> f64 + Clone,
-    GF: Fn(&Vec<f64>) -> Vec<f64> + Clone,
-    HF: Fn(&Vec<f64>) -> Array2<f64> + Clone,
+    F: Fn(&Array1<f64>) -> f64 + Clone,
+    GF: Fn(&Array1<f64>) -> Array1<f64> + Clone,
+    HF: Fn(&Array1<f64>) -> Array2<f64> + Clone,
 {
-    fn grad(&self, x: &Vec<f64>) -> Vec<f64> {
+    fn grad(&self, x: &Array1<f64>) -> Array1<f64> {
         (self.1)(x)
     }
 
-    fn grad_scalar(&self, x: f64) -> Vec<f64> {
-        (self.1)(&vec![x])
+    fn grad_scalar(&self, x: f64) -> Array1<f64> {
+        (self.1)(&array![x])
     }
 }
 
 impl<F, GF, HF> ObjHessFn for MultiDimHessFn<F, GF, HF>
 where
-    F: Fn(&Vec<f64>) -> f64 + Clone,
-    GF: Fn(&Vec<f64>) -> Vec<f64> + Clone,
-    HF: Fn(&Vec<f64>) -> Array2<f64> + Clone,
+    F: Fn(&Array1<f64>) -> f64 + Clone,
+    GF: Fn(&Array1<f64>) -> Array1<f64> + Clone,
+    HF: Fn(&Array1<f64>) -> Array2<f64> + Clone,
 {
-    fn hessian(&self, x: &Vec<f64>) -> Array2<f64> {
+    fn hessian(&self, x: &Array1<f64>) -> Array2<f64> {
         match self.2.clone() {
             Some(hf) => (hf)(x),
             _ => Array2::eye(x.len()),
@@ -408,7 +408,7 @@ where
 
     fn hessian_scalar(&self, x: f64) -> Array2<f64> {
         match self.2.clone() {
-            Some(hf) => (hf)(&vec![x]),
+            Some(hf) => (hf)(&array![x]),
             _ => Array2::eye(1),
         }
     }
@@ -433,11 +433,11 @@ impl F1dim {
 
     pub fn eval(
         &mut self,
-        point: &Vec<f64>,
-        direction: &Vec<f64>,
+        point: &Array1<f64>,
+        direction: &Array1<f64>,
         t: f64,
     ) -> Result<f64, MinimizerError> {
-        let test_point: Vec<f64> = point
+        let test_point: Array1<f64> = point
             .iter()
             .zip(direction.iter())
             .map(|(&p, &d)| p + t * d)
@@ -451,12 +451,50 @@ impl F1dim {
 }
 
 impl ObjFn for F1dim {
-    fn call(&self, x: &Vec<f64>) -> f64 {
+    fn call(&self, x: &Array1<f64>) -> f64 {
         self.f.call(x)
     }
 
     fn call_scalar(&self, x: f64) -> f64 {
         self.f.call_scalar(x)
+    }
+}
+
+#[derive(Clone)]
+pub struct GF1dim {
+    f: Box<dyn ObjGradFn>,
+}
+
+impl GF1dim {
+    pub fn new<F>(f: F) -> Self
+    where
+        F: ObjGradFn + 'static,
+    {
+        GF1dim { f: Box::new(f) }
+    }
+
+    pub fn new_boxed(f: Box<dyn ObjGradFn>) -> Self {
+        GF1dim { f }
+    }
+}
+
+impl ObjFn for GF1dim {
+    fn call(&self, x: &Array1<f64>) -> f64 {
+        self.f.call(x)
+    }
+
+    fn call_scalar(&self, x: f64) -> f64 {
+        self.f.call_scalar(x)
+    }
+}
+
+impl ObjGradFn for GF1dim {
+    fn grad(&self, x: &Array1<f64>) -> Array1<f64> {
+        self.f.grad(x)
+    }
+
+    fn grad_scalar(&self, x: f64) -> Array1<f64> {
+        self.f.grad(&array![x])
     }
 }
 
@@ -506,7 +544,7 @@ impl HF1dim {
         }
     }
 
-    pub fn objective(&self, x: &Vec<f64>) -> f64 {
+    pub fn objective(&self, x: &Array1<f64>) -> f64 {
         let mut result = self.f.call(x);
 
         // Add barrier terms for ieq
@@ -521,7 +559,7 @@ impl HF1dim {
         result
     }
 
-    pub fn gradient(&self, x: &Vec<f64>) -> Vec<f64> {
+    pub fn gradient(&self, x: &Array1<f64>) -> Array1<f64> {
         let mut grad = self.f.grad(x);
         let n = x.len();
 
@@ -529,7 +567,7 @@ impl HF1dim {
         for constraint in &self.ieq {
             let val = constraint.evaluate(x);
             if val >= -1e-12 {
-                return vec![f64::INFINITY; n]; // Outside feasible region
+                return Array1::from_vec(vec![f64::INFINITY; n]); // Outside feasible region
             }
             let constraint_grad = constraint.gradient(x);
             let factor = -self.mu / val;
@@ -542,7 +580,7 @@ impl HF1dim {
         grad
     }
 
-    pub fn hess(&self, x: &Vec<f64>) -> Array2<f64> {
+    pub fn hess(&self, x: &Array1<f64>) -> Array2<f64> {
         let mut hess = self.f.hessian(x);
         let n = x.len();
 
@@ -565,7 +603,7 @@ impl HF1dim {
             // Add second derivative terms
             for i in 0..n {
                 for j in 0..n {
-                    hess[[i, j]] += factor1 * constraint_hess[i][j]
+                    hess[[i, j]] += factor1 * constraint_hess[[i, j]]
                         + factor2 * constraint_grad[i] * constraint_grad[j];
                 }
             }
@@ -576,31 +614,31 @@ impl HF1dim {
 }
 
 impl ObjFn for HF1dim {
-    fn call(&self, x: &Vec<f64>) -> f64 {
+    fn call(&self, x: &Array1<f64>) -> f64 {
         self.objective(x)
     }
 
     fn call_scalar(&self, x: f64) -> f64 {
-        self.objective(&vec![x])
+        self.objective(&array![x])
     }
 }
 
 impl ObjGradFn for HF1dim {
-    fn grad(&self, x: &Vec<f64>) -> Vec<f64> {
+    fn grad(&self, x: &Array1<f64>) -> Array1<f64> {
         self.gradient(x)
     }
 
-    fn grad_scalar(&self, x: f64) -> Vec<f64> {
-        self.gradient(&vec![x])
+    fn grad_scalar(&self, x: f64) -> Array1<f64> {
+        self.gradient(&array![x])
     }
 }
 
 impl ObjHessFn for HF1dim {
-    fn hessian(&self, x: &Vec<f64>) -> Array2<f64> {
+    fn hessian(&self, x: &Array1<f64>) -> Array2<f64> {
         self.hess(x)
     }
 
     fn hessian_scalar(&self, x: f64) -> Array2<f64> {
-        self.hess(&vec![x])
+        self.hess(&array![x])
     }
 }

@@ -188,7 +188,7 @@ impl fmt::Debug for Golden {
 }
 
 #[cfg(test)]
-mod goldenf64_tests {
+mod minimize_f64_golden_tests {
     use super::*;
     use crate::minimize::f64::SingleDimFn;
     use float_cmp::F64Margin;

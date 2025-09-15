@@ -559,7 +559,7 @@ impl fmt::Debug for Bracket {
 }
 
 #[cfg(test)]
-mod bracketf64_tests {
+mod minimize_f64_bracket_tests {
     use super::*;
     use crate::minimize::f64::SingleDimFn;
     use float_cmp::F64Margin;

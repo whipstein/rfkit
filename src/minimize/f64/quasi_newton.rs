@@ -5,21 +5,21 @@ use crate::minimize::{
     f64::{LineSearchResult, ObjGradFn, WolfeParams},
 };
 use ndarray::prelude::*;
+use ndarray_linalg::*;
 use std::fmt;
 
 /// Result of quasi-Newton optimization
 #[derive(Debug, Clone)]
 pub struct QuasiNewtonResult {
-    pub x_min: Vec<f64>,
+    pub x_min: Array1<f64>,
     pub f_min: f64,
     pub gradient_norm: f64,
     pub iterations: usize,
     pub function_evaluations: usize,
     pub gradient_evaluations: usize,
     pub converged: bool,
-    pub convergence_history: Vec<f64>,
-    pub gradient_norm_history: Vec<f64>,
-    // pub final_hessian_approximation: Vec<Vec<f64>>,
+    pub convergence_history: Array1<f64>,
+    pub gradient_norm_history: Array1<f64>,
     pub final_hessian_approximation: Array2<f64>,
     pub method_used: String,
 }
@@ -46,7 +46,7 @@ impl fmt::Display for QuasiNewtonMethod {
 
 #[derive(Clone)]
 pub struct QuasiNewton {
-    xmin: Vec<f64>,
+    xmin: Array1<f64>,
     fmin: f64,
     f: Box<dyn ObjGradFn>,
     iters: usize,
@@ -60,7 +60,7 @@ impl QuasiNewton {
     {
         let boxed = Box::new(f);
         QuasiNewton {
-            xmin: vec![],
+            xmin: array![],
             fmin: 0.0,
             f: boxed,
             iters: 0,
@@ -70,7 +70,7 @@ impl QuasiNewton {
 
     pub fn new_boxed(f: Box<dyn ObjGradFn>) -> Self {
         QuasiNewton {
-            xmin: vec![],
+            xmin: array![],
             fmin: 0.0,
             f: f,
             iters: 0,
@@ -78,31 +78,18 @@ impl QuasiNewton {
         }
     }
 
-    /// Vector operations
-    fn dot_product(&self, a: &[f64], b: &[f64]) -> f64 {
-        a.iter().zip(b.iter()).map(|(&x, &y)| x * y).sum()
-    }
-
-    fn vector_norm(&self, v: &[f64]) -> f64 {
-        v.iter().map(|&x| x * x).sum::<f64>().sqrt()
-    }
-
-    fn vector_subtract(&self, a: &[f64], b: &[f64]) -> Vec<f64> {
-        a.iter().zip(b.iter()).map(|(&x, &y)| x - y).collect()
-    }
-
     /// Strong Wolfe line search for quasi-Newton methods
     fn wolfe_line_search(
         &mut self,
-        x: &[f64],
-        direction: &[f64],
+        x: &Array1<f64>,
+        direction: &Array1<f64>,
         f_current: f64,
-        grad_current: &[f64],
+        grad_current: &Array1<f64>,
         initial_step: f64,
         wolfe_params: &WolfeParams,
         max_evaluations: usize,
     ) -> Result<LineSearchResult, MinimizerError> {
-        let directional_derivative = self.dot_product(grad_current, direction);
+        let directional_derivative = grad_current.dot(direction);
 
         if directional_derivative >= -1e-13 {
             // Stricter descent check
@@ -119,7 +106,7 @@ impl QuasiNewton {
                 break;
             }
 
-            let x_new: Vec<f64> = x
+            let x_new: Array1<f64> = x
                 .iter()
                 .zip(direction.iter())
                 .map(|(&xi, &di)| xi + alpha * di)
@@ -155,7 +142,7 @@ impl QuasiNewton {
 
         // Return the best alpha found, even if not perfect
         let final_alpha = alpha.max(wolfe_params.min_step);
-        let x_new: Vec<f64> = x
+        let x_new: Array1<f64> = x
             .iter()
             .zip(direction.iter())
             .map(|(&xi, &di)| xi + final_alpha * di)
@@ -187,7 +174,7 @@ impl QuasiNewton {
     /// * `QuasiNewtonResult` containing the minimum and convergence info
     pub fn quasi_newton(
         &mut self,
-        initial_point: Vec<f64>,
+        initial_point: Array1<f64>,
         method: QuasiNewtonMethod,
         tol: Option<f64>,
         max_iters: Option<usize>,
@@ -217,7 +204,7 @@ impl QuasiNewton {
     /// BFGS implementation
     fn bfgs_optimization(
         &mut self,
-        initial_point: Vec<f64>,
+        initial_point: Array1<f64>,
         tol: f64,
         max_iters: usize,
     ) -> Result<QuasiNewtonResult, MinimizerError> {
@@ -244,20 +231,20 @@ impl QuasiNewton {
         let mut convergence_history = vec![f_current];
         let mut gradient_norm_history = Vec::new();
 
-        let mut grad_norm = self.vector_norm(&grad_current);
+        let mut grad_norm = grad_current.norm();
         gradient_norm_history.push(grad_norm);
 
         while iterations < max_iters && grad_norm > tol {
             iterations += 1;
 
             // Compute search direction: p = -H * grad
-            let mut search_direction = h_inv.dot(&Array1::from(grad_current.to_vec())).to_vec();
+            let mut search_direction = h_inv.dot(&grad_current);
             for d in &mut search_direction {
                 *d = -*d;
             }
 
             // Ensure it's a descent direction
-            let directional_derivative = self.dot_product(&search_direction, &grad_current);
+            let directional_derivative = search_direction.dot(&grad_current);
             if directional_derivative >= 0.0 {
                 // Reset to steepest descent if not descent direction
                 search_direction = grad_current.iter().map(|&g| -g).collect();
@@ -279,7 +266,7 @@ impl QuasiNewton {
             gradient_evaluations += line_result.evaluations;
 
             // Update position
-            let x_new: Vec<f64> = x
+            let x_new: Array1<f64> = x
                 .iter()
                 .zip(search_direction.iter())
                 .map(|(&xi, &di)| xi + line_result.alpha * di)
@@ -293,17 +280,17 @@ impl QuasiNewton {
             }
 
             // Compute updates for BFGS formula
-            let s = self.vector_subtract(&x_new, &x); // step
-            let y = self.vector_subtract(&grad_new, &grad_current); // gradient change
+            let s = &x_new - &x; // step
+            let y = &grad_new - &grad_current; // gradient change
 
-            let sy = self.dot_product(&s, &y);
+            let sy = s.dot(&y);
 
             // Check curvature condition for BFGS update
-            if sy > 1e-8 * self.vector_norm(&s) * self.vector_norm(&y) {
+            if sy > 1e-8 * s.norm() * y.norm() {
                 // Better curvature condition
                 // BFGS update: H_new = H + (sy + y^T H y)(s s^T)/(sy)^2 - (H y s^T + s y^T H)/(sy)
-                let hy = h_inv.dot(&Array1::from(y.to_vec())).to_vec();
-                let yhy = self.dot_product(&y, &hy);
+                let hy = h_inv.dot(&y);
+                let yhy = y.dot(&hy);
 
                 // Compute the rank-2 update
                 let ss = Array2::from_shape_fn((s.len(), s.len()), |(i, j)| s[i] * s[j]);
@@ -327,7 +314,7 @@ impl QuasiNewton {
             x = x_new;
             f_current = line_result.f_new;
             grad_current = grad_new;
-            grad_norm = self.vector_norm(&grad_current);
+            grad_norm = grad_current.norm();
 
             convergence_history.push(f_current);
             gradient_norm_history.push(grad_norm);
@@ -341,8 +328,8 @@ impl QuasiNewton {
             function_evaluations,
             gradient_evaluations,
             converged: grad_norm <= tol,
-            convergence_history,
-            gradient_norm_history,
+            convergence_history: Array1::from_vec(convergence_history),
+            gradient_norm_history: Array1::from_vec(gradient_norm_history),
             final_hessian_approximation: h_inv,
             method_used: "BFGS".to_string(),
         })
@@ -351,7 +338,7 @@ impl QuasiNewton {
     /// DFP (Davidon-Fletcher-Powell) implementation
     fn dfp_optimization(
         &mut self,
-        initial_point: Vec<f64>,
+        initial_point: Array1<f64>,
         tol: f64,
         max_iters: usize,
     ) -> Result<QuasiNewtonResult, MinimizerError> {
@@ -369,14 +356,14 @@ impl QuasiNewton {
         let mut convergence_history = vec![f_current];
         let mut gradient_norm_history = Vec::new();
 
-        let mut grad_norm = self.vector_norm(&grad_current);
+        let mut grad_norm = grad_current.norm();
         gradient_norm_history.push(grad_norm);
 
         while iterations < max_iters && grad_norm > tol {
             iterations += 1;
 
             let search_direction = h_inv.dot(&Array1::from(grad_current.to_vec())).to_vec();
-            let search_direction: Vec<f64> = search_direction.iter().map(|&x| -x).collect();
+            let search_direction: Array1<f64> = search_direction.iter().map(|&x| -x).collect();
 
             let line_result = self.wolfe_line_search(
                 &x,
@@ -391,7 +378,7 @@ impl QuasiNewton {
             function_evaluations += line_result.evaluations;
             gradient_evaluations += line_result.evaluations;
 
-            let x_new: Vec<f64> = x
+            let x_new: Array1<f64> = x
                 .iter()
                 .zip(search_direction.iter())
                 .map(|(&xi, &di)| xi + line_result.alpha * di)
@@ -400,14 +387,14 @@ impl QuasiNewton {
             let grad_new = self.f.grad(&x_new);
             gradient_evaluations += 1;
 
-            let s = self.vector_subtract(&x_new, &x);
-            let y = self.vector_subtract(&grad_new, &grad_current);
-            let sy = self.dot_product(&s, &y);
+            let s = &x_new - &x;
+            let y = &grad_new - &grad_current;
+            let sy = s.dot(&y);
 
             // DFP update: H_new = H - (H y y^T H)/(y^T H y) + (s s^T)/(s^T y)
             if sy > 1e-14 {
-                let hy = h_inv.dot(&Array1::from(y.to_vec())).to_vec();
-                let yhy = self.dot_product(&y, &hy);
+                let hy = h_inv.dot(&y);
+                let yhy = y.dot(&hy);
 
                 if yhy > 1e-14 {
                     let hyhy = Array2::from_shape_fn((hy.len(), hy.len()), |(i, j)| hy[i] * hy[j]);
@@ -426,7 +413,7 @@ impl QuasiNewton {
             x = x_new;
             f_current = line_result.f_new;
             grad_current = grad_new;
-            grad_norm = self.vector_norm(&grad_current);
+            grad_norm = grad_current.norm();
 
             convergence_history.push(f_current);
             gradient_norm_history.push(grad_norm);
@@ -440,8 +427,8 @@ impl QuasiNewton {
             function_evaluations,
             gradient_evaluations,
             converged: grad_norm <= tol,
-            convergence_history,
-            gradient_norm_history,
+            convergence_history: Array1::from_vec(convergence_history),
+            gradient_norm_history: Array1::from_vec(gradient_norm_history),
             final_hessian_approximation: h_inv,
             method_used: "DFP".to_string(),
         })
@@ -450,7 +437,7 @@ impl QuasiNewton {
     /// SR1 (Symmetric Rank-1) implementation  
     fn sr1_optimization(
         &mut self,
-        initial_point: Vec<f64>,
+        initial_point: Array1<f64>,
         tol: f64,
         max_iters: usize,
     ) -> Result<QuasiNewtonResult, MinimizerError> {
@@ -468,14 +455,14 @@ impl QuasiNewton {
         let mut convergence_history = vec![f_current];
         let mut gradient_norm_history = Vec::new();
 
-        let mut grad_norm = self.vector_norm(&grad_current);
+        let mut grad_norm = grad_current.norm();
         gradient_norm_history.push(grad_norm);
 
         while iterations < max_iters && grad_norm > tol {
             iterations += 1;
 
             let search_direction = h_inv.dot(&Array1::from(grad_current.to_vec())).to_vec();
-            let search_direction: Vec<f64> = search_direction.iter().map(|&x| -x).collect();
+            let search_direction: Array1<f64> = search_direction.iter().map(|&x| -x).collect();
 
             let line_result = self.wolfe_line_search(
                 &x,
@@ -490,7 +477,7 @@ impl QuasiNewton {
             function_evaluations += line_result.evaluations;
             gradient_evaluations += line_result.evaluations;
 
-            let x_new: Vec<f64> = x
+            let x_new: Array1<f64> = x
                 .iter()
                 .zip(search_direction.iter())
                 .map(|(&xi, &di)| xi + line_result.alpha * di)
@@ -499,11 +486,11 @@ impl QuasiNewton {
             let grad_new = self.f.grad(&x_new);
             gradient_evaluations += 1;
 
-            let s = self.vector_subtract(&x_new, &x);
-            let y = self.vector_subtract(&grad_new, &grad_current);
-            let hy = h_inv.dot(&Array1::from(y.to_vec())).to_vec();
-            let v = self.vector_subtract(&s, &hy);
-            let vy = self.dot_product(&v, &y);
+            let s = &x_new - &x;
+            let y = &grad_new - &grad_current;
+            let hy = h_inv.dot(&y);
+            let v = &s - &hy;
+            let vy = v.dot(&y);
 
             // SR1 update: H_new = H + (v v^T)/(v^T y)
             if vy.abs() > 1e-14 {
@@ -516,7 +503,7 @@ impl QuasiNewton {
             x = x_new;
             f_current = line_result.f_new;
             grad_current = grad_new;
-            grad_norm = self.vector_norm(&grad_current);
+            grad_norm = grad_current.norm();
 
             convergence_history.push(f_current);
             gradient_norm_history.push(grad_norm);
@@ -530,8 +517,8 @@ impl QuasiNewton {
             function_evaluations,
             gradient_evaluations,
             converged: grad_norm <= tol,
-            convergence_history,
-            gradient_norm_history,
+            convergence_history: Array1::from_vec(convergence_history),
+            gradient_norm_history: Array1::from_vec(gradient_norm_history),
             final_hessian_approximation: h_inv,
             method_used: "SR1".to_string(),
         })
@@ -540,7 +527,7 @@ impl QuasiNewton {
     /// Limited-memory BFGS (L-BFGS) implementation
     fn lbfgs_optimization(
         &mut self,
-        initial_point: Vec<f64>,
+        initial_point: Array1<f64>,
         tol: f64,
         max_iters: usize,
         memory_size: usize,
@@ -554,9 +541,9 @@ impl QuasiNewton {
         let mut grad_current = self.f.grad(&x);
 
         // L-BFGS storage
-        let mut s_history: Vec<Vec<f64>> = Vec::with_capacity(m);
-        let mut y_history: Vec<Vec<f64>> = Vec::with_capacity(m);
-        let mut rho_history: Vec<f64> = Vec::with_capacity(m);
+        let mut s_history: Array2<f64> = Array2::zeros((m, n));
+        let mut y_history: Array2<f64> = Array2::zeros((m, n));
+        let mut rho_history: Array1<f64> = Array1::zeros(m);
 
         let mut function_evaluations = 1;
         let mut gradient_evaluations = 1;
@@ -564,9 +551,10 @@ impl QuasiNewton {
         let mut convergence_history = vec![f_current];
         let mut gradient_norm_history = Vec::new();
 
-        let mut grad_norm = self.vector_norm(&grad_current);
+        let mut grad_norm = grad_current.norm();
         gradient_norm_history.push(grad_norm);
 
+        let mut history = 0;
         while iterations < max_iters && grad_norm > tol {
             iterations += 1;
 
@@ -591,36 +579,42 @@ impl QuasiNewton {
             function_evaluations += line_result.evaluations;
             gradient_evaluations += line_result.evaluations;
 
-            let x_new: Vec<f64> = x
-                .iter()
-                .zip(search_direction.iter())
-                .map(|(&xi, &di)| xi + line_result.alpha * di)
-                .collect();
+            let x_new =
+                Array1::from_shape_fn(x.len(), |i| x[i] + line_result.alpha * search_direction[i]);
 
             let grad_new = self.f.grad(&x_new);
             gradient_evaluations += 1;
 
-            let s = self.vector_subtract(&x_new, &x);
-            let y = self.vector_subtract(&grad_new, &grad_current);
-            let sy = self.dot_product(&s, &y);
+            let s = &x_new - &x;
+            let y = &grad_new - &grad_current;
+            let sy = s.dot(&y);
 
             // Update L-BFGS history
             if sy > 1e-14 {
                 if s_history.len() >= m {
-                    s_history.remove(0);
-                    y_history.remove(0);
-                    rho_history.remove(0);
+                    for i in 0..m - 1 {
+                        for j in 0..n {
+                            s_history[[i, j]] = s_history[[i + 1, j]];
+                            y_history[[i, j]] = y_history[[i + 1, j]];
+                        }
+                        rho_history[i] = rho_history[i + 1];
+                    }
                 }
 
-                s_history.push(s);
-                y_history.push(y);
-                rho_history.push(1.0 / sy);
+                for j in 0..n {
+                    s_history[[history, j]] = s[j];
+                    y_history[[history, j]] = y[j];
+                }
+                rho_history[history] = 1.0 / sy;
+                if history < m - 1 {
+                    history += 1;
+                }
             }
 
             x = x_new;
             f_current = line_result.f_new;
             grad_current = grad_new;
-            grad_norm = self.vector_norm(&grad_current);
+            grad_norm = grad_current.norm();
 
             convergence_history.push(f_current);
             gradient_norm_history.push(grad_norm);
@@ -634,8 +628,8 @@ impl QuasiNewton {
             function_evaluations,
             gradient_evaluations,
             converged: grad_norm <= tol,
-            convergence_history,
-            gradient_norm_history,
+            convergence_history: Array1::from_vec(convergence_history),
+            gradient_norm_history: Array1::from_vec(gradient_norm_history),
             final_hessian_approximation: Array2::eye(n), // L-BFGS doesn't store full matrix
             method_used: format!("L-BFGS({})", m),
         })
@@ -644,28 +638,28 @@ impl QuasiNewton {
     /// L-BFGS two-loop recursion to compute search direction
     fn lbfgs_two_loop_recursion(
         &mut self,
-        grad: &Vec<f64>,
-        s_history: &[Vec<f64>],
-        y_history: &[Vec<f64>],
-        rho_history: &Vec<f64>,
-    ) -> Vec<f64> {
-        let m = s_history.len();
+        grad: &Array1<f64>,
+        s_history: &Array2<f64>,
+        y_history: &Array2<f64>,
+        rho_history: &Array1<f64>,
+    ) -> Array1<f64> {
+        let m = s_history.nrows();
         let n = grad.len();
-        let mut q = grad.to_vec();
-        let mut alpha = vec![0.0; m];
+        let mut q = grad.clone();
+        let mut alpha = Array1::zeros(m);
 
         // First loop (backward)
         for i in (0..m).rev() {
-            alpha[i] = rho_history[i] * self.dot_product(&s_history[i], &q);
+            alpha[i] = rho_history[i] * &s_history.row(i).dot(&q);
             for j in 0..n {
-                q[j] -= alpha[i] * y_history[i][j];
+                q[j] -= alpha[i] * y_history[[i, j]];
             }
         }
 
         // Apply initial Hessian approximation (H0 = γI)
         let gamma = if m > 0 {
-            let last_sy = self.dot_product(&s_history[m - 1], &y_history[m - 1]);
-            let last_yy = self.dot_product(&y_history[m - 1], &y_history[m - 1]);
+            let last_sy = s_history.row(m - 1).dot(&y_history.row(m - 1));
+            let last_yy = y_history.row(m - 1).dot(&y_history.row(m - 1));
             if last_yy > 1e-14 {
                 last_sy / last_yy
             } else {
@@ -681,9 +675,9 @@ impl QuasiNewton {
 
         // Second loop (forward)
         for i in 0..m {
-            let beta = rho_history[i] * self.dot_product(&y_history[i], &q);
+            let beta = rho_history[i] * y_history.row(i).dot(&q);
             for j in 0..n {
-                q[j] += (alpha[i] - beta) * s_history[i][j];
+                q[j] += (alpha[i] - beta) * s_history[[i, j]];
             }
         }
 
@@ -694,7 +688,7 @@ impl QuasiNewton {
     /// Convenience function using BFGS method
     pub fn minimize_bfgs(
         &mut self,
-        initial_point: Vec<f64>,
+        initial_point: Array1<f64>,
     ) -> Result<QuasiNewtonResult, MinimizerError> {
         self.quasi_newton(initial_point, QuasiNewtonMethod::BFGS, None, None)
     }
@@ -702,7 +696,7 @@ impl QuasiNewton {
     /// Compare different quasi-Newton methods
     pub fn compare_quasi_newton_methods(
         &mut self,
-        initial_point: Vec<f64>,
+        initial_point: Array1<f64>,
         tol: Option<f64>,
         max_iters: Option<usize>,
     ) -> Vec<(QuasiNewtonMethod, Result<QuasiNewtonResult, MinimizerError>)> {
@@ -734,7 +728,7 @@ impl fmt::Debug for QuasiNewton {
 }
 
 #[cfg(test)]
-mod quasinewtonf64_tests {
+mod minimize_f64_quasinewton_tests {
     use super::*;
     use crate::minimize::f64::{MultiDimGradFn, MultiDimNumGradFn};
     use float_cmp::F64Margin;
@@ -748,12 +742,12 @@ mod quasinewtonf64_tests {
     #[test]
     fn test_2d_quadratic_bfgs() {
         // f(x,y) = (x-1)² + (y-2)², grad = (2(x-1), 2(y-2))
-        let func = |x: &Vec<f64>| (x[0] - 1.0).powi(2) + (x[1] - 2.0).powi(2);
-        let grad = |x: &Vec<f64>| vec![2.0 * (x[0] - 1.0), 2.0 * (x[1] - 2.0)];
+        let func = |x: &Array1<f64>| (x[0] - 1.0).powi(2) + (x[1] - 2.0).powi(2);
+        let grad = |x: &Array1<f64>| array![2.0 * (x[0] - 1.0), 2.0 * (x[1] - 2.0)];
         let obj = MultiDimGradFn::new(func, grad);
         let mut quasinewton = QuasiNewton::new(obj);
 
-        let result = quasinewton.minimize_bfgs(vec![0.0, 0.0]).unwrap();
+        let result = quasinewton.minimize_bfgs(array![0.0, 0.0]).unwrap();
 
         assert!((result.x_min[0] - 1.0).abs() < 1e-8);
         assert!((result.x_min[1] - 2.0).abs() < 1e-8);
@@ -765,9 +759,9 @@ mod quasinewtonf64_tests {
     #[test]
     fn test_rosenbrock_bfgs() {
         let rosenbrock =
-            |x: &Vec<f64>| (1.0 - x[0]).powi(2) + 100.0 * (x[1] - x[0].powi(2)).powi(2);
-        let rosenbrock_grad = |x: &Vec<f64>| {
-            vec![
+            |x: &Array1<f64>| (1.0 - x[0]).powi(2) + 100.0 * (x[1] - x[0].powi(2)).powi(2);
+        let rosenbrock_grad = |x: &Array1<f64>| {
+            array![
                 -2.0 * (1.0 - x[0]) - 400.0 * x[0] * (x[1] - x[0].powi(2)),
                 200.0 * (x[1] - x[0].powi(2)),
             ]
@@ -778,7 +772,7 @@ mod quasinewtonf64_tests {
         // The Rosenbrock function is extremely challenging for BFGS
         // We'll test that it makes reasonable progress rather than finding the exact solution
         let result = quasinewton.quasi_newton(
-            vec![-1.2, 1.0], // Standard starting point
+            array![-1.2, 1.0], // Standard starting point
             QuasiNewtonMethod::BFGS,
             Some(1e-3), // Relaxed tolerance - Rosenbrock is genuinely hard
             Some(5000), // Many iterations may be needed
@@ -787,7 +781,7 @@ mod quasinewtonf64_tests {
         match result {
             Ok(res) => {
                 // Check that we made significant progress (function value decreased substantially)
-                let initial_f = rosenbrock(&vec![-1.2, 1.0]);
+                let initial_f = rosenbrock(&array![-1.2, 1.0]);
                 println!(
                     "Initial f: {}, Final f: {}, Progress: {:.1}%",
                     initial_f,
@@ -817,14 +811,14 @@ mod quasinewtonf64_tests {
             }
             Err(_) => {
                 // If BFGS struggles with Rosenbrock, try a simpler test to verify the implementation
-                let simple_func = |x: &Vec<f64>| (x[0] - 1.0).powi(2) + (x[1] - 2.0).powi(2);
-                let simple_grad = |x: &Vec<f64>| vec![2.0 * (x[0] - 1.0), 2.0 * (x[1] - 2.0)];
+                let simple_func = |x: &Array1<f64>| (x[0] - 1.0).powi(2) + (x[1] - 2.0).powi(2);
+                let simple_grad = |x: &Array1<f64>| array![2.0 * (x[0] - 1.0), 2.0 * (x[1] - 2.0)];
                 let obj = MultiDimGradFn::new(simple_func, simple_grad);
                 let mut quasinewton = QuasiNewton::new(obj);
 
                 let simple_result = quasinewton
                     .quasi_newton(
-                        vec![0.0, 0.0],
+                        array![0.0, 0.0],
                         QuasiNewtonMethod::BFGS,
                         Some(1e-8),
                         Some(100),
@@ -840,8 +834,8 @@ mod quasinewtonf64_tests {
 
     #[test]
     fn test_different_quasi_newton_methods() {
-        let func = |x: &Vec<f64>| x[0].powi(2) + 2.0 * x[1].powi(2) + x[0] * x[1];
-        let grad = |x: &Vec<f64>| vec![2.0 * x[0] + x[1], 4.0 * x[1] + x[0]];
+        let func = |x: &Array1<f64>| x[0].powi(2) + 2.0 * x[1].powi(2) + x[0] * x[1];
+        let grad = |x: &Array1<f64>| array![2.0 * x[0] + x[1], 4.0 * x[1] + x[0]];
         let obj = MultiDimGradFn::new(func, grad);
         let mut quasinewton = QuasiNewton::new(obj);
 
@@ -853,7 +847,7 @@ mod quasinewtonf64_tests {
 
         for &method in &methods {
             let result = quasinewton.quasi_newton(
-                vec![1.0, 1.0],
+                array![1.0, 1.0],
                 method,
                 Some(1e-6), // Reasonable tolerance
                 Some(200),  // More iterations for robustness
@@ -878,13 +872,13 @@ mod quasinewtonf64_tests {
                 Err(_) => {
                     // Some methods might struggle with this coupled quadratic
                     // Try a simpler separable quadratic to verify the method works
-                    let simple_func = |x: &Vec<f64>| x[0].powi(2) + x[1].powi(2);
-                    let simple_grad = |x: &Vec<f64>| vec![2.0 * x[0], 2.0 * x[1]];
+                    let simple_func = |x: &Array1<f64>| x[0].powi(2) + x[1].powi(2);
+                    let simple_grad = |x: &Array1<f64>| array![2.0 * x[0], 2.0 * x[1]];
                     let obj = MultiDimGradFn::new(simple_func, simple_grad);
                     let mut quasinewton = QuasiNewton::new(obj);
 
                     let simple_result =
-                        quasinewton.quasi_newton(vec![1.0, 1.0], method, Some(1e-8), Some(100));
+                        quasinewton.quasi_newton(array![1.0, 1.0], method, Some(1e-8), Some(100));
 
                     // At least one of these should work
                     if simple_result.is_ok() {
@@ -903,13 +897,13 @@ mod quasinewtonf64_tests {
                     } else {
                         // If even the simple case fails, there might be a fundamental issue
                         // Let's try with a very simple 1D problem
-                        let simple_1d = |x: &Vec<f64>| x[0].powi(2);
-                        let grad_1d = |x: &Vec<f64>| vec![2.0 * x[0]];
+                        let simple_1d = |x: &Array1<f64>| x[0].powi(2);
+                        let grad_1d = |x: &Array1<f64>| array![2.0 * x[0]];
                         let obj = MultiDimGradFn::new(simple_1d, grad_1d);
                         let mut quasinewton = QuasiNewton::new(obj);
 
                         let result_1d = quasinewton
-                            .quasi_newton(vec![2.0], method, Some(1e-6), Some(50))
+                            .quasi_newton(array![2.0], method, Some(1e-6), Some(50))
                             .expect(&format!("Method {:?} should work on 1D quadratic", method));
 
                         assert!(result_1d.x_min[0].abs() < 1e-5);
@@ -923,13 +917,13 @@ mod quasinewtonf64_tests {
     #[test]
     fn test_lbfgs_memory() {
         // Use a simpler function that L-BFGS should handle well
-        let func = |x: &Vec<f64>| x.iter().map(|&xi| xi.powi(2)).sum::<f64>();
-        let grad = |x: &Vec<f64>| x.iter().map(|&xi| 2.0 * xi).collect::<Vec<f64>>();
+        let func = |x: &Array1<f64>| x.iter().map(|&xi| xi.powi(2)).sum::<f64>();
+        let grad = |x: &Array1<f64>| x.iter().map(|&xi| 2.0 * xi).collect::<Array1<f64>>();
         let obj = MultiDimGradFn::new(func, grad);
         let mut quasinewton = QuasiNewton::new(obj);
 
         let result = quasinewton.quasi_newton(
-            vec![1.0; 10], // 10D instead of higher dimension to be more reliable
+            Array1::ones(10), // 10D instead of higher dimension to be more reliable
             QuasiNewtonMethod::LimitedBFGS(5),
             Some(1e-6), // Reasonable tolerance
             Some(200),  // Sufficient iterations
@@ -944,14 +938,14 @@ mod quasinewtonf64_tests {
             }
             Err(_) => {
                 // If L-BFGS fails, let's try an even simpler case
-                let simple_func = |x: &Vec<f64>| x[0].powi(2) + x[1].powi(2) + x[2].powi(2);
-                let simple_grad = |x: &Vec<f64>| vec![2.0 * x[0], 2.0 * x[1], 2.0 * x[2]];
+                let simple_func = |x: &Array1<f64>| x[0].powi(2) + x[1].powi(2) + x[2].powi(2);
+                let simple_grad = |x: &Array1<f64>| array![2.0 * x[0], 2.0 * x[1], 2.0 * x[2]];
                 let obj = MultiDimGradFn::new(simple_func, simple_grad);
                 let mut quasinewton = QuasiNewton::new(obj);
 
                 let simple_result = quasinewton
                     .quasi_newton(
-                        vec![1.0, 2.0, 3.0],
+                        array![1.0, 2.0, 3.0],
                         QuasiNewtonMethod::LimitedBFGS(3),
                         Some(1e-6),
                         Some(100),
@@ -968,13 +962,13 @@ mod quasinewtonf64_tests {
 
     #[test]
     fn test_numerical_gradients() {
-        let func = |x: &Vec<f64>| (x[0] - 3.0).powi(2) + (x[1] + 1.0).powi(2);
+        let func = |x: &Array1<f64>| (x[0] - 3.0).powi(2) + (x[1] + 1.0).powi(2);
         let obj = MultiDimNumGradFn::new(func, Some(1e-8), 2);
         let mut quasinewton = QuasiNewton::new(obj);
 
         let result = quasinewton
             .quasi_newton(
-                vec![0.0, 0.0],
+                array![0.0, 0.0],
                 QuasiNewtonMethod::BFGS,
                 Some(1e-6),
                 Some(100),
@@ -988,13 +982,13 @@ mod quasinewtonf64_tests {
 
     #[test]
     fn test_method_comparison() {
-        let func = |x: &Vec<f64>| x.iter().map(|&xi| xi.powi(2)).sum::<f64>();
-        let grad = |x: &Vec<f64>| x.iter().map(|&xi| 2.0 * xi).collect();
+        let func = |x: &Array1<f64>| x.iter().map(|&xi| xi.powi(2)).sum::<f64>();
+        let grad = |x: &Array1<f64>| x.iter().map(|&xi| 2.0 * xi).collect();
         let obj = MultiDimGradFn::new(func, grad);
         let mut quasinewton = QuasiNewton::new(obj);
 
         let results =
-            quasinewton.compare_quasi_newton_methods(vec![1.0, 2.0, 3.0], Some(1e-8), Some(50));
+            quasinewton.compare_quasi_newton_methods(array![1.0, 2.0, 3.0], Some(1e-8), Some(50));
 
         for (method, result) in results {
             match result {
@@ -1017,14 +1011,14 @@ mod quasinewtonf64_tests {
     #[test]
     fn test_bfgs_hessian_approximation() {
         // Test that BFGS builds good Hessian approximation
-        let quadratic_2d = |x: &Vec<f64>| 2.0 * x[0].powi(2) + x[1].powi(2) + x[0] * x[1];
-        let quadratic_grad = |x: &Vec<f64>| vec![4.0 * x[0] + x[1], 2.0 * x[1] + x[0]];
+        let quadratic_2d = |x: &Array1<f64>| 2.0 * x[0].powi(2) + x[1].powi(2) + x[0] * x[1];
+        let quadratic_grad = |x: &Array1<f64>| array![4.0 * x[0] + x[1], 2.0 * x[1] + x[0]];
         let obj = MultiDimGradFn::new(quadratic_2d, quadratic_grad);
         let mut quasinewton = QuasiNewton::new(obj);
 
         let result = quasinewton
             .quasi_newton(
-                vec![1.0, 1.0],
+                array![1.0, 1.0],
                 QuasiNewtonMethod::BFGS,
                 Some(1e-8),
                 Some(100),
@@ -1042,7 +1036,7 @@ mod quasinewtonf64_tests {
     #[test]
     fn test_lbfgs_memory_efficiency() {
         // Test L-BFGS on higher dimensional problem
-        let high_dim_objective = |x: &Vec<f64>| {
+        let high_dim_objective = |x: &Array1<f64>| {
             x.iter()
                 .enumerate()
                 .map(|(i, &xi)| {
@@ -1051,7 +1045,7 @@ mod quasinewtonf64_tests {
                 })
                 .sum::<f64>()
         };
-        let high_dim_grad = |x: &Vec<f64>| {
+        let high_dim_grad = |x: &Array1<f64>| {
             x.iter()
                 .enumerate()
                 .map(|(i, &xi)| {
@@ -1072,7 +1066,7 @@ mod quasinewtonf64_tests {
 
         let result = quasinewton
             .quasi_newton(
-                vec![1.0; 20],
+                Array1::ones(20),
                 QuasiNewtonMethod::LimitedBFGS(10),
                 Some(1e-6),
                 Some(200),
@@ -1089,9 +1083,9 @@ mod quasinewtonf64_tests {
     fn test_quasi_newton_method_comparison() {
         // Compare different quasi-Newton methods
         let rosenbrock =
-            |x: &Vec<f64>| (1.0 - x[0]).powi(2) + 100.0 * (x[1] - x[0].powi(2)).powi(2);
-        let rosenbrock_grad = |x: &Vec<f64>| {
-            vec![
+            |x: &Array1<f64>| (1.0 - x[0]).powi(2) + 100.0 * (x[1] - x[0].powi(2)).powi(2);
+        let rosenbrock_grad = |x: &Array1<f64>| {
+            array![
                 -2.0 * (1.0 - x[0]) - 400.0 * x[0] * (x[1] - x[0].powi(2)),
                 200.0 * (x[1] - x[0].powi(2)),
             ]
@@ -1106,7 +1100,8 @@ mod quasinewtonf64_tests {
         ];
 
         for &method in &methods {
-            let result = quasinewton.quasi_newton(vec![-1.2, 1.0], method, Some(1e-4), Some(1000));
+            let result =
+                quasinewton.quasi_newton(array![-1.2, 1.0], method, Some(1e-4), Some(1000));
 
             match result {
                 Ok(res) => {

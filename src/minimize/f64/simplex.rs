@@ -1,25 +1,27 @@
 #![allow(dead_code)]
 #![allow(unused_assignments)]
-use crate::minimize::f64::Vertex;
-use crate::minimize::{MinimizerError, f64::ObjFn};
+use crate::minimize::{
+    MinimizerError,
+    f64::{ObjFn, Vertex},
+};
+use ndarray::prelude::*;
 use std::fmt;
-// use ndarray::prelude::*;
 
 /// Result of downhill simplex optimization
 #[derive(Debug, Clone)]
 pub struct SimplexResult {
-    pub xmin: Vec<f64>,
+    pub xmin: Array1<f64>,
     pub fmin: f64,
     pub iters: usize,
     pub fn_evals: usize,
     pub converged: bool,
     pub final_simplex_size: f64,
-    pub history: Vec<f64>,
+    pub history: Array1<f64>,
 }
 
 #[derive(Clone)]
 pub struct Simplex {
-    xmin: Vec<f64>,
+    xmin: Array1<f64>,
     fmin: f64,
     f: Box<dyn ObjFn>,
     iters: usize,
@@ -32,7 +34,7 @@ impl Simplex {
         F: ObjFn + 'static,
     {
         Simplex {
-            xmin: vec![],
+            xmin: array![],
             fmin: 0.0,
             f: Box::new(f),
             iters: 0,
@@ -42,7 +44,7 @@ impl Simplex {
 
     pub fn new_boxed(f: Box<dyn ObjFn>) -> Self {
         Simplex {
-            xmin: vec![],
+            xmin: array![],
             fmin: 0.0,
             f: f,
             iters: 0,
@@ -50,7 +52,12 @@ impl Simplex {
         }
     }
 
-    fn reflect_point(&self, worst: &[f64], centroid: &[f64], coeff: f64) -> Vec<f64> {
+    fn reflect_point(
+        &self,
+        worst: &Array1<f64>,
+        centroid: &Array1<f64>,
+        coeff: f64,
+    ) -> Array1<f64> {
         worst
             .iter()
             .zip(centroid.iter())
@@ -58,7 +65,7 @@ impl Simplex {
             .collect()
     }
 
-    fn calculate_centroid(&self, vertices: &[Vertex]) -> Vec<f64> {
+    fn calculate_centroid(&self, vertices: &[Vertex]) -> Array1<f64> {
         let n = vertices[0].point.len();
         let mut centroid = vec![0.0; n];
 
@@ -72,7 +79,7 @@ impl Simplex {
             *coord /= vertices.len() as f64;
         }
 
-        centroid
+        Array1::from_vec(centroid)
     }
 
     fn calculate_simplex_size(&self, simplex: &[Vertex]) -> f64 {
@@ -137,7 +144,7 @@ impl Simplex {
                     fn_evals,
                     converged: self.converged,
                     final_simplex_size: simplex_size,
-                    history,
+                    history: Array1::from_vec(history),
                 });
             }
 
@@ -201,7 +208,7 @@ impl Simplex {
                 } else {
                     let best_point = best.point.clone();
                     for i in 1..=n {
-                        let mut new_point = vec![0.0; n];
+                        let mut new_point = Array1::zeros(n);
                         for j in 0..n {
                             new_point[j] =
                                 best_point[j] + sigma * (simplex[i].point[j] - best_point[j]);
@@ -234,7 +241,7 @@ impl Simplex {
             fn_evals,
             converged: self.converged,
             final_simplex_size: self.calculate_simplex_size(&simplex),
-            history,
+            history: Array1::from_vec(history),
         })
     }
 
@@ -255,7 +262,7 @@ impl Simplex {
     /// * `SimplexResult` containing the minimum point and convergence information
     pub fn downhill_simplex(
         &mut self,
-        initial_point: Vec<f64>,
+        initial_point: Array1<f64>,
         initial_step: Option<f64>,
         tol: Option<f64>,
         max_iters: Option<usize>,
@@ -322,7 +329,7 @@ impl Simplex {
                     fn_evals,
                     converged: self.converged,
                     final_simplex_size: simplex_size,
-                    history,
+                    history: Array1::from_vec(history),
                 });
             }
 
@@ -397,7 +404,7 @@ impl Simplex {
                     // Shrink simplex toward best point
                     let best_point = best.point.clone();
                     for i in 1..=n {
-                        let mut new_point = vec![0.0; n];
+                        let mut new_point = Array1::zeros(n);
                         for j in 0..n {
                             new_point[j] =
                                 best_point[j] + sigma * (simplex[i].point[j] - best_point[j]);
@@ -431,7 +438,7 @@ impl Simplex {
             fn_evals,
             converged: self.converged,
             final_simplex_size: self.calculate_simplex_size(&simplex),
-            history,
+            history: Array1::from_vec(history),
         })
     }
 
@@ -441,7 +448,7 @@ impl Simplex {
     /// characteristics for improved performance.
     pub fn adaptive_downhill_simplex(
         &mut self,
-        initial_point: Vec<f64>,
+        initial_point: Array1<f64>,
         initial_step: Option<f64>,
         tol: Option<f64>,
         max_iters: Option<usize>,
@@ -522,7 +529,7 @@ impl Simplex {
                     fn_evals,
                     converged: self.converged,
                     final_simplex_size: simplex_size,
-                    history,
+                    history: Array1::from_vec(history),
                 });
             }
 
@@ -591,7 +598,7 @@ impl Simplex {
                     // Shrink with adaptive sigma
                     let best_point = best.point.clone();
                     for i in 1..=n {
-                        let mut new_point = vec![0.0; n];
+                        let mut new_point = Array1::zeros(n);
                         for j in 0..n {
                             new_point[j] =
                                 best_point[j] + sigma * (simplex[i].point[j] - best_point[j]);
@@ -624,20 +631,23 @@ impl Simplex {
             fn_evals,
             converged: self.converged,
             final_simplex_size: self.calculate_simplex_size(&simplex),
-            history,
+            history: Array1::from_vec(history),
         })
     }
 
     /// Convenience function with default parameters
-    pub fn minimize(&mut self, initial_point: Vec<f64>) -> Result<SimplexResult, MinimizerError> {
+    pub fn minimize(
+        &mut self,
+        initial_point: Array1<f64>,
+    ) -> Result<SimplexResult, MinimizerError> {
         self.downhill_simplex(initial_point, None, None, None)
     }
 
     /// Create initial simplex with custom step sizes for each dimension
     pub fn minimize_with_steps(
         &mut self,
-        initial_point: Vec<f64>,
-        step_sizes: Vec<f64>,
+        initial_point: Array1<f64>,
+        step_sizes: Array1<f64>,
     ) -> Result<SimplexResult, MinimizerError> {
         let n = initial_point.len();
         if step_sizes.len() != n {
@@ -670,7 +680,7 @@ impl fmt::Debug for Simplex {
 }
 
 #[cfg(test)]
-mod simplexf64_tests {
+mod minimize_f64_simplex_tests {
     use super::*;
     use crate::minimize::f64::MultiDimFn;
     use float_cmp::F64Margin;
@@ -684,11 +694,11 @@ mod simplexf64_tests {
     #[test]
     fn test_2d_quadratic() {
         // f(x,y) = (x-1)² + (y-2)², minimum at (1,2)
-        let func = |x: &Vec<f64>| (x[0] - 1.0).powi(2) + (x[1] - 2.0).powi(2);
+        let func = |x: &Array1<f64>| (x[0] - 1.0).powi(2) + (x[1] - 2.0).powi(2);
         let objective = MultiDimFn::new(func);
         let mut simplex = Simplex::new(objective);
 
-        let result = simplex.minimize(vec![0.0, 0.0]).unwrap();
+        let result = simplex.minimize(array![0.0, 0.0]).unwrap();
 
         assert!((result.xmin[0] - 1.0).abs() < 1e-6);
         assert!((result.xmin[1] - 2.0).abs() < 1e-6);
@@ -705,12 +715,12 @@ mod simplexf64_tests {
     fn test_rosenbrock_2d() {
         // Rosenbrock function: f(x,y) = (1-x)² + 100(y-x²)²
         let rosenbrock =
-            |x: &Vec<f64>| (1.0 - x[0]).powi(2) + 100.0 * (x[1] - x[0].powi(2)).powi(2);
+            |x: &Array1<f64>| (1.0 - x[0]).powi(2) + 100.0 * (x[1] - x[0].powi(2)).powi(2);
         let objective = MultiDimFn::new(rosenbrock);
         let mut simplex = Simplex::new(objective);
 
         let result = simplex
-            .downhill_simplex(vec![-1.2, 1.0], Some(0.1), Some(1e-6), Some(2000))
+            .downhill_simplex(array![-1.2, 1.0], Some(0.1), Some(1e-6), Some(2000))
             .unwrap();
 
         assert!((result.xmin[0] - 1.0).abs() < 1e-4);
@@ -725,11 +735,11 @@ mod simplexf64_tests {
     #[test]
     fn test_3d_sphere() {
         // f(x,y,z) = x² + y² + z², minimum at (0,0,0)
-        let sphere = |x: &Vec<f64>| x.iter().map(|&xi| xi * xi).sum();
+        let sphere = |x: &Array1<f64>| x.iter().map(|&xi| xi * xi).sum();
         let objective = MultiDimFn::new(sphere);
         let mut simplex = Simplex::new(objective);
 
-        let result = simplex.minimize(vec![1.0, 1.0, 1.0]).unwrap();
+        let result = simplex.minimize(array![1.0, 1.0, 1.0]).unwrap();
 
         for &coord in &result.xmin {
             assert!(coord.abs() < 1e-6);
@@ -746,12 +756,12 @@ mod simplexf64_tests {
 
     #[test]
     fn test_adaptive_simplex() {
-        let func = |x: &Vec<f64>| (x[0] - 3.0).powi(2) + (x[1] + 2.0).powi(2) + 5.0;
+        let func = |x: &Array1<f64>| (x[0] - 3.0).powi(2) + (x[1] + 2.0).powi(2) + 5.0;
         let objective = MultiDimFn::new(func);
         let mut simplex = Simplex::new(objective);
 
         let result = simplex
-            .adaptive_downhill_simplex(vec![0.0, 0.0], Some(1.0), Some(1e-8), None)
+            .adaptive_downhill_simplex(array![0.0, 0.0], Some(1.0), Some(1e-8), None)
             .unwrap();
 
         assert!((result.xmin[0] - 3.0).abs() < 1e-6);
@@ -765,14 +775,14 @@ mod simplexf64_tests {
 
     #[test]
     fn test_custom_step_sizes() {
-        let func = |x: &Vec<f64>| (x[0] / 10.0 - 1.0).powi(2) + (x[1] - 2.0).powi(2);
+        let func = |x: &Array1<f64>| (x[0] / 10.0 - 1.0).powi(2) + (x[1] - 2.0).powi(2);
         let objective = MultiDimFn::new(func);
         let mut simplex = Simplex::new(objective);
 
         let result = simplex
             .minimize_with_steps(
-                vec![0.0, 0.0],
-                vec![10.0, 1.0], // Different step sizes for each dimension
+                array![0.0, 0.0],
+                array![10.0, 1.0], // Different step sizes for each dimension
             )
             .unwrap();
 
@@ -785,11 +795,11 @@ mod simplexf64_tests {
 
     #[test]
     fn test_invalid_dimension() {
-        let func = |_: &Vec<f64>| 0.0;
+        let func = |_: &Array1<f64>| 0.0;
         let objective = MultiDimFn::new(func);
         let mut simplex = Simplex::new(objective);
 
-        let result = simplex.minimize(vec![]);
+        let result = simplex.minimize(array![]);
         assert!(result.is_err());
 
         assert!(matches!(result, Err(MinimizerError::InvalidDimension)));
@@ -797,11 +807,11 @@ mod simplexf64_tests {
 
     #[test]
     fn test_convergence_tracking() {
-        let func = |x: &Vec<f64>| x[0].powi(2) + x[1].powi(2);
+        let func = |x: &Array1<f64>| x[0].powi(2) + x[1].powi(2);
         let objective = MultiDimFn::new(func);
         let mut simplex = Simplex::new(objective);
 
-        let result = simplex.minimize(vec![2.0, 2.0]).unwrap();
+        let result = simplex.minimize(array![2.0, 2.0]).unwrap();
 
         assert!(!result.history.is_empty());
         assert!(result.history[0] > result.fmin);
@@ -811,11 +821,11 @@ mod simplexf64_tests {
     #[test]
     fn test_simplex_high_dimensional() {
         // Test 5D sphere function
-        let sphere_5d = |x: &Vec<f64>| x.iter().map(|&xi| xi * xi).sum::<f64>();
+        let sphere_5d = |x: &Array1<f64>| x.iter().map(|&xi| xi * xi).sum::<f64>();
         let objective = MultiDimFn::new(sphere_5d);
         let mut simplex = Simplex::new(objective);
 
-        let result = simplex.minimize(vec![1.0; 5]).unwrap();
+        let result = simplex.minimize(Array1::ones(5)).unwrap();
 
         assert!(result.converged);
         for &coord in &result.xmin {
@@ -828,19 +838,19 @@ mod simplexf64_tests {
     fn test_simplex_rosenbrock_variants() {
         // Test 1: 2D Rosenbrock
         let rosenbrock_2d =
-            |x: &Vec<f64>| (1.0 - x[0]).powi(2) + 100.0 * (x[1] - x[0].powi(2)).powi(2);
+            |x: &Array1<f64>| (1.0 - x[0]).powi(2) + 100.0 * (x[1] - x[0].powi(2)).powi(2);
         let objective = MultiDimFn::new(rosenbrock_2d);
         let mut simplex = Simplex::new(objective);
 
         let result = simplex
-            .downhill_simplex(vec![-1.2, 1.0], Some(0.1), Some(1e-6), Some(3000))
+            .downhill_simplex(array![-1.2, 1.0], Some(0.1), Some(1e-6), Some(3000))
             .unwrap();
 
         assert!((result.xmin[0] - 1.0).abs() < 1e-3);
         assert!((result.xmin[1] - 1.0).abs() < 1e-3);
 
         // Test 2: Extended Rosenbrock (4D)
-        let rosenbrock_4d = |x: &Vec<f64>| {
+        let rosenbrock_4d = |x: &Array1<f64>| {
             (0..x.len() - 1)
                 .map(|i| (1.0 - x[i]).powi(2) + 100.0 * (x[i + 1] - x[i].powi(2)).powi(2))
                 .sum::<f64>()
@@ -848,7 +858,7 @@ mod simplexf64_tests {
         let objective = MultiDimFn::new(rosenbrock_4d);
         let mut simplex = Simplex::new(objective);
 
-        let result = simplex.minimize(vec![-1.0; 4]).unwrap();
+        let result = simplex.minimize(Array1::ones(4) * -1.0).unwrap();
 
         for &coord in &result.xmin {
             assert!((coord - 1.0).abs() < 0.1); // Relaxed for high-D Rosenbrock
@@ -858,7 +868,7 @@ mod simplexf64_tests {
     #[test]
     fn test_simplex_with_constraints_penalty() {
         // Test penalty method simulation
-        let constrained_objective = |x: &Vec<f64>| {
+        let constrained_objective = |x: &Array1<f64>| {
             let obj = x[0].powi(2) + x[1].powi(2);
             let penalty = if x[0] + x[1] < 1.0 {
                 1000.0 * (1.0 - x[0] - x[1]).powi(2)
@@ -870,7 +880,7 @@ mod simplexf64_tests {
         let objective = MultiDimFn::new(constrained_objective);
         let mut simplex = Simplex::new(objective);
 
-        let result = simplex.minimize(vec![0.6, 0.6]).unwrap();
+        let result = simplex.minimize(array![0.6, 0.6]).unwrap();
 
         // Should satisfy constraint x + y >= 1
         assert!(result.xmin[0] + result.xmin[1] >= 0.95);
@@ -880,7 +890,7 @@ mod simplexf64_tests {
     #[test]
     fn test_adaptive_simplex_performance() {
         // Compare standard vs adaptive simplex
-        let beale = |x: &Vec<f64>| {
+        let beale = |x: &Array1<f64>| {
             let x1 = x[0];
             let x2 = x[1];
             (1.5 - x1 + x1 * x2).powi(2)
@@ -891,10 +901,10 @@ mod simplexf64_tests {
         let mut simplex = Simplex::new(objective);
 
         let standard_result = simplex
-            .downhill_simplex(vec![1.0, 1.0], None, None, None)
+            .downhill_simplex(array![1.0, 1.0], None, None, None)
             .unwrap();
         let adaptive_result = simplex
-            .adaptive_downhill_simplex(vec![1.0, 1.0], None, None, None)
+            .adaptive_downhill_simplex(array![1.0, 1.0], None, None, None)
             .unwrap();
 
         // Both should converge

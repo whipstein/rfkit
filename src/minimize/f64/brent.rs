@@ -4,6 +4,7 @@ use crate::minimize::{
     MinimizerError,
     f64::{Bracket, F1dim, ObjFn},
 };
+use ndarray::prelude::*;
 use std::fmt;
 
 /// Result of Brent's method root finding
@@ -35,7 +36,6 @@ impl Brent {
             xmin: 0.0,
             fmin: 0.0,
             f: Box::new(f),
-            // bracket: Bracket::new(),
             iters: 0,
             converged: false,
         }
@@ -46,21 +46,16 @@ impl Brent {
             xmin: 0.0,
             fmin: 0.0,
             f: f,
-            // bracket: Bracket::new(),
             iters: 0,
             converged: false,
         }
     }
 
-    // pub fn bracket(&mut self, a: f64, b: f64) {
-    //     self.bracket.bracket_boxed(a, b, &mut self.f);
-    // }
-
     /// Brent's method for more robust line search
     pub fn line_search(
         &mut self,
-        point: &Vec<f64>,
-        direction: &Vec<f64>,
+        point: &Array1<f64>,
+        direction: &Array1<f64>,
         initial_step: f64,
         tol: f64,
         max_evaluations: usize,
@@ -415,7 +410,7 @@ impl Brent {
         b: f64,
         subdivisions: Option<usize>,
         tol: Option<f64>,
-    ) -> Vec<f64> {
+    ) -> Array1<f64> {
         let n_sub = subdivisions.unwrap_or(100);
         let tol = tol.unwrap_or(1e-12);
         let mut roots = Vec::new();
@@ -465,7 +460,7 @@ impl Brent {
         }
 
         roots.sort_by(|a, b| a.partial_cmp(b).unwrap());
-        roots
+        Array1::from_vec(roots)
     }
 
     pub fn xmin(&self) -> f64 {
@@ -497,7 +492,7 @@ impl fmt::Debug for Brent {
 }
 
 #[cfg(test)]
-mod brentf64_tests {
+mod minimize_f64_brent_tests {
     use super::*;
     use crate::minimize::f64::SingleDimFn;
     use float_cmp::F64Margin;

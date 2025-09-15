@@ -381,7 +381,7 @@ impl fmt::Debug for DBrent {
 }
 
 #[cfg(test)]
-mod dbrentf64_tests {
+mod minimize_f64_dbrent_tests {
     use super::*;
     use crate::minimize::f64::SingleDimDerFn;
     use float_cmp::F64Margin;

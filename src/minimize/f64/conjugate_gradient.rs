@@ -1,22 +1,24 @@
 #![allow(dead_code)]
 #![allow(unused_assignments)]
-use crate::minimize::f64::{LineSearchResult, WolfeParams};
-use crate::minimize::{MinimizerError, f64::ObjGradFn};
+use crate::minimize::{
+    MinimizerError,
+    f64::{LineSearchResult, ObjGradFn, WolfeParams},
+};
+use ndarray::prelude::*;
 use std::fmt;
-// use ndarray::prelude::*;
 
 /// Result of conjugate gradient optimization
 #[derive(Debug, Clone)]
 pub struct ConjGradResult {
-    pub xmin: Vec<f64>,
+    pub xmin: Array1<f64>,
     pub fmin: f64,
     pub gradient_norm: f64,
     pub iters: usize,
     pub fn_evals: usize,
     pub g_evals: usize,
     pub converged: bool,
-    pub convergence_history: Vec<f64>,
-    pub gradient_norm_history: Vec<f64>,
+    pub convergence_history: Array1<f64>,
+    pub gradient_norm_history: Array1<f64>,
     pub restart_count: usize,
     pub method_used: String,
 }
@@ -45,7 +47,7 @@ impl fmt::Display for ConjGradMethod {
 
 #[derive(Clone)]
 pub struct ConjGrad {
-    xmin: Vec<f64>,
+    xmin: Array1<f64>,
     fmin: f64,
     f: Box<dyn ObjGradFn>,
     iters: usize,
@@ -59,7 +61,7 @@ impl ConjGrad {
     {
         let boxed = Box::new(f);
         ConjGrad {
-            xmin: vec![],
+            xmin: array![],
             fmin: 0.0,
             f: boxed,
             iters: 0,
@@ -69,7 +71,7 @@ impl ConjGrad {
 
     pub fn new_boxed(f: Box<dyn ObjGradFn>) -> Self {
         ConjGrad {
-            xmin: vec![],
+            xmin: array![],
             fmin: 0.0,
             f: f,
             iters: 0,
@@ -80,10 +82,10 @@ impl ConjGrad {
     /// Line search using strong Wolfe conditions
     fn wolfe_line_search(
         &mut self,
-        x: &Vec<f64>,
-        direction: &Vec<f64>,
+        x: &Array1<f64>,
+        direction: &Array1<f64>,
         f_current: f64,
-        grad_current: &Vec<f64>,
+        grad_current: &Array1<f64>,
         initial_step: f64,
         wolfe_params: &WolfeParams,
         max_evaluations: usize,
@@ -115,7 +117,7 @@ impl ConjGrad {
             }
 
             // Evaluate function at current alpha
-            let x_new: Vec<f64> = x
+            let x_new: Array1<f64> = x
                 .iter()
                 .zip(direction.iter())
                 .map(|(&xi, &di)| xi + alpha * di)
@@ -214,10 +216,10 @@ impl ConjGrad {
     /// Zoom phase for Wolfe line search
     fn zoom_phase(
         &mut self,
-        x: &Vec<f64>,
-        direction: &Vec<f64>,
+        x: &Array1<f64>,
+        direction: &Array1<f64>,
         f_current: f64,
-        grad_current: &Vec<f64>,
+        grad_current: &Array1<f64>,
         mut alpha_low: f64,
         mut alpha_high: f64,
         wolfe_params: &WolfeParams,
@@ -244,7 +246,7 @@ impl ConjGrad {
                 alpha_low * 2.0
             };
 
-            let x_new: Vec<f64> = x
+            let x_new: Array1<f64> = x
                 .iter()
                 .zip(direction.iter())
                 .map(|(&xi, &di)| xi + alpha * di)
@@ -292,7 +294,7 @@ impl ConjGrad {
 
         // Return best alpha found
         let alpha = alpha_low;
-        let x_new: Vec<f64> = x
+        let x_new: Array1<f64> = x
             .iter()
             .zip(direction.iter())
             .map(|(&xi, &di)| xi + alpha * di)
@@ -324,7 +326,7 @@ impl ConjGrad {
     /// * `ConjGradResult` containing the minimum and convergence info
     pub fn conjugate_gradient(
         &mut self,
-        initial_point: Vec<f64>,
+        initial_point: Array1<f64>,
         method: ConjGradMethod,
         tol: Option<f64>,
         max_iters: Option<usize>,
@@ -365,7 +367,7 @@ impl ConjGrad {
         let mut restart_count = 0;
 
         // Initial search direction is negative gradient
-        let mut search_direction: Vec<f64> = grad_current.iter().map(|&g| -g).collect();
+        let mut search_direction: Array1<f64> = grad_current.iter().map(|&g| -g).collect();
         let mut grad_norm = grad_current.iter().map(|&g| g * g).sum::<f64>().sqrt();
         gradient_norm_history.push(grad_norm);
 
@@ -430,7 +432,7 @@ impl ConjGrad {
                 }
 
                 ConjGradMethod::PolakRibiere => {
-                    let grad_diff: Vec<f64> = grad_current
+                    let grad_diff: Array1<f64> = grad_current
                         .iter()
                         .zip(grad_old.iter())
                         .map(|(&g_new, &g_old)| g_new - g_old)
@@ -452,7 +454,7 @@ impl ConjGrad {
                 }
 
                 ConjGradMethod::HestenesStiefel => {
-                    let grad_diff: Vec<f64> = grad_current
+                    let grad_diff: Array1<f64> = grad_current
                         .iter()
                         .zip(grad_old.iter())
                         .map(|(&g_new, &g_old)| g_new - g_old)
@@ -478,7 +480,7 @@ impl ConjGrad {
                 }
 
                 ConjGradMethod::DaiYuan => {
-                    let grad_diff: Vec<f64> = grad_current
+                    let grad_diff: Array1<f64> = grad_current
                         .iter()
                         .zip(grad_old.iter())
                         .map(|(&g_new, &g_old)| g_new - g_old)
@@ -500,7 +502,7 @@ impl ConjGrad {
                 }
 
                 ConjGradMethod::HagerZhang => {
-                    let grad_diff: Vec<f64> = grad_current
+                    let grad_diff: Array1<f64> = grad_current
                         .iter()
                         .zip(grad_old.iter())
                         .map(|(&g_new, &g_old)| g_new - g_old)
@@ -518,7 +520,7 @@ impl ConjGrad {
                         let grad_diff_norm_sq: f64 = grad_diff.iter().map(|&d| d * d).sum();
                         let scaling = 2.0 * grad_diff_norm_sq / hd_dot;
 
-                        let adjusted_diff: Vec<f64> = grad_diff
+                        let adjusted_diff: Array1<f64> = grad_diff
                             .iter()
                             .zip(search_direction.iter())
                             .map(|(&diff, &h)| diff - scaling * h)
@@ -565,15 +567,18 @@ impl ConjGrad {
             fn_evals,
             g_evals,
             converged: self.converged,
-            convergence_history,
-            gradient_norm_history,
+            convergence_history: Array1::from_vec(convergence_history),
+            gradient_norm_history: Array1::from_vec(gradient_norm_history),
             restart_count,
             method_used: format!("{}", method),
         })
     }
 
     /// Convenience function using Polak-Ribiere method (generally robust)
-    pub fn minimize(&mut self, initial_point: Vec<f64>) -> Result<ConjGradResult, MinimizerError> {
+    pub fn minimize(
+        &mut self,
+        initial_point: Array1<f64>,
+    ) -> Result<ConjGradResult, MinimizerError> {
         self.conjugate_gradient(
             initial_point,
             ConjGradMethod::PolakRibiere,
@@ -586,7 +591,7 @@ impl ConjGrad {
     /// Compare different CG methods on the same problem
     pub fn compare_cg_methods(
         &mut self,
-        initial_point: Vec<f64>,
+        initial_point: Array1<f64>,
         tol: Option<f64>,
         max_iters: Option<usize>,
     ) -> Vec<(ConjGradMethod, Result<ConjGradResult, MinimizerError>)> {
@@ -620,7 +625,7 @@ impl fmt::Debug for ConjGrad {
 }
 
 #[cfg(test)]
-mod conjgradf64_tests {
+mod minimize_f64_conjgrad_tests {
     use super::*;
     use crate::minimize::f64::{MultiDimGradFn, MultiDimNumGradFn};
     use float_cmp::F64Margin;
@@ -634,12 +639,12 @@ mod conjgradf64_tests {
     #[test]
     fn test_2d_quadratic() {
         // f(x,y) = (x-1)² + (y-2)², grad = (2(x-1), 2(y-2))
-        let func = |x: &Vec<f64>| (x[0] - 1.0).powi(2) + (x[1] - 2.0).powi(2);
-        let grad = |x: &Vec<f64>| vec![2.0 * (x[0] - 1.0), 2.0 * (x[1] - 2.0)];
+        let func = |x: &Array1<f64>| (x[0] - 1.0).powi(2) + (x[1] - 2.0).powi(2);
+        let grad = |x: &Array1<f64>| array![2.0 * (x[0] - 1.0), 2.0 * (x[1] - 2.0)];
         let obj = MultiDimGradFn::new(func, grad);
         let mut conjgrad = ConjGrad::new(obj);
 
-        let result = conjgrad.minimize(vec![0.0, 0.0]).unwrap();
+        let result = conjgrad.minimize(array![0.0, 0.0]).unwrap();
 
         assert!((result.xmin[0] - 1.0).abs() < 1e-8);
         assert!((result.xmin[1] - 2.0).abs() < 1e-8);
@@ -657,9 +662,9 @@ mod conjgradf64_tests {
     #[test]
     fn test_rosenbrock() {
         let rosenbrock =
-            |x: &Vec<f64>| (1.0 - x[0]).powi(2) + 100.0 * (x[1] - x[0].powi(2)).powi(2);
-        let rosenbrock_grad = |x: &Vec<f64>| {
-            vec![
+            |x: &Array1<f64>| (1.0 - x[0]).powi(2) + 100.0 * (x[1] - x[0].powi(2)).powi(2);
+        let rosenbrock_grad = |x: &Array1<f64>| {
+            array![
                 -2.0 * (1.0 - x[0]) - 400.0 * x[0] * (x[1] - x[0].powi(2)),
                 200.0 * (x[1] - x[0].powi(2)),
             ]
@@ -669,7 +674,7 @@ mod conjgradf64_tests {
 
         let result = conjgrad
             .conjugate_gradient(
-                vec![-1.2, 1.0],
+                array![-1.2, 1.0],
                 ConjGradMethod::PolakRibiere,
                 Some(1e-4), // Relaxed tolerance for Rosenbrock
                 Some(5000), // More iterations for this difficult problem
@@ -712,8 +717,8 @@ mod conjgradf64_tests {
 
     #[test]
     fn test_different_methods() {
-        let func = |x: &Vec<f64>| x[0].powi(2) + 2.0 * x[1].powi(2) + x[0] * x[1];
-        let grad = |x: &Vec<f64>| vec![2.0 * x[0] + x[1], 4.0 * x[1] + x[0]];
+        let func = |x: &Array1<f64>| x[0].powi(2) + 2.0 * x[1].powi(2) + x[0] * x[1];
+        let grad = |x: &Array1<f64>| array![2.0 * x[0] + x[1], 4.0 * x[1] + x[0]];
         let obj = MultiDimGradFn::new(func, grad);
         let mut conjgrad = ConjGrad::new(obj);
 
@@ -725,7 +730,7 @@ mod conjgradf64_tests {
 
         for method in &methods {
             let result = conjgrad.conjugate_gradient(
-                vec![1.0, 1.0],
+                array![1.0, 1.0],
                 *method,
                 Some(1e-6), // Reasonable tolerance
                 Some(100),  // Sufficient iterations for this simple problem
@@ -765,13 +770,13 @@ mod conjgradf64_tests {
                 Err(_) => {
                     // Some methods might struggle with this particular function form
                     // Let's try a simpler version to make sure the method works at all
-                    let simple_func = |x: &Vec<f64>| x[0].powi(2) + x[1].powi(2);
-                    let simple_grad = |x: &Vec<f64>| vec![2.0 * x[0], 2.0 * x[1]];
+                    let simple_func = |x: &Array1<f64>| x[0].powi(2) + x[1].powi(2);
+                    let simple_grad = |x: &Array1<f64>| array![2.0 * x[0], 2.0 * x[1]];
                     let obj_simple = MultiDimGradFn::new(simple_func, simple_grad);
                     let mut conjgrad = ConjGrad::new(obj_simple);
 
                     let simple_result = conjgrad
-                        .conjugate_gradient(vec![1.0, 1.0], *method, Some(1e-8), Some(50), None)
+                        .conjugate_gradient(array![1.0, 1.0], *method, Some(1e-8), Some(50), None)
                         .expect(&format!(
                             "Method {:?} should work on simple quadratic",
                             method
@@ -791,13 +796,13 @@ mod conjgradf64_tests {
 
     #[test]
     fn test_numerical_gradients() {
-        let func = |x: &Vec<f64>| (x[0] - 3.0).powi(2) + (x[1] + 1.0).powi(2);
+        let func = |x: &Array1<f64>| (x[0] - 3.0).powi(2) + (x[1] + 1.0).powi(2);
         let obj = MultiDimNumGradFn::new(func, Some(1e-6), 2);
         let mut conjgrad = ConjGrad::new(obj);
 
         let result = conjgrad
             .conjugate_gradient(
-                vec![0.0, 0.0],
+                array![0.0, 0.0],
                 ConjGradMethod::FletcherReeves,
                 Some(1e-6),
                 None,
@@ -816,13 +821,13 @@ mod conjgradf64_tests {
 
     #[test]
     fn test_method_comparison() {
-        let func = |x: &Vec<f64>| {
+        let func = |x: &Array1<f64>| {
             x.iter()
                 .enumerate()
                 .map(|(i, &xi)| (i + 1) as f64 * xi.powi(2))
                 .sum::<f64>()
         };
-        let grad = |x: &Vec<f64>| {
+        let grad = |x: &Array1<f64>| {
             x.iter()
                 .enumerate()
                 .map(|(i, &xi)| 2.0 * (i + 1) as f64 * xi)
@@ -831,7 +836,7 @@ mod conjgradf64_tests {
         let obj = MultiDimGradFn::new(func, grad);
         let mut conjgrad = ConjGrad::new(obj);
 
-        let results = conjgrad.compare_cg_methods(vec![1.0, 2.0, 3.0], Some(1e-8), Some(100));
+        let results = conjgrad.compare_cg_methods(array![1.0, 2.0, 3.0], Some(1e-8), Some(100));
 
         for (method, result) in results {
             match result {
@@ -864,13 +869,13 @@ mod conjgradf64_tests {
     #[test]
     fn test_cg_method_comparison() {
         // Test all CG methods on the same problem
-        let objective = |x: &Vec<f64>| {
+        let objective = |x: &Array1<f64>| {
             x.iter()
                 .enumerate()
                 .map(|(i, &xi)| (i + 1) as f64 * xi.powi(2))
                 .sum::<f64>()
         };
-        let gradient = |x: &Vec<f64>| {
+        let gradient = |x: &Array1<f64>| {
             x.iter()
                 .enumerate()
                 .map(|(i, &xi)| 2.0 * (i + 1) as f64 * xi)
@@ -889,7 +894,7 @@ mod conjgradf64_tests {
 
         for &method in &methods {
             let result = conjgrad
-                .conjugate_gradient(vec![1.0; 4], method, Some(1e-8), Some(100), None)
+                .conjugate_gradient(Array1::ones(4), method, Some(1e-8), Some(100), None)
                 .unwrap();
 
             assert!(result.converged, "Method {:?} failed to converge", method);
@@ -908,15 +913,15 @@ mod conjgradf64_tests {
     fn test_cg_restart_mechanism() {
         // Test that restart prevents cycling
         let ill_conditioned =
-            |x: &Vec<f64>| 1000.0 * x[0].powi(2) + x[1].powi(2) + 0.1 * x[0] * x[1];
+            |x: &Array1<f64>| 1000.0 * x[0].powi(2) + x[1].powi(2) + 0.1 * x[0] * x[1];
         let ill_conditioned_grad =
-            |x: &Vec<f64>| vec![2000.0 * x[0] + 0.1 * x[1], 2.0 * x[1] + 0.1 * x[0]];
+            |x: &Array1<f64>| array![2000.0 * x[0] + 0.1 * x[1], 2.0 * x[1] + 0.1 * x[0]];
         let obj = MultiDimGradFn::new(ill_conditioned, ill_conditioned_grad);
         let mut conjgrad = ConjGrad::new(obj);
 
         let result = conjgrad
             .conjugate_gradient(
-                vec![1.0, 1.0],
+                array![1.0, 1.0],
                 ConjGradMethod::PolakRibiere,
                 Some(1e-6),
                 Some(200),
@@ -934,13 +939,13 @@ mod conjgradf64_tests {
     fn test_cg_numerical_gradients() {
         // Test CG with numerical gradients
         let objective =
-            |x: &Vec<f64>| (x[0] - 1.0).powi(4) + (x[1] + 2.0).powi(2) + 3.0 * x[0] * x[1];
+            |x: &Array1<f64>| (x[0] - 1.0).powi(4) + (x[1] + 2.0).powi(2) + 3.0 * x[0] * x[1];
         let obj = MultiDimNumGradFn::new(objective, Some(1e-6), 2);
         let mut conjgrad = ConjGrad::new(obj);
 
         let result = conjgrad
             .conjugate_gradient(
-                vec![0.0, 0.0],
+                array![0.0, 0.0],
                 ConjGradMethod::FletcherReeves,
                 Some(1e-4),
                 Some(500),

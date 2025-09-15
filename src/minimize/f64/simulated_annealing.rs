@@ -398,7 +398,7 @@ impl Annealable for FunctionOptimization {
 }
 
 #[cfg(test)]
-mod simannealingf64_tests {
+mod minimize_f64_simannealing_tests {
     use super::*;
 
     #[test]
