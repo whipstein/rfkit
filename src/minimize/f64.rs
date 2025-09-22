@@ -24,8 +24,8 @@ pub use self::dbrent::DBrent;
 pub use self::golden::Golden;
 pub use self::interior_point::InteriorPoint;
 pub use self::objective::{
-    F1dim, HF1dim, MultiDimFn, MultiDimGradFn, MultiDimHessFn, MultiDimNumGradFn, ObjDerFn, ObjFn,
-    ObjGradFn, ObjHessFn, SingleDimDerFn, SingleDimFn,
+    F1dim, GF1dim, HF1dim, MultiDimFn, MultiDimGradFn, MultiDimHessFn, MultiDimNumGradFn, ObjDerFn,
+    ObjFn, ObjGradFn, ObjHessFn, SingleDimDerFn, SingleDimFn,
 };
 pub use self::powell::Powell;
 pub use self::quasi_newton::QuasiNewton;

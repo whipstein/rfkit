@@ -627,11 +627,19 @@ impl fmt::Debug for ConjGrad {
 #[cfg(test)]
 mod minimize_f64_conjgrad_tests {
     use super::*;
-    use crate::minimize::f64::{MultiDimGradFn, MultiDimNumGradFn};
+    use crate::minimize::f64::{GF1dim, MultiDimGradFn, MultiDimNumGradFn};
     use float_cmp::F64Margin;
     use std::vec;
 
     const MARGIN: F64Margin = F64Margin {
+        epsilon: 1e-4,
+        ulps: 10,
+    };
+    const TIGHT_MARGIN: F64Margin = F64Margin {
+        epsilon: 1e-8,
+        ulps: 4,
+    };
+    const LOOSE_MARGIN: F64Margin = F64Margin {
         epsilon: 1e-4,
         ulps: 10,
     };
@@ -956,5 +964,670 @@ mod minimize_f64_conjgrad_tests {
         assert!(result.converged);
         // Note: numerical gradients are less precise, so relaxed tolerance
         assert!(result.gradient_norm < 1e-3);
+    }
+
+    // Helper functions for common test functions
+    fn simple_quadratic() -> GF1dim {
+        let func = |x: &Array1<f64>| x.iter().map(|&xi| xi.powi(2)).sum::<f64>();
+        let grad = |x: &Array1<f64>| x.iter().map(|&xi| 2.0 * xi).collect();
+        GF1dim::new(MultiDimGradFn::new(func, grad))
+    }
+
+    fn shifted_quadratic(center: Array1<f64>) -> GF1dim {
+        let center_func = center.clone();
+        let func = move |x: &Array1<f64>| {
+            x.iter()
+                .zip(center_func.iter())
+                .map(|(&xi, &ci)| (xi - ci).powi(2))
+                .sum::<f64>()
+        };
+        let grad = move |x: &Array1<f64>| {
+            x.iter()
+                .zip(center.iter())
+                .map(|(&xi, &ci)| 2.0 * (xi - ci))
+                .collect()
+        };
+        GF1dim::new(MultiDimGradFn::new(func, grad))
+    }
+
+    fn rosenbrock_2d() -> GF1dim {
+        let func = |x: &Array1<f64>| (1.0 - x[0]).powi(2) + 100.0 * (x[1] - x[0].powi(2)).powi(2);
+        let grad = |x: &Array1<f64>| {
+            array![
+                -2.0 * (1.0 - x[0]) - 400.0 * x[0] * (x[1] - x[0].powi(2)),
+                200.0 * (x[1] - x[0].powi(2)),
+            ]
+        };
+        GF1dim::new(MultiDimGradFn::new(func, grad))
+    }
+
+    mod basic_functionality_tests {
+        use super::*;
+
+        #[test]
+        fn test_conjgrad_construction() {
+            let obj = simple_quadratic();
+            let conjgrad = ConjGrad::new(obj);
+
+            assert!(conjgrad.xmin.is_empty());
+            assert_eq!(conjgrad.fmin, 0.0);
+            assert_eq!(conjgrad.iters, 0);
+            assert!(!conjgrad.converged);
+        }
+
+        #[test]
+        fn test_conjgrad_boxed_construction() {
+            let obj = simple_quadratic();
+            let boxed_obj = Box::new(obj);
+            let conjgrad = ConjGrad::new_boxed(boxed_obj);
+
+            assert!(conjgrad.xmin.is_empty());
+            assert_eq!(conjgrad.fmin, 0.0);
+            assert_eq!(conjgrad.iters, 0);
+            assert!(!conjgrad.converged);
+        }
+
+        #[test]
+        fn test_debug_formatting() {
+            let obj = simple_quadratic();
+            let mut conjgrad = ConjGrad::new(obj);
+            let _ = conjgrad.minimize(array![1.0, 2.0]);
+
+            let debug_str = format!("{:?}", conjgrad);
+            assert!(debug_str.contains("ConjGrad"));
+            assert!(debug_str.contains("xmin"));
+            assert!(debug_str.contains("fmin"));
+        }
+
+        #[test]
+        fn test_method_display_formatting() {
+            assert_eq!(
+                format!("{}", ConjGradMethod::FletcherReeves),
+                "Fletcher-Reeves"
+            );
+            assert_eq!(format!("{}", ConjGradMethod::PolakRibiere), "Polak-Ribiere");
+            assert_eq!(
+                format!("{}", ConjGradMethod::HestenesStiefel),
+                "Hestenes-Stiefel"
+            );
+            assert_eq!(format!("{}", ConjGradMethod::DaiYuan), "Dai-Yuan");
+            assert_eq!(format!("{}", ConjGradMethod::HagerZhang), "Hager-Zhang");
+        }
+    }
+
+    mod error_handling_tests {
+        use super::*;
+
+        #[test]
+        fn test_empty_initial_point_error() {
+            let obj = simple_quadratic();
+            let mut conjgrad = ConjGrad::new(obj);
+
+            let result = conjgrad.minimize(array![]);
+            assert!(matches!(result, Err(MinimizerError::InvalidDimension)));
+        }
+
+        #[test]
+        fn test_zero_tolerance_error() {
+            let obj = simple_quadratic();
+            let mut conjgrad = ConjGrad::new(obj);
+
+            let result = conjgrad.conjugate_gradient(
+                array![1.0, 2.0],
+                ConjGradMethod::FletcherReeves,
+                Some(0.0),
+                None,
+                None,
+            );
+            assert!(matches!(result, Err(MinimizerError::InvalidTolerance)));
+        }
+
+        #[test]
+        fn test_negative_tolerance_error() {
+            let obj = simple_quadratic();
+            let mut conjgrad = ConjGrad::new(obj);
+
+            let result = conjgrad.conjugate_gradient(
+                array![1.0, 2.0],
+                ConjGradMethod::FletcherReeves,
+                Some(-1e-6),
+                None,
+                None,
+            );
+            assert!(matches!(result, Err(MinimizerError::InvalidTolerance)));
+        }
+
+        #[test]
+        fn test_wrong_gradient_dimension() {
+            let func = |x: &Array1<f64>| x[0].powi(2) + x[1].powi(2);
+            let wrong_grad = |_x: &Array1<f64>| array![1.0]; // Wrong dimension
+            let obj = MultiDimGradFn::new(func, wrong_grad);
+            let mut conjgrad = ConjGrad::new(obj);
+
+            let result = conjgrad.minimize(array![1.0, 1.0]);
+            assert!(matches!(
+                result,
+                Err(MinimizerError::GradientEvaluationError)
+            ));
+        }
+    }
+
+    mod basic_optimization_tests {
+        use super::*;
+
+        #[test]
+        fn test_shifted_quadratic() {
+            let center = array![3.0, -2.0];
+            let obj = shifted_quadratic(center.clone());
+            let mut conjgrad = ConjGrad::new(obj);
+
+            let result = conjgrad.minimize(array![0.0, 0.0]).unwrap();
+
+            assert!(result.converged);
+            assert!((result.xmin[0] - center[0]).abs() < 1e-8);
+            assert!((result.xmin[1] - center[1]).abs() < 1e-8);
+            assert!(result.fmin < 1e-14);
+        }
+
+        #[test]
+        fn test_1d_optimization() {
+            let func = |x: &Array1<f64>| (x[0] - 5.0).powi(2);
+            let grad = |x: &Array1<f64>| array![2.0 * (x[0] - 5.0)];
+            let obj = MultiDimGradFn::new(func, grad);
+            let mut conjgrad = ConjGrad::new(obj);
+
+            let result = conjgrad.minimize(array![0.0]).unwrap();
+
+            assert!(result.converged);
+            assert!((result.xmin[0] - 5.0).abs() < 1e-8);
+            assert!(result.iters <= 2);
+        }
+
+        #[test]
+        fn test_high_dimensional_quadratic() {
+            let n = 8;
+            let targets: Vec<f64> = (1..=n).map(|i| i as f64).collect();
+            let targets_func = targets.clone();
+            let targets_grad = targets.clone();
+
+            let func = move |x: &Array1<f64>| {
+                x.iter()
+                    .zip(targets_func.iter())
+                    .map(|(&xi, &ti)| (xi - ti).powi(2))
+                    .sum::<f64>()
+            };
+            let grad = move |x: &Array1<f64>| {
+                x.iter()
+                    .zip(targets_grad.iter())
+                    .map(|(&xi, &ti)| 2.0 * (xi - ti))
+                    .collect()
+            };
+            let obj = MultiDimGradFn::new(func, grad);
+            let mut conjgrad = ConjGrad::new(obj);
+
+            let result = conjgrad.minimize(Array1::zeros(n)).unwrap();
+
+            assert!(result.converged);
+            for (i, &xi) in result.xmin.iter().enumerate() {
+                assert!((xi - targets[i]).abs() < 1e-6);
+            }
+            assert!(result.fmin < 1e-12);
+        }
+    }
+
+    mod cg_method_comparison_tests {
+        use super::*;
+
+        #[test]
+        fn test_all_cg_methods_simple_quadratic() {
+            let methods = [
+                ConjGradMethod::FletcherReeves,
+                ConjGradMethod::PolakRibiere,
+                ConjGradMethod::HestenesStiefel,
+                ConjGradMethod::DaiYuan,
+                ConjGradMethod::HagerZhang,
+            ];
+
+            for &method in &methods {
+                let obj = simple_quadratic();
+                let mut conjgrad = ConjGrad::new(obj);
+
+                let result = conjgrad
+                    .conjugate_gradient(array![2.0, -1.5], method, Some(1e-8), Some(100), None)
+                    .unwrap();
+
+                assert!(result.converged, "Method {:?} should converge", method);
+                assert!(
+                    result.xmin[0].abs() < 1e-6,
+                    "Method {:?} x[0] = {}",
+                    method,
+                    result.xmin[0]
+                );
+                assert!(
+                    result.xmin[1].abs() < 1e-6,
+                    "Method {:?} x[1] = {}",
+                    method,
+                    result.xmin[1]
+                );
+                assert_eq!(result.method_used, format!("{}", method));
+            }
+        }
+
+        #[test]
+        fn test_fletcher_reeves_method() {
+            let obj = shifted_quadratic(array![1.0, -1.0]);
+            let mut conjgrad = ConjGrad::new(obj);
+
+            let result = conjgrad
+                .conjugate_gradient(
+                    array![0.0, 0.0],
+                    ConjGradMethod::FletcherReeves,
+                    Some(1e-8),
+                    Some(50),
+                    None,
+                )
+                .unwrap();
+
+            assert!(result.converged);
+            assert!((result.xmin[0] - 1.0).abs() < 1e-6);
+            assert!((result.xmin[1] + 1.0).abs() < 1e-6);
+            assert_eq!(result.method_used, "Fletcher-Reeves");
+        }
+
+        #[test]
+        fn test_polak_ribiere_method() {
+            let obj = simple_quadratic();
+            let mut conjgrad = ConjGrad::new(obj);
+
+            let result = conjgrad
+                .conjugate_gradient(
+                    array![3.0, -2.0],
+                    ConjGradMethod::PolakRibiere,
+                    Some(1e-8),
+                    Some(50),
+                    None,
+                )
+                .unwrap();
+
+            assert!(result.converged);
+            assert!(result.xmin[0].abs() < 1e-6);
+            assert!(result.xmin[1].abs() < 1e-6);
+            assert_eq!(result.method_used, "Polak-Ribiere");
+        }
+
+        #[test]
+        fn test_method_comparison_function() {
+            let obj = simple_quadratic();
+            let mut conjgrad = ConjGrad::new(obj);
+
+            let results = conjgrad.compare_cg_methods(array![1.0, 2.0], Some(1e-6), Some(100));
+
+            assert_eq!(results.len(), 5); // All 5 methods
+
+            for (method, result) in results {
+                match result {
+                    Ok(res) => {
+                        assert!(res.converged, "Method {:?} should converge", method);
+                        assert!(res.xmin[0].abs() < 1e-4, "Method {:?}", method);
+                        assert!(res.xmin[1].abs() < 1e-4, "Method {:?}", method);
+                    }
+                    Err(e) => panic!("Method {:?} failed: {:?}", method, e),
+                }
+            }
+        }
+    }
+
+    mod convergence_analysis_tests {
+        use super::*;
+
+        #[test]
+        fn test_convergence_history_structure() {
+            let obj = simple_quadratic();
+            let mut conjgrad = ConjGrad::new(obj);
+
+            let result = conjgrad.minimize(array![2.0, -1.0]).unwrap();
+
+            // Basic structure validation
+            assert!(!result.convergence_history.is_empty());
+            assert!(!result.gradient_norm_history.is_empty());
+            assert_eq!(result.convergence_history.len(), result.iters + 1);
+            assert_eq!(result.gradient_norm_history.len(), result.iters + 1);
+
+            // Overall progress validation
+            let initial_f = result.convergence_history[0];
+            let final_f = *result.convergence_history.last().unwrap();
+            assert!(final_f <= initial_f);
+            assert!(final_f < 1e-10);
+
+            // Gradient norm progress
+            let initial_grad = result.gradient_norm_history[0];
+            let final_grad = *result.gradient_norm_history.last().unwrap();
+            assert!(final_grad <= initial_grad);
+            assert!(final_grad < 1e-6);
+
+            // Consistency checks
+            assert_eq!(result.gradient_norm, final_grad);
+            assert_eq!(result.fmin, final_f);
+        }
+
+        #[test]
+        fn test_evaluation_counts() {
+            let obj = simple_quadratic();
+            let mut conjgrad = ConjGrad::new(obj);
+
+            let result = conjgrad.minimize(array![1.0, 2.0]).unwrap();
+
+            assert!(result.fn_evals > 0);
+            assert!(result.g_evals > 0);
+            assert!(result.fn_evals >= result.iters);
+            assert!(result.g_evals >= result.iters);
+
+            // For simple quadratic, shouldn't need excessive evaluations
+            assert!(result.fn_evals < 100);
+            assert!(result.g_evals < 100);
+        }
+
+        #[test]
+        fn test_tolerance_behavior() {
+            let tolerances = array![1e-4, 1e-6, 1e-8];
+
+            for &tol in &tolerances {
+                let obj = simple_quadratic();
+                let mut conjgrad = ConjGrad::new(obj);
+
+                let result = conjgrad
+                    .conjugate_gradient(
+                        array![2.0, -1.0],
+                        ConjGradMethod::PolakRibiere,
+                        Some(tol),
+                        Some(100),
+                        None,
+                    )
+                    .unwrap();
+
+                assert!(result.converged);
+                assert!(result.gradient_norm <= tol * 2.0); // Allow some numerical tolerance
+            }
+        }
+    }
+
+    mod restart_mechanism_tests {
+        use super::*;
+
+        #[test]
+        fn test_restart_functionality() {
+            // Ill-conditioned quadratic to force restarts
+            let func = |x: &Array1<f64>| 100.0 * x[0].powi(2) + x[1].powi(2);
+            let grad = |x: &Array1<f64>| array![200.0 * x[0], 2.0 * x[1]];
+            let obj = MultiDimGradFn::new(func, grad);
+            let mut conjgrad = ConjGrad::new(obj);
+
+            let result = conjgrad
+                .conjugate_gradient(
+                    array![1.0, 1.0],
+                    ConjGradMethod::PolakRibiere,
+                    Some(1e-6),
+                    Some(200),
+                    Some(3), // Force frequent restarts
+                )
+                .unwrap();
+
+            assert!(result.converged);
+            assert!(result.restart_count > 0);
+            assert!(result.xmin[0].abs() < 1e-4);
+            assert!(result.xmin[1].abs() < 1e-4);
+        }
+    }
+
+    mod difficult_function_tests {
+        use super::*;
+
+        #[test]
+        fn test_rosenbrock_optimization() {
+            let obj = rosenbrock_2d();
+            let mut conjgrad = ConjGrad::new(obj);
+
+            let result = conjgrad
+                .conjugate_gradient(
+                    array![-1.2, 1.0],
+                    ConjGradMethod::PolakRibiere,
+                    Some(1e-3), // Relaxed tolerance for Rosenbrock
+                    Some(2000),
+                    Some(10),
+                )
+                .unwrap();
+
+            // Rosenbrock is challenging, so relaxed criteria
+            assert!((result.xmin[0] - 1.0).abs() < 0.1);
+            assert!((result.xmin[1] - 1.0).abs() < 0.1);
+            assert!(result.fmin < 1e-2);
+        }
+
+        #[test]
+        fn test_booth_function() {
+            // Booth function: f(x,y) = (x + 2y - 7)² + (2x + y - 5)²
+            // Global minimum at (1, 3) with f(1, 3) = 0
+            let func = |x: &Array1<f64>| {
+                (x[0] + 2.0 * x[1] - 7.0).powi(2) + (2.0 * x[0] + x[1] - 5.0).powi(2)
+            };
+            let grad = |x: &Array1<f64>| {
+                let t1 = x[0] + 2.0 * x[1] - 7.0;
+                let t2 = 2.0 * x[0] + x[1] - 5.0;
+                array![2.0 * t1 + 4.0 * t2, 4.0 * t1 + 2.0 * t2]
+            };
+            let obj = MultiDimGradFn::new(func, grad);
+            let mut conjgrad = ConjGrad::new(obj);
+
+            let result = conjgrad.minimize(array![0.0, 0.0]).unwrap();
+
+            assert!(result.converged);
+            assert!((result.xmin[0] - 1.0).abs() < 1e-6);
+            assert!((result.xmin[1] - 3.0).abs() < 1e-6);
+            assert!(result.fmin < 1e-12);
+        }
+    }
+
+    mod numerical_gradient_tests {
+        use super::*;
+
+        #[test]
+        fn test_numerical_gradients() {
+            let func = |x: &Array1<f64>| (x[0] - 2.0).powi(2) + (x[1] + 1.0).powi(2);
+            let obj = MultiDimNumGradFn::new(func, Some(1e-8), 2);
+            let mut conjgrad = ConjGrad::new(obj);
+
+            let result = conjgrad.minimize(array![0.0, 0.0]).unwrap();
+
+            assert!(result.converged);
+            assert!((result.xmin[0] - 2.0).abs() < 1e-3);
+            assert!((result.xmin[1] + 1.0).abs() < 1e-3);
+        }
+    }
+
+    mod robustness_tests {
+        use super::*;
+
+        #[test]
+        fn test_already_at_minimum() {
+            let obj = simple_quadratic();
+            let mut conjgrad = ConjGrad::new(obj);
+
+            let result = conjgrad.minimize(array![0.0, 0.0]).unwrap();
+
+            assert!(result.converged);
+            assert!(result.iters <= 2); // Should recognize it's already converged
+            assert!(result.fmin < 1e-12);
+        }
+
+        #[test]
+        fn test_large_initial_values() {
+            let obj = simple_quadratic();
+            let mut conjgrad = ConjGrad::new(obj);
+
+            let result = conjgrad.minimize(array![100.0, -50.0]).unwrap();
+
+            assert!(result.converged);
+            assert!(result.xmin[0].abs() < 1e-6);
+            assert!(result.xmin[1].abs() < 1e-6);
+            assert!(result.fmin < 1e-12);
+        }
+
+        #[test]
+        fn test_function_with_different_scales() {
+            // Function with different scales in different dimensions
+            let func = |x: &Array1<f64>| 1000.0 * x[0].powi(2) + x[1].powi(2);
+            let grad = |x: &Array1<f64>| array![2000.0 * x[0], 2.0 * x[1]];
+            let obj = MultiDimGradFn::new(func, grad);
+            let mut conjgrad = ConjGrad::new(obj);
+
+            let result = conjgrad
+                .conjugate_gradient(
+                    array![1.0, 1.0],
+                    ConjGradMethod::PolakRibiere,
+                    Some(1e-6),
+                    Some(200),
+                    Some(5),
+                )
+                .unwrap();
+
+            assert!(result.converged);
+            assert!(result.xmin[0].abs() < 1e-4);
+            assert!(result.xmin[1].abs() < 1e-4);
+        }
+    }
+
+    mod edge_case_tests {
+        use super::*;
+
+        #[test]
+        fn test_maximum_iterations_limit() {
+            let obj = rosenbrock_2d();
+            let mut conjgrad = ConjGrad::new(obj);
+
+            let result = conjgrad
+                .conjugate_gradient(
+                    array![-1.2, 1.0],
+                    ConjGradMethod::FletcherReeves,
+                    Some(1e-12), // Very strict tolerance
+                    Some(5),     // Very few iterations
+                    None,
+                )
+                .unwrap();
+
+            // Should hit iteration limit
+            assert!(!result.converged);
+            assert_eq!(result.iters, 5);
+        }
+
+        #[test]
+        fn test_result_completeness() {
+            let obj = simple_quadratic();
+            let mut conjgrad = ConjGrad::new(obj);
+
+            let result = conjgrad.minimize(array![1.0, 2.0]).unwrap();
+
+            // Verify all fields are populated
+            assert!(!result.xmin.is_empty());
+            assert!(result.fmin.is_finite());
+            assert!(result.gradient_norm.is_finite());
+            assert!(result.iters > 0);
+            assert!(result.fn_evals > 0);
+            assert!(result.g_evals > 0);
+            assert!(result.converged);
+            assert!(!result.convergence_history.is_empty());
+            assert!(!result.gradient_norm_history.is_empty());
+            assert!(!result.method_used.is_empty());
+        }
+
+        #[test]
+        fn test_clone_and_debug_traits() {
+            let obj = simple_quadratic();
+            let mut conjgrad = ConjGrad::new(obj);
+            let result = conjgrad.minimize(array![1.0]).unwrap();
+
+            // Test Clone
+            let result_clone = result.clone();
+            assert_eq!(result.xmin, result_clone.xmin);
+            assert_eq!(result.fmin, result_clone.fmin);
+            assert_eq!(result.converged, result_clone.converged);
+
+            // Test Debug
+            let debug_str = format!("{:?}", result);
+            assert!(debug_str.contains("ConjGradResult"));
+        }
+    }
+
+    mod stress_tests {
+        use super::*;
+
+        #[test]
+        fn test_method_robustness_on_challenging_function() {
+            // Moderately challenging function
+            let func = |x: &Array1<f64>| {
+                let a = 5.0 * x[0] + x[1];
+                let b = x[0] + 5.0 * x[1];
+                a * a + b * b
+            };
+            let grad = |x: &Array1<f64>| {
+                array![
+                    2.0 * (5.0 * x[0] + x[1]) * 5.0 + 2.0 * (x[0] + 5.0 * x[1]),
+                    2.0 * (5.0 * x[0] + x[1]) + 2.0 * (x[0] + 5.0 * x[1]) * 5.0,
+                ]
+            };
+
+            let methods = [
+                ConjGradMethod::FletcherReeves,
+                ConjGradMethod::PolakRibiere,
+                ConjGradMethod::HestenesStiefel,
+            ];
+
+            let mut successful_methods = 0;
+
+            for &method in &methods {
+                let obj = MultiDimGradFn::new(func, grad);
+                let mut conjgrad = ConjGrad::new(obj);
+
+                let result = conjgrad.conjugate_gradient(
+                    array![1.0, 1.0],
+                    method,
+                    Some(1e-6),
+                    Some(200),
+                    Some(10),
+                );
+
+                if let Ok(res) = result {
+                    if res.converged && res.xmin[0].abs() < 1e-3 && res.xmin[1].abs() < 1e-3 {
+                        successful_methods += 1;
+                    }
+                }
+            }
+
+            assert!(
+                successful_methods >= 2,
+                "At least 2 methods should work on this problem"
+            );
+        }
+
+        #[test]
+        fn test_various_starting_points() {
+            let starting_points = array![
+                array![0.0, 0.0],
+                array![1.0, 1.0],
+                array![-1.0, 1.0],
+                array![10.0, -5.0],
+                array![-20.0, 15.0],
+            ];
+
+            for start in starting_points {
+                let obj = shifted_quadratic(array![2.0, -1.0]);
+                let mut conjgrad = ConjGrad::new(obj);
+
+                let result = conjgrad.minimize(start.clone()).unwrap();
+
+                assert!(result.converged, "Failed from starting point {:?}", start);
+                assert!((result.xmin[0] - 2.0).abs() < 1e-6);
+                assert!((result.xmin[1] + 1.0).abs() < 1e-6);
+            }
+        }
     }
 }

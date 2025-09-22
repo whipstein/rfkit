@@ -920,4 +920,642 @@ mod minimize_f64_simplex_tests {
 
         assert!(std_dist < 0.1 || ada_dist < 0.1);
     }
+
+    mod basic_functionality_tests {
+        use super::*;
+
+        #[test]
+        fn test_1d_optimization() {
+            // f(x) = (x - 5)²
+            let func = |x: &Array1<f64>| (x[0] - 5.0).powi(2);
+            let objective = MultiDimFn::new(func);
+            let mut simplex = Simplex::new(objective);
+
+            let result = simplex.minimize(array![0.0]).unwrap();
+
+            assert!((result.xmin[0] - 5.0).abs() < 1e-6);
+            assert!(result.fmin < 1e-10);
+            assert!(result.converged);
+            assert!(result.iters > 0);
+            assert!(result.fn_evals >= 2); // At least n+1 evaluations
+        }
+
+        #[test]
+        fn test_already_at_minimum() {
+            let func = |x: &Array1<f64>| x[0].powi(2) + x[1].powi(2);
+            let objective = MultiDimFn::new(func);
+            let mut simplex = Simplex::new(objective);
+
+            let result = simplex.minimize(array![0.0, 0.0]).unwrap();
+
+            assert!(result.xmin[0].abs() < 1e-6);
+            assert!(result.xmin[1].abs() < 1e-6);
+            assert!(result.converged);
+        }
+
+        #[test]
+        fn test_negative_coordinates() {
+            // Minimum at (-3, -4)
+            let func = |x: &Array1<f64>| (x[0] + 3.0).powi(2) + (x[1] + 4.0).powi(2);
+            let objective = MultiDimFn::new(func);
+            let mut simplex = Simplex::new(objective);
+
+            let result = simplex.minimize(array![0.0, 0.0]).unwrap();
+
+            assert!((result.xmin[0] + 3.0).abs() < 1e-6);
+            assert!((result.xmin[1] + 4.0).abs() < 1e-6);
+            assert!(result.fmin < 1e-10);
+        }
+    }
+
+    mod error_handling_tests {
+        use super::*;
+
+        #[test]
+        fn test_empty_initial_point() {
+            let func = |_: &Array1<f64>| 0.0;
+            let objective = MultiDimFn::new(func);
+            let mut simplex = Simplex::new(objective);
+
+            let result = simplex.minimize(array![]);
+            assert!(result.is_err());
+            assert!(matches!(
+                result.unwrap_err(),
+                MinimizerError::InvalidDimension
+            ));
+        }
+
+        #[test]
+        fn test_invalid_tolerance() {
+            let func = |x: &Array1<f64>| x[0].powi(2);
+            let objective = MultiDimFn::new(func);
+            let mut simplex = Simplex::new(objective);
+
+            let result = simplex.downhill_simplex(array![1.0], None, Some(0.0), None);
+            assert!(result.is_err());
+            assert!(matches!(
+                result.unwrap_err(),
+                MinimizerError::InvalidTolerance
+            ));
+
+            let result = simplex.downhill_simplex(array![1.0], None, Some(-1e-8), None);
+            assert!(result.is_err());
+            assert!(matches!(
+                result.unwrap_err(),
+                MinimizerError::InvalidTolerance
+            ));
+        }
+
+        #[test]
+        fn test_function_returning_infinity() {
+            let func = |x: &Array1<f64>| {
+                if x[0] > 1.0 {
+                    f64::INFINITY
+                } else {
+                    x[0].powi(2)
+                }
+            };
+            let objective = MultiDimFn::new(func);
+            let mut simplex = Simplex::new(objective);
+
+            let result = simplex.minimize(array![2.0]); // Start where function is infinite
+            assert!(result.is_err());
+            assert!(matches!(
+                result.unwrap_err(),
+                MinimizerError::FunctionEvaluationError
+            ));
+        }
+
+        #[test]
+        fn test_function_returning_nan() {
+            let func = |x: &Array1<f64>| if x[0] < 0.0 { f64::NAN } else { x[0].powi(2) };
+            let objective = MultiDimFn::new(func);
+            let mut simplex = Simplex::new(objective);
+
+            let result = simplex.minimize(array![-1.0]); // Start where function is NaN
+            assert!(result.is_err());
+            assert!(matches!(
+                result.unwrap_err(),
+                MinimizerError::FunctionEvaluationError
+            ));
+        }
+
+        #[test]
+        fn test_mismatched_step_sizes() {
+            let func = |x: &Array1<f64>| x[0].powi(2) + x[1].powi(2);
+            let objective = MultiDimFn::new(func);
+            let mut simplex = Simplex::new(objective);
+
+            let result = simplex.minimize_with_steps(array![1.0, 1.0], array![0.1]); // Wrong length
+            assert!(result.is_err());
+            assert!(matches!(
+                result.unwrap_err(),
+                MinimizerError::InvalidInitialSimplex
+            ));
+        }
+    }
+
+    mod convergence_tests {
+        use super::*;
+
+        #[test]
+        fn test_max_iterations_reached() {
+            // Create a difficult function that won't converge quickly
+            let func = |x: &Array1<f64>| {
+                (x[0] - 1.0).powi(4) + (x[1] - 2.0).powi(4) + 0.01 * (x[0] * x[1]).sin()
+            };
+            let objective = MultiDimFn::new(func);
+            let mut simplex = Simplex::new(objective);
+
+            let result = simplex
+                .downhill_simplex(array![0.0, 0.0], None, Some(1e-12), Some(10))
+                .unwrap();
+
+            assert_eq!(result.iters, 10);
+            assert!(!result.converged);
+        }
+
+        #[test]
+        fn test_convergence_tracking() {
+            let func = |x: &Array1<f64>| (x[0] - 2.0).powi(2) + (x[1] - 3.0).powi(2);
+            let objective = MultiDimFn::new(func);
+            let mut simplex = Simplex::new(objective);
+
+            let result = simplex.minimize(array![0.0, 0.0]).unwrap();
+
+            assert!(!result.history.is_empty());
+            assert_eq!(result.history.len(), result.iters);
+
+            // History should be generally decreasing (allowing for some fluctuation)
+            let first_value = result.history[0];
+            let last_value = *result.history.last().unwrap();
+            assert!(first_value >= last_value);
+
+            // Final value should match fmin
+            assert!((last_value - result.fmin).abs() < 1e-10);
+        }
+
+        #[test]
+        fn test_tight_tolerance() {
+            let func = |x: &Array1<f64>| x[0].powi(2) + x[1].powi(2);
+            let objective = MultiDimFn::new(func);
+            let mut simplex = Simplex::new(objective);
+
+            let result = simplex
+                .downhill_simplex(array![1.0, 1.0], None, Some(1e-12), None)
+                .unwrap();
+
+            assert!(result.converged);
+            assert!(result.final_simplex_size < 1e-12);
+            assert!(result.xmin[0].abs() < 1e-6);
+            assert!(result.xmin[1].abs() < 1e-6);
+        }
+    }
+
+    mod high_dimensional_tests {
+        use super::*;
+
+        #[test]
+        fn test_10d_sphere() {
+            let sphere_10d = |x: &Array1<f64>| x.iter().map(|&xi| xi * xi).sum::<f64>();
+            let objective = MultiDimFn::new(sphere_10d);
+            let mut simplex = Simplex::new(objective);
+
+            let result = simplex.minimize(Array1::ones(10)).unwrap();
+
+            for &coord in &result.xmin {
+                assert!(coord.abs() < 1e-3);
+            }
+            assert!(result.fmin < 1e-4);
+        }
+
+        #[test]
+        fn test_high_dimensional_rosenbrock() {
+            // 4D Rosenbrock function
+            let rosenbrock_4d = |x: &Array1<f64>| {
+                (0..x.len() - 1)
+                    .map(|i| (1.0 - x[i]).powi(2) + 100.0 * (x[i + 1] - x[i].powi(2)).powi(2))
+                    .sum::<f64>()
+            };
+            let objective = MultiDimFn::new(rosenbrock_4d);
+            let mut simplex = Simplex::new(objective);
+
+            let result = simplex
+                .downhill_simplex(Array1::ones(4) * -0.5, Some(0.5), Some(1e-4), Some(5000))
+                .unwrap();
+
+            // Rosenbrock optimum is at (1, 1, 1, 1)
+            for &coord in &result.xmin {
+                assert!((coord - 1.0).abs() < 0.2); // Relaxed tolerance for high-D Rosenbrock
+            }
+        }
+    }
+
+    mod complex_function_tests {
+        use super::*;
+
+        #[test]
+        fn test_beale_function() {
+            // Beale function: global minimum at (3, 0.5)
+            let beale = |x: &Array1<f64>| {
+                let x1 = x[0];
+                let x2 = x[1];
+                (1.5 - x1 + x1 * x2).powi(2)
+                    + (2.25 - x1 + x1 * x2.powi(2)).powi(2)
+                    + (2.625 - x1 + x1 * x2.powi(3)).powi(2)
+            };
+            let objective = MultiDimFn::new(beale);
+            let mut simplex = Simplex::new(objective);
+
+            let result = simplex
+                .downhill_simplex(array![1.0, 1.0], Some(0.5), Some(1e-6), Some(2000))
+                .unwrap();
+
+            assert!((result.xmin[0] - 3.0).abs() < 0.1);
+            assert!((result.xmin[1] - 0.5).abs() < 0.1);
+            assert!(result.fmin < 1e-4);
+        }
+
+        #[test]
+        fn test_goldstein_price_function() {
+            // Goldstein-Price function: global minimum at (0, -1) with value 3
+            let goldstein_price = |x: &Array1<f64>| {
+                let x1 = x[0];
+                let x2 = x[1];
+                (1.0 + (x1 + x2 + 1.0).powi(2)
+                    * (19.0 - 14.0 * x1 + 3.0 * x1.powi(2) - 14.0 * x2
+                        + 6.0 * x1 * x2
+                        + 3.0 * x2.powi(2)))
+                    * (30.0
+                        + (2.0 * x1 - 3.0 * x2).powi(2)
+                            * (18.0 - 32.0 * x1 + 12.0 * x1.powi(2) + 48.0 * x2 - 36.0 * x1 * x2
+                                + 27.0 * x2.powi(2)))
+            };
+            let objective = MultiDimFn::new(goldstein_price);
+            let mut simplex = Simplex::new(objective);
+
+            let result = simplex
+                .downhill_simplex(array![0.5, -0.5], Some(0.2), Some(1e-6), Some(3000))
+                .unwrap();
+
+            assert!((result.xmin[0] - 0.0).abs() < 0.1);
+            assert!((result.xmin[1] + 1.0).abs() < 0.1);
+            assert!((result.fmin - 3.0).abs() < 1.0);
+        }
+
+        #[test]
+        fn test_himmelblau_function() {
+            // Himmelblau's function has 4 global minima
+            let himmelblau = |x: &Array1<f64>| {
+                (x[0].powi(2) + x[1] - 11.0).powi(2) + (x[0] + x[1].powi(2) - 7.0).powi(2)
+            };
+            let objective = MultiDimFn::new(himmelblau);
+            let mut simplex = Simplex::new(objective);
+
+            // Test from different starting points to potentially find different minima
+            let starting_points = array![
+                array![0.0, 0.0],
+                array![3.0, 2.0],
+                array![-3.0, 3.0],
+                array![-3.0, -3.0],
+            ];
+
+            for start in starting_points {
+                let result = simplex
+                    .downhill_simplex(start, Some(0.5), Some(1e-6), Some(2000))
+                    .unwrap();
+
+                // All minima should have function value 0
+                assert!(result.fmin < 1e-4);
+
+                // Check if we found one of the known minima
+                let known_minima = array![
+                    (3.0, 2.0),
+                    (-2.805118, 3.131312),
+                    (-3.779310, -3.283186),
+                    (3.584428, -1.848126),
+                ];
+
+                let found_known_minimum = known_minima.iter().any(|&(x, y)| {
+                    (result.xmin[0] - x).abs() < 0.1 && (result.xmin[1] - y).abs() < 0.1
+                });
+
+                assert!(found_known_minimum || result.fmin < 1e-4);
+            }
+        }
+    }
+
+    mod adaptive_vs_standard_comparison_tests {
+        use super::*;
+
+        #[test]
+        fn test_adaptive_vs_standard_performance() {
+            let func = |x: &Array1<f64>| {
+                // Scaled quadratic - more challenging in one dimension
+                (x[0] / 100.0 - 1.0).powi(2) + (x[1] - 2.0).powi(2)
+            };
+            let objective = MultiDimFn::new(func);
+            let mut simplex = Simplex::new(objective);
+
+            let standard_result = simplex
+                .downhill_simplex(array![0.0, 0.0], None, Some(1e-8), None)
+                .unwrap();
+            let adaptive_result = simplex
+                .adaptive_downhill_simplex(array![0.0, 0.0], None, Some(1e-8), None)
+                .unwrap();
+
+            // Both should find the correct minimum
+            assert!((standard_result.xmin[0] - 100.0).abs() < 1e-3);
+            assert!((adaptive_result.xmin[0] - 100.0).abs() < 1e-3);
+            assert!((standard_result.xmin[1] - 2.0).abs() < 1e-6);
+            assert!((adaptive_result.xmin[1] - 2.0).abs() < 1e-6);
+        }
+
+        #[test]
+        fn test_adaptive_no_improvement_convergence() {
+            // Function that plateaus to test no-improvement convergence
+            let plateau_func = |x: &Array1<f64>| {
+                let base = x[0].powi(2) + x[1].powi(2);
+                if base < 0.01 { 0.01 } else { base }
+            };
+            let objective = MultiDimFn::new(plateau_func);
+            let mut simplex = Simplex::new(objective);
+
+            let result = simplex
+                .adaptive_downhill_simplex(array![2.0, 2.0], Some(1.0), Some(1e-8), Some(1000))
+                .unwrap();
+
+            // Should converge and get close to the plateau region
+            assert!(result.converged);
+            // The plateau starts at distance sqrt(0.01) = 0.1 from origin
+            let distance_from_origin = (result.xmin[0].powi(2) + result.xmin[1].powi(2)).sqrt();
+            assert!(distance_from_origin < 0.5); // Should get reasonably close to plateau
+            assert!(result.fmin >= 0.009); // Should be near the plateau value of 0.01
+        }
+    }
+
+    mod custom_step_size_tests {
+        use super::*;
+
+        #[test]
+        fn test_custom_step_sizes_scaled_problem() {
+            // Problem with very different scales in different dimensions
+            let scaled_func =
+                |x: &Array1<f64>| (x[0] / 1000.0 - 1.0).powi(2) + (x[1] * 1000.0 - 2.0).powi(2);
+            let objective = MultiDimFn::new(scaled_func);
+            let mut simplex = Simplex::new(objective);
+
+            // Use appropriate step sizes for each dimension
+            let result = simplex
+                .minimize_with_steps(
+                    array![0.0, 0.0],
+                    array![1000.0, 0.001], // Large step for first dim, small for second
+                )
+                .unwrap();
+
+            assert!((result.xmin[0] - 1000.0).abs() < 1.0);
+            assert!((result.xmin[1] - 0.002).abs() < 1e-6);
+        }
+
+        #[test]
+        fn test_zero_step_size() {
+            let func = |x: &Array1<f64>| x[0].powi(2) + x[1].powi(2);
+            let objective = MultiDimFn::new(func);
+            let mut simplex = Simplex::new(objective);
+
+            // Test with zero step size - this creates a degenerate simplex
+            let result = simplex.minimize_with_steps(array![1.0, 1.0], array![0.0, 1.0]);
+
+            // Zero step size creates a degenerate simplex, which may cause convergence issues
+            // but the algorithm should still handle it gracefully
+            if result.is_ok() {
+                let res = result.unwrap();
+                assert!(res.fn_evals >= 3); // At least n+1 evaluations
+            // Don't assert on convergence quality since degenerate simplex is pathological
+            } else {
+                // It's also acceptable for this to fail with an appropriate error
+                println!("Zero step size caused expected failure: {:?}", result.err());
+            }
+        }
+    }
+
+    mod edge_case_function_tests {
+        use super::*;
+
+        #[test]
+        fn test_constant_function() {
+            let constant_func = |_: &Array1<f64>| 42.0;
+            let objective = MultiDimFn::new(constant_func);
+            let mut simplex = Simplex::new(objective);
+
+            let result = simplex.minimize(array![1.0, 2.0]).unwrap();
+
+            assert!((result.fmin - 42.0).abs() < 1e-10);
+            assert!(result.converged); // Should converge immediately due to zero simplex size
+        }
+
+        #[test]
+        fn test_linear_function() {
+            // f(x,y) = 2x + 3y (unbounded below, but simplex should handle gracefully)
+            let linear_func = |x: &Array1<f64>| 2.0 * x[0] + 3.0 * x[1];
+            let objective = MultiDimFn::new(linear_func);
+            let mut simplex = Simplex::new(objective);
+
+            let result =
+                simplex.downhill_simplex(array![0.0, 0.0], Some(1.0), Some(1e-8), Some(100));
+
+            // Linear function is unbounded below, so algorithm should either:
+            // 1. Hit max iterations without converging, or
+            // 2. Find a very negative value
+            if result.is_ok() {
+                let res = result.unwrap();
+                if !res.converged {
+                    assert_eq!(res.iters, 100); // Hit max iterations
+                }
+                // The function value should be moving in the negative direction
+                assert!(res.fmin <= 0.0); // Should find negative values
+            }
+        }
+
+        #[test]
+        fn test_discontinuous_function() {
+            let discontinuous = |x: &Array1<f64>| {
+                if x[0] < 0.0 {
+                    100.0 + x[0].powi(2) + x[1].powi(2)
+                } else {
+                    x[0].powi(2) + x[1].powi(2)
+                }
+            };
+            let objective = MultiDimFn::new(discontinuous);
+            let mut simplex = Simplex::new(objective);
+
+            let result = simplex.minimize(array![1.0, 1.0]).unwrap();
+
+            // Should find minimum in the x >= 0 region
+            assert!(result.xmin[0] >= -1e-6);
+            assert!(result.xmin[0].abs() < 1e-4);
+            assert!(result.xmin[1].abs() < 1e-4);
+        }
+    }
+
+    mod state_consistency_tests {
+        use super::*;
+
+        #[test]
+        fn test_simplex_state_consistency() {
+            let func = |x: &Array1<f64>| (x[0] - 3.0).powi(2) + (x[1] - 4.0).powi(2);
+            let objective = MultiDimFn::new(func);
+            let mut simplex = Simplex::new(objective);
+
+            let result = simplex.minimize(array![0.0, 0.0]).unwrap();
+
+            // Check that simplex internal state matches result
+            assert_eq!(simplex.xmin, result.xmin);
+            assert_eq!(simplex.fmin, result.fmin);
+            assert_eq!(simplex.iters, result.iters);
+            assert_eq!(simplex.converged, result.converged);
+        }
+
+        #[test]
+        fn test_multiple_optimizations() {
+            let func = |x: &Array1<f64>| (x[0] - 1.0).powi(2) + (x[1] - 2.0).powi(2);
+            let objective = MultiDimFn::new(func);
+            let mut simplex = Simplex::new(objective);
+
+            // First optimization
+            let result1 = simplex.minimize(array![0.0, 0.0]).unwrap();
+
+            // Second optimization with different starting point
+            let result2 = simplex.minimize(array![5.0, 5.0]).unwrap();
+
+            // Both should find the same minimum
+            assert!((result1.xmin[0] - 1.0).abs() < 1e-6);
+            assert!((result1.xmin[1] - 2.0).abs() < 1e-6);
+            assert!((result2.xmin[0] - 1.0).abs() < 1e-6);
+            assert!((result2.xmin[1] - 2.0).abs() < 1e-6);
+
+            // State should reflect the last optimization
+            assert_eq!(simplex.xmin, result2.xmin);
+            assert_eq!(simplex.fmin, result2.fmin);
+        }
+    }
+
+    mod large_scale_tests {
+        use super::*;
+
+        #[test]
+        fn test_function_evaluation_count() {
+            // Note: This test would need to be redesigned since we can't capture eval_count
+            // in a closure that implements ObjFn. Instead, we can test that fn_evals is reasonable:
+
+            let func = |x: &Array1<f64>| x[0].powi(2) + x[1].powi(2);
+            let objective = MultiDimFn::new(func);
+            let mut simplex = Simplex::new(objective);
+
+            let result = simplex.minimize(array![1.0, 1.0]).unwrap();
+
+            // Should have reasonable number of function evaluations
+            assert!(result.fn_evals >= 3); // At least n+1 for initial simplex
+            assert!(result.fn_evals <= result.iters * 10); // Reasonable upper bound
+        }
+
+        #[test]
+        fn test_very_small_initial_step() {
+            let func = |x: &Array1<f64>| x[0].powi(2) + x[1].powi(2);
+            let objective = MultiDimFn::new(func);
+            let mut simplex = Simplex::new(objective);
+
+            // Very small initial step creates a tiny simplex that may converge immediately
+            // due to the simplex size being smaller than the tolerance
+            let result = simplex
+                .downhill_simplex(array![1.0, 1.0], Some(1e-12), Some(1e-6), Some(5000))
+                .unwrap();
+
+            // With very small initial step, the algorithm often converges immediately
+            // because the initial simplex size is already smaller than the tolerance
+            assert!(result.converged);
+
+            // The result might be close to the starting point due to the tiny simplex
+            // What matters is that the algorithm handled the edge case gracefully
+            assert!(result.fn_evals >= 3); // At least created the initial simplex
+            assert!(result.iters >= 1); // At least one iteration
+
+            // The simplex size should be very small
+            assert!(result.final_simplex_size <= 1e-6);
+
+            // Function value should be finite and non-negative
+            assert!(result.fmin >= 0.0);
+            assert!(result.fmin.is_finite());
+        }
+
+        #[test]
+        fn test_small_but_reasonable_initial_step() {
+            // This test demonstrates proper behavior with a small but reasonable step
+            let func = |x: &Array1<f64>| x[0].powi(2) + x[1].powi(2);
+            let objective = MultiDimFn::new(func);
+            let mut simplex = Simplex::new(objective);
+
+            let result = simplex
+                .downhill_simplex(array![1.0, 1.0], Some(1e-6), Some(1e-8), None)
+                .unwrap();
+
+            assert!(result.converged);
+            assert!(result.xmin[0].abs() < 1e-6);
+            assert!(result.xmin[1].abs() < 1e-6);
+            assert!(result.fmin < 1e-10);
+        }
+
+        #[test]
+        fn test_very_large_initial_step() {
+            let func = |x: &Array1<f64>| x[0].powi(2) + x[1].powi(2);
+            let objective = MultiDimFn::new(func);
+            let mut simplex = Simplex::new(objective);
+
+            let result = simplex
+                .downhill_simplex(array![0.0, 0.0], Some(1000.0), None, None)
+                .unwrap();
+
+            assert!(result.converged);
+            assert!(result.xmin[0].abs() < 1e-4);
+            assert!(result.xmin[1].abs() < 1e-4);
+        }
+    }
+
+    mod numerical_stability_tests {
+        use super::*;
+
+        #[test]
+        fn test_ill_conditioned_problem() {
+            // Function with very different curvatures in different directions
+            let ill_conditioned = |x: &Array1<f64>| x[0].powi(2) + 10000.0 * x[1].powi(2);
+            let objective = MultiDimFn::new(ill_conditioned);
+            let mut simplex = Simplex::new(objective);
+
+            let result = simplex
+                .downhill_simplex(array![1.0, 1.0], Some(0.1), Some(1e-4), Some(5000))
+                .unwrap();
+
+            // Ill-conditioned problems are harder to solve, so use relaxed tolerances
+            assert!(result.xmin[0].abs() < 0.1);
+            assert!(result.xmin[1].abs() < 0.01); // y-direction has much higher curvature
+
+            // Should at least improve significantly from starting point
+            let initial_value = 1.0 + 10000.0; // 10001.0
+            assert!(result.fmin < initial_value * 0.1); // At least 90% improvement
+        }
+
+        #[test]
+        fn test_near_zero_function_values() {
+            let tiny_func = |x: &Array1<f64>| 1e-15 * (x[0].powi(2) + x[1].powi(2));
+            let objective = MultiDimFn::new(tiny_func);
+            let mut simplex = Simplex::new(objective);
+
+            let result = simplex.minimize(array![1.0, 1.0]).unwrap();
+
+            assert!(result.xmin[0].abs() < 1e-6);
+            assert!(result.xmin[1].abs() < 1e-6);
+            assert!(result.fmin >= 0.0);
+            assert!(result.fmin < 1e-12);
+        }
+    }
 }

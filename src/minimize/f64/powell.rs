@@ -55,6 +55,18 @@ impl Powell {
         }
     }
 
+    pub fn xmin(&self) -> Array1<f64> {
+        self.xmin.clone()
+    }
+
+    pub fn fmin(&self) -> f64 {
+        self.fmin
+    }
+
+    pub fn iters(&self) -> usize {
+        self.iters
+    }
+
     /// Powell's method for multidimensional optimization
     ///
     /// This algorithm performs sequential line searches along a set of conjugate
@@ -463,13 +475,6 @@ impl Powell {
 
     /// Create orthogonal initial directions for better performance
     pub fn create_orthogonal_directions(&self, n: usize) -> Array2<f64> {
-        // (0..n)
-        //     .map(|i| {
-        //         let mut dir = vec![0.0; n];
-        //         dir[i] = 1.0;
-        //         dir
-        //     })
-        //     .collect()
         Array2::eye(n)
     }
 
@@ -545,7 +550,7 @@ impl fmt::Debug for Powell {
 #[cfg(test)]
 mod minimize_f64_powell_tests {
     use super::*;
-    use crate::minimize::f64::MultiDimFn;
+    use crate::minimize::f64::{F1dim, MultiDimFn};
     use float_cmp::F64Margin;
     use std::vec;
 
@@ -754,5 +759,552 @@ mod minimize_f64_powell_tests {
         // Final directions should be approximately conjugate
         // (This is hard to test directly, but convergence implies conjugacy)
         assert!(result.iters <= 5); // Should be fast for 2D quadratic
+    }
+
+    // Helper function to create a simple quadratic function
+    fn simple_quadratic() -> F1dim {
+        F1dim::new(MultiDimFn::new(|x: &Array1<f64>| {
+            (x[0] - 2.0).powi(2) + (x[1] + 1.0).powi(2)
+        }))
+    }
+
+    // Helper function to create Rosenbrock function
+    fn rosenbrock_2d() -> F1dim {
+        F1dim::new(MultiDimFn::new(|x: &Array1<f64>| {
+            (1.0 - x[0]).powi(2) + 100.0 * (x[1] - x[0].powi(2)).powi(2)
+        }))
+    }
+
+    // Helper function for ill-conditioned quadratic
+    fn ill_conditioned_quadratic() -> F1dim {
+        F1dim::new(MultiDimFn::new(|x: &Array1<f64>| {
+            1000.0 * x[0].powi(2) + x[1].powi(2)
+        }))
+    }
+
+    #[test]
+    fn test_empty_initial_point() {
+        let objective = simple_quadratic();
+        let mut powell = Powell::new(objective);
+
+        let result = powell.minimize(array![]);
+        assert!(matches!(result, Err(MinimizerError::InvalidDimension)));
+    }
+
+    #[test]
+    fn test_invalid_tolerance() {
+        let objective = simple_quadratic();
+        let mut powell = Powell::new(objective);
+
+        let result = powell.powell_method(array![0.0, 0.0], Some(-1e-8), None, None);
+        assert!(matches!(result, Err(MinimizerError::InvalidTolerance)));
+
+        let result = powell.powell_method(array![0.0, 0.0], Some(0.0), None, None);
+        assert!(matches!(result, Err(MinimizerError::InvalidTolerance)));
+    }
+
+    #[test]
+    fn test_single_dimension() {
+        let func = |x: &Array1<f64>| (x[0] - 3.0).powi(2);
+        let objective = MultiDimFn::new(func);
+        let mut powell = Powell::new(objective);
+
+        let result = powell.minimize(array![0.0]).unwrap();
+
+        assert!((result.xmin[0] - 3.0).abs() < 1e-8);
+        assert!(result.fmin < 1e-14);
+        assert!(result.converged);
+        assert_eq!(result.final_directions.len(), 1);
+        assert_eq!(result.final_directions.row(0), array![1.0]);
+    }
+
+    #[test]
+    fn test_very_tight_tolerance() {
+        let objective = simple_quadratic();
+        let mut powell = Powell::new(objective);
+
+        let result = powell
+            .powell_method(array![0.0, 0.0], Some(1e-15), Some(1000), None)
+            .unwrap();
+
+        // With very tight tolerance, should still achieve good accuracy
+        assert!((result.xmin[0] - 2.0).abs() < 1e-6);
+        assert!((result.xmin[1] + 1.0).abs() < 1e-6);
+        assert!(result.converged);
+    }
+
+    #[test]
+    fn test_very_loose_tolerance() {
+        let objective = simple_quadratic();
+        let mut powell = Powell::new(objective);
+
+        let result = powell
+            .powell_method(array![0.0, 0.0], Some(1e-1), None, None)
+            .unwrap();
+
+        assert!((result.xmin[0] - 2.0).abs() < 0.5);
+        assert!((result.xmin[1] + 1.0).abs() < 0.5);
+        assert!(result.converged);
+        assert!(result.iters <= 10); // Should converge quickly with loose tolerance
+    }
+
+    #[test]
+    fn test_max_iterations_reached() {
+        let objective = rosenbrock_2d();
+        let mut powell = Powell::new(objective);
+
+        let result = powell
+            .powell_method(array![-1.2, 1.0], Some(1e-12), Some(5), None)
+            .unwrap();
+
+        assert!(!result.converged);
+        assert_eq!(result.iters, 5);
+        // Should still make some progress even without convergence
+        assert!(result.fmin < 100.0); // Starting value is much higher
+    }
+
+    #[test]
+    fn test_already_at_minimum() {
+        let objective = simple_quadratic();
+        let mut powell = Powell::new(objective);
+
+        let result = powell.minimize(array![2.0, -1.0]).unwrap();
+
+        assert!(result.converged);
+        assert!(result.iters <= 2); // Should converge very quickly
+        assert!(result.fmin < 1e-14);
+        assert_eq!(result.xmin.len(), 2);
+    }
+
+    #[test]
+    fn test_high_dimensional_sphere() {
+        let n = 10;
+        let sphere = |x: &Array1<f64>| x.iter().map(|&xi| xi * xi).sum();
+        let objective = MultiDimFn::new(sphere);
+        let mut powell = Powell::new(objective);
+
+        let initial = Array1::from_shape_fn(n, |i| i as f64);
+        let result = powell.minimize(initial).unwrap();
+
+        assert!(result.converged);
+        for &coord in &result.xmin {
+            assert!(coord.abs() < 1e-6);
+        }
+        assert!(result.fmin < 1e-12);
+        // Don't assert on final_directions length - it might vary during optimization
+        assert!(!result.final_directions.is_empty());
+    }
+
+    #[test]
+    fn test_custom_directions_invalid_dimensions() {
+        let objective = simple_quadratic();
+        let mut powell = Powell::new(objective);
+
+        // Wrong number of directions
+        let directions = array![[1.0, 0.0]]; // Only 1 direction for 2D problem
+        let result =
+            powell.powell_method_with_directions(array![0.0, 0.0], directions, None, None, None);
+        assert!(matches!(result, Err(MinimizerError::InvalidDirectionSet)));
+
+        // Zero-norm direction
+        let directions = array![
+            [1.0, 0.0],
+            [0.0, 0.0], // Zero vector
+        ];
+        let result =
+            powell.powell_method_with_directions(array![0.0, 0.0], directions, None, None, None);
+        assert!(matches!(result, Err(MinimizerError::InvalidDirectionSet)));
+    }
+
+    #[test]
+    fn test_function_returning_nan() {
+        let bad_func = |x: &Array1<f64>| {
+            if x[0] > 10.0 {
+                f64::NAN
+            } else {
+                x[0].powi(2) + x[1].powi(2)
+            }
+        };
+        let objective = MultiDimFn::new(bad_func);
+        let mut powell = Powell::new(objective);
+
+        let result = powell.minimize(array![15.0, 0.0]);
+        assert!(matches!(
+            result,
+            Err(MinimizerError::FunctionEvaluationError)
+        ));
+    }
+
+    #[test]
+    fn test_function_returning_infinity() {
+        let bad_func = |x: &Array1<f64>| {
+            if x[0] < -10.0 {
+                f64::INFINITY
+            } else {
+                x[0].powi(2) + x[1].powi(2)
+            }
+        };
+        let objective = MultiDimFn::new(bad_func);
+        let mut powell = Powell::new(objective);
+
+        let result = powell.minimize(array![-15.0, 0.0]);
+        assert!(matches!(
+            result,
+            Err(MinimizerError::FunctionEvaluationError)
+        ));
+    }
+
+    #[test]
+    fn test_linear_function() {
+        // Linear function has no minimum, but should handle gracefully
+        let linear = |x: &Array1<f64>| x[0] + 2.0 * x[1];
+        let objective = MultiDimFn::new(linear);
+        let mut powell = Powell::new(objective);
+
+        let result = powell.powell_method(array![0.0, 0.0], Some(1e-6), Some(20), None);
+        // Depending on implementation, this might not converge or might find a direction
+        // where the function decreases indefinitely
+        match result {
+            Ok(res) => {
+                // If it "converges", it should be because improvement became negligible
+                assert!(res.iters <= 20);
+            }
+            Err(_) => {
+                // Acceptable if line search fails due to unbounded function
+            }
+        }
+    }
+
+    #[test]
+    fn test_constant_function() {
+        let constant = |_x: &Array1<f64>| 42.0;
+        let objective = MultiDimFn::new(constant);
+        let mut powell = Powell::new(objective);
+
+        let result = powell.minimize(array![1.0, 2.0]).unwrap();
+
+        assert!(result.converged);
+        assert!((result.fmin - 42.0).abs() < 1e-12);
+        assert!(result.iters <= 2); // Should converge immediately
+    }
+
+    #[test]
+    fn test_steep_valley_function() {
+        // Function with a steep valley (challenging for optimization)
+        let valley = |x: &Array1<f64>| {
+            let u = x[0] + x[1];
+            let v = x[0] - x[1];
+            u.powi(2) + 100.0 * v.powi(2)
+        };
+        let objective = MultiDimFn::new(valley);
+        let mut powell = Powell::new(objective);
+
+        let result = powell
+            .powell_method(array![1.0, 1.0], Some(1e-6), Some(100), None)
+            .unwrap();
+
+        assert!(result.converged);
+        assert!(result.xmin[0].abs() < 1e-3);
+        assert!(result.xmin[1].abs() < 1e-3);
+        assert!(result.fmin < 1e-6);
+    }
+
+    #[test]
+    fn test_discontinuous_function() {
+        // Function with a discontinuity
+        let discontinuous = |x: &Array1<f64>| {
+            if x[0] > 0.0 {
+                x[0].powi(2) + x[1].powi(2) + 1.0
+            } else {
+                x[0].powi(2) + x[1].powi(2)
+            }
+        };
+        let objective = MultiDimFn::new(discontinuous);
+        let mut powell = Powell::new(objective);
+
+        let result = powell.minimize(array![-1.0, 1.0]).unwrap();
+
+        // Should find minimum in the negative x region
+        assert!(result.xmin[0] <= 0.0);
+        assert!(result.xmin[1].abs() < 1e-6);
+        assert!(result.fmin < 0.1);
+    }
+
+    #[test]
+    fn test_result_structure_completeness() {
+        let objective = simple_quadratic();
+        let mut powell = Powell::new(objective);
+
+        let result = powell.minimize(array![0.0, 0.0]).unwrap();
+
+        // Check all fields are properly populated
+        assert_eq!(result.xmin.len(), 2);
+        assert!(result.fmin.is_finite());
+        assert!(result.iters > 0);
+        assert!(result.fn_evals > 0);
+        assert!(result.converged);
+        // Don't assert exact length of final_directions - may vary
+        assert!(!result.final_directions.is_empty());
+        assert!(!result.history.is_empty());
+        assert!(!result.improvement.is_empty());
+        // Basic sanity check on history/improvement relationship
+        assert!(result.history.len() >= result.improvement.len());
+    }
+
+    #[test]
+    fn test_powell_state_updates() {
+        let objective = simple_quadratic();
+        let mut powell = Powell::new(objective);
+
+        // Initial state
+        assert!(powell.xmin().is_empty());
+        assert_eq!(powell.fmin(), 0.0);
+        assert_eq!(powell.iters(), 0);
+
+        let result = powell.minimize(array![0.0, 0.0]).unwrap();
+
+        // State should be updated
+        assert_eq!(powell.xmin(), &result.xmin);
+        assert_eq!(powell.fmin(), result.fmin);
+        assert_eq!(powell.iters(), result.iters);
+        assert!(powell.converged);
+    }
+
+    #[test]
+    fn test_orthogonal_directions_properties() {
+        let objective = simple_quadratic();
+        let powell = Powell::new(objective);
+
+        // Test a few specific cases rather than a loop
+        let n = 3;
+        let directions = powell.create_orthogonal_directions(n);
+
+        assert_eq!(directions.nrows(), n);
+
+        // Check that coordinate directions are properly formed
+        for (i, direction) in directions.outer_iter().enumerate() {
+            assert_eq!(
+                direction.len(),
+                n,
+                "Direction {} should have length {} but has length {}",
+                i,
+                n,
+                direction.len()
+            );
+
+            for (j, &val) in direction.iter().enumerate() {
+                if i == j {
+                    assert!(
+                        (val - 1.0).abs() < 1e-15,
+                        "Expected 1.0 at position ({}, {}), got {}",
+                        i,
+                        j,
+                        val
+                    );
+                } else {
+                    assert!(
+                        val.abs() < 1e-15,
+                        "Expected 0.0 at position ({}, {}), got {}",
+                        i,
+                        j,
+                        val
+                    );
+                }
+            }
+        }
+
+        // Test orthogonality
+        for i in 0..n {
+            for j in i + 1..n {
+                let dot_product: f64 = directions
+                    .row(i)
+                    .iter()
+                    .zip(directions.row(j).iter())
+                    .map(|(&a, &b)| a * b)
+                    .sum();
+                assert!(
+                    dot_product.abs() < 1e-12,
+                    "Directions {} and {} should be orthogonal",
+                    i,
+                    j
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_random_directions_reproducibility() {
+        let objective = simple_quadratic();
+        let powell = Powell::new(objective);
+
+        let seed = 12345;
+        let dirs1 = powell.create_random_orthogonal_directions(3, Some(seed));
+        let dirs2 = powell.create_random_orthogonal_directions(3, Some(seed));
+
+        // Should be identical with same seed
+        for (d1, d2) in dirs1.outer_iter().zip(dirs2.outer_iter()) {
+            for (&v1, &v2) in d1.iter().zip(d2.iter()) {
+                assert!((v1 - v2).abs() < 1e-15);
+            }
+        }
+    }
+
+    #[test]
+    fn test_random_directions_different_seeds() {
+        let objective = simple_quadratic();
+        let powell = Powell::new(objective);
+
+        let dirs1 = powell.create_random_orthogonal_directions(3, Some(123));
+        let dirs2 = powell.create_random_orthogonal_directions(3, Some(456));
+
+        // Should be different with different seeds
+        let mut different = false;
+        for (d1, d2) in dirs1.outer_iter().zip(dirs2.outer_iter()) {
+            for (&v1, &v2) in d1.iter().zip(d2.iter()) {
+                if (v1 - v2).abs() > 1e-10 {
+                    different = true;
+                    break;
+                }
+            }
+            if different {
+                break;
+            }
+        }
+        assert!(different);
+    }
+
+    #[test]
+    fn test_large_scale_problem() {
+        let n = 50;
+        // Sum of squares function
+        let sum_of_squares = |x: &Array1<f64>| {
+            x.iter()
+                .enumerate()
+                .map(|(i, &xi)| (i as f64 + 1.0) * xi * xi)
+                .sum()
+        };
+        let objective = MultiDimFn::new(sum_of_squares);
+        let mut powell = Powell::new(objective);
+
+        let initial = Array1::ones(n);
+        let result = powell
+            .powell_method(initial, Some(1e-4), Some(500), None)
+            .unwrap();
+
+        assert!(result.converged || result.fmin < 1e-6);
+        for &coord in &result.xmin {
+            assert!(coord.abs() < 1e-2);
+        }
+    }
+
+    #[test]
+    fn test_ill_conditioned_problem() {
+        let objective = ill_conditioned_quadratic();
+        let mut powell = Powell::new(objective);
+
+        let result = powell.minimize(array![1.0, 1.0]).unwrap();
+
+        assert!(result.converged);
+        assert!(result.xmin[0].abs() < 1e-4);
+        assert!(result.xmin[1].abs() < 1e-4);
+        // Might take more iterations due to ill-conditioning
+        assert!(result.iters <= 50);
+    }
+
+    #[test]
+    fn test_convergence_history() {
+        let objective = rosenbrock_2d();
+        let mut powell = Powell::new(objective);
+
+        let result = powell.minimize(array![-1.2, 1.0]).unwrap();
+
+        // History should show monotonic decrease (mostly)
+        assert!(!result.history.is_empty());
+        assert!(result.history[0] > *result.history.last().unwrap());
+
+        // Improvement should be non-negative (allowing for numerical precision)
+        for &improvement in &result.improvement {
+            assert!(improvement >= -1e-12); // Allow tiny negative due to numerical precision
+        }
+    }
+
+    #[test]
+    fn test_very_small_step_function() {
+        // Function where optimal step sizes are very small
+        let small_step = |x: &Array1<f64>| 1e6 * x[0].powi(2) + x[1].powi(2);
+        let objective = MultiDimFn::new(small_step);
+        let mut powell = Powell::new(objective);
+
+        let result = powell
+            .powell_method(array![1e-3, 1e-3], Some(1e-10), Some(100), Some(1e-15))
+            .unwrap();
+
+        assert!(result.converged);
+        assert!(result.xmin[0].abs() < 1e-6);
+        assert!(result.xmin[1].abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_debug_formatting() {
+        let objective = simple_quadratic();
+        let mut powell = Powell::new(objective);
+
+        // Test before optimization
+        let debug_str = format!("{:?}", powell);
+        assert!(debug_str.contains("Powell"));
+        assert!(debug_str.contains("xmin"));
+        assert!(debug_str.contains("fmin"));
+        assert!(debug_str.contains("iters"));
+        assert!(debug_str.contains("converged"));
+
+        // Test after optimization
+        let _result = powell.minimize(array![0.0, 0.0]).unwrap();
+        let debug_str_after = format!("{:?}", powell);
+        assert!(debug_str_after.contains("Powell"));
+        assert!(debug_str_after.contains(&format!("{:?}", powell.xmin())));
+    }
+
+    #[test]
+    fn test_boxed_function() {
+        let func = |x: &Array1<f64>| (x[0] - 1.0).powi(2) + (x[1] - 2.0).powi(2);
+        let boxed_func: Box<dyn ObjFn> = Box::new(MultiDimFn::new(func));
+        let mut powell = Powell::new_boxed(boxed_func);
+
+        let result = powell.minimize(array![0.0, 0.0]).unwrap();
+
+        assert!(result.converged);
+        assert!((result.xmin[0] - 1.0).abs() < 1e-8);
+        assert!((result.xmin[1] - 2.0).abs() < 1e-8);
+    }
+
+    #[test]
+    fn test_performance_comparison() {
+        // Compare standard vs custom directions on ill-conditioned problem
+        let objective1 = ill_conditioned_quadratic();
+        let objective2 = ill_conditioned_quadratic();
+        let mut powell1 = Powell::new(objective1);
+        let mut powell2 = Powell::new(objective2);
+
+        let start_point = array![10.0, 10.0];
+
+        // Standard coordinate directions
+        let result1 = powell1.minimize(start_point.clone()).unwrap();
+
+        // Custom directions better suited for the problem
+        let custom_dirs = array![
+            [0.001, 0.0], // Small step for highly scaled dimension
+            [0.0, 1.0],   // Normal step for other dimension
+        ];
+        let result2 = powell2
+            .powell_method_with_directions(start_point, custom_dirs, None, None, None)
+            .unwrap();
+
+        // Both should converge, custom might be more efficient
+        assert!(result1.converged);
+        assert!(result2.converged);
+        assert!(result1.xmin[0].abs() < 1e-4);
+        assert!(result1.xmin[1].abs() < 1e-4);
+        assert!(result2.xmin[0].abs() < 1e-4);
+        assert!(result2.xmin[1].abs() < 1e-4);
     }
 }
