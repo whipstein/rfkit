@@ -3,6 +3,7 @@ use ndarray::prelude::*;
 
 pub mod bracket;
 pub mod brent;
+pub mod cma_es;
 pub mod conjugate_gradient;
 pub mod constraint;
 pub mod dbrent;
@@ -16,6 +17,7 @@ pub mod simulated_annealing;
 
 pub use self::bracket::Bracket;
 pub use self::brent::Brent;
+pub use self::cma_es::CmaEs;
 pub use self::conjugate_gradient::ConjGrad;
 pub use self::constraint::{
     Constraint, LinearConstraint, QuadraticConstraint, create_box_constraints,
@@ -30,6 +32,21 @@ pub use self::objective::{
 pub use self::powell::Powell;
 pub use self::quasi_newton::QuasiNewton;
 pub use self::simplex::Simplex;
+
+// Helper function for outer product
+fn outer(a: &Array1<f64>, b: &Array1<f64>) -> Array2<f64> {
+    let n = a.len();
+    let m = b.len();
+    let mut result = Array2::zeros((n, m));
+
+    for i in 0..n {
+        for j in 0..m {
+            result[[i, j]] = a[i] * b[j];
+        }
+    }
+
+    result
+}
 
 /// A vertex of the simplex
 #[derive(Debug, Clone)]

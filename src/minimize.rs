@@ -18,6 +18,7 @@ pub use self::single::{Bracket, Brent, DBrent, Golden};
 #[derive(Debug)]
 pub enum MinimizerError {
     ConstraintViolation,
+    FileError(String),
     FunctionEvaluationError,
     GradientEvaluationError,
     HessianEvaluationError,
@@ -27,12 +28,15 @@ pub enum MinimizerError {
     InvalidDirectionSet,
     InvalidInitialPoints,
     InvalidInitialSimplex,
+    InvalidParameters(String),
     InvalidStepSize,
     InvalidTolerance,
+    LinearAlgebraError(String),
     LinearSearchFailed,
     LinearSystemSingular,
     LineSearchFailed,
     MaxIterationsExceeded,
+    NumericalError(String),
     NoMinimumFound,
     NumericalInstability,
     NumericalOverflow,
@@ -46,6 +50,7 @@ impl fmt::Display for MinimizerError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             MinimizerError::ConstraintViolation => write!(f, "Constraint violation detected"),
+            MinimizerError::FileError(msg) => write!(f, "File error: {}", msg),
             MinimizerError::FunctionEvaluationError => {
                 write!(f, "Function evaluation returned invalid value")
             }
@@ -67,14 +72,19 @@ impl fmt::Display for MinimizerError {
             MinimizerError::InvalidInitialSimplex => {
                 write!(f, "Invalid initial simplex configuration")
             }
+            MinimizerError::InvalidParameters(msg) => {
+                write!(f, "Invalid parameters: {}", msg)
+            }
             MinimizerError::InvalidStepSize => {
                 write!(f, "Step size must be positive and finite")
             }
             MinimizerError::InvalidTolerance => write!(f, "Tolerance must be positive"),
+            MinimizerError::LinearAlgebraError(msg) => write!(f, "Linear algebra error: {}", msg),
             MinimizerError::LinearSearchFailed => write!(f, "Line search failed to converge"),
             MinimizerError::LinearSystemSingular => write!(f, "Linear system is singular"),
             MinimizerError::LineSearchFailed => write!(f, "Line search failed to find valid step"),
             MinimizerError::MaxIterationsExceeded => write!(f, "Maximum iterations exceeded"),
+            MinimizerError::NumericalError(msg) => write!(f, "Numerical error: {}", msg),
             MinimizerError::NumericalInstability => write!(f, "Numerical instability detected"),
             MinimizerError::NoMinimumFound => {
                 write!(f, "No minimum bracket found within search limits")
