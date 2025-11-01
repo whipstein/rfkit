@@ -15,15 +15,15 @@ pub use crate::file::read_touchstone;
 pub use crate::frequency::{Frequency, FrequencyBuilder};
 
 #[doc(no_inline)]
-pub use crate::elements::capacitor::{Capacitor, CapacitorBuilder};
+pub use crate::element::capacitor::{Capacitor, CapacitorBuilder};
 #[doc(no_inline)]
-pub use crate::elements::inductor::{Inductor, InductorBuilder};
+pub use crate::element::inductor::{Inductor, InductorBuilder};
 #[doc(no_inline)]
-pub use crate::elements::port::{Port, PortBuilder};
+pub use crate::element::port::{Port, PortBuilder};
 #[doc(no_inline)]
-pub use crate::elements::resistor::{Resistor, ResistorBuilder};
+pub use crate::element::resistor::{Resistor, ResistorBuilder};
 #[doc(no_inline)]
-pub use crate::elements::{Element, ElementBuilder};
+pub use crate::element::{Element, ElementBuilder};
 
 #[doc(no_inline)]
 pub use crate::impedance::{
@@ -32,7 +32,7 @@ pub use crate::impedance::{
 };
 
 #[doc(no_inline)]
-pub use crate::minimize::{Minimizer, NelderMead, NelderMeadBounded, ObjectiveDerFn, ObjectiveFn};
+pub use crate::minimize::{Minimizer, ObjDerFn, ObjFn};
 
 #[doc(no_inline)]
 pub use crate::mycomplex::*;
@@ -47,9 +47,9 @@ pub use crate::network::{
 };
 
 #[doc(no_inline)]
-pub use crate::point::{Point, PointComplex, PointFloat, Pointf64, Pt};
+pub use crate::point::{Point, Pt};
 #[doc(no_inline)]
-pub use crate::points::{Points, Pointsf64, Pts};
+pub use crate::points::{Points, Pts};
 
 #[doc(no_inline)]
 pub use crate::parameter::RFParameter;

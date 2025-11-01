@@ -1,5 +1,5 @@
 #![allow(unused)]
-use crate::elements::{Distributed, Elem, ElemType, Lumped};
+use crate::element::{Distributed, Elem, ElemType, Lumped};
 use crate::frequency::Frequency;
 use crate::point;
 use crate::point::{Point, Pt};
@@ -129,7 +129,7 @@ impl Default for Msub {
 }
 
 impl Elem for Msub {
-    fn c(&self, _freq: &Frequency) -> Point {
+    fn c(&self, _freq: &Frequency) -> Point<Complex64> {
         Point::zeros((0, 0))
     }
 
@@ -149,7 +149,7 @@ impl Elem for Msub {
         &self.id
     }
 
-    fn net(&self, freq: &Frequency) -> Points {
+    fn net(&self, freq: &Frequency) -> Points<Complex64> {
         Points::zeros((freq.npts(), 2, 2))
     }
 
@@ -286,7 +286,7 @@ impl Default for MsubBuilder {
 }
 
 #[cfg(test)]
-mod test {
+mod element_msub_tests {
     use super::*;
     use crate::frequency::FrequencyBuilder;
     use crate::unit::UnitValBuilder;

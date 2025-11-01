@@ -322,7 +322,7 @@ impl FrequencyBuilder {
 }
 
 #[cfg(test)]
-mod tests {
+mod frequency_tests {
     use super::*;
     use crate::util::{comp_array_f64, comp_f64};
     use float_cmp::F64Margin;

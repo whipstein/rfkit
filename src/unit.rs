@@ -253,7 +253,7 @@ impl UnitValBuilder {
 }
 
 #[cfg(test)]
-mod test {
+mod unit_test {
     use super::*;
     use crate::util::comp_f64;
     use float_cmp::F64Margin;

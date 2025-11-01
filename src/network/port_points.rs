@@ -5,7 +5,7 @@ use crate::math::*;
 use crate::mycomplex::MyComplex;
 use crate::myfloat::MyFloat;
 use crate::parameter::RFParameter;
-use crate::point::{Point, PointComplex};
+use crate::point::{Point, Pt};
 use crate::unit::Unit;
 use ndarray::OwnedRepr;
 use ndarray::prelude::*;

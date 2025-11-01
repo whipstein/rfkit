@@ -1,6 +1,9 @@
 #![allow(dead_code)]
+// #![feature(f128)]
+
 pub mod circuit;
-pub mod elements;
+pub mod element;
+pub mod error;
 pub mod file;
 pub mod frequency;
 pub mod impedance;
@@ -32,9 +35,9 @@ pub mod util;
 ///
 #[macro_export]
 macro_rules! point {
-    ($([$($x:expr),* $(,)*]),+ $(,)*) => {{
-        $crate::point::Point::new(ndarray::Array2::from(vec![$([$($x,)*],)*]))
-    }};
+    ($t: ty, $([$($x:expr),* $(,)*]),+ $(,)*) => {{
+        $crate::point::Point::<$t>::new(ndarray::Array2::from(vec![$([$($x,)*],)*]))}
+    };
 }
 
 /// Create an **[`Points`]** with three dimensions.
@@ -52,19 +55,19 @@ macro_rules! point {
 ///
 #[macro_export]
 macro_rules! points {
-    ($([$([$($x:expr),* $(,)*]),+ $(,)*]),+ $(,)*) => {{
-        $crate::points::Points::new(ndarray::Array3::from(vec![$([$([$($x,)*],)*],)*]))
+    ($t: ty, $([$([$($x:expr),* $(,)*]),+ $(,)*]),+ $(,)*) => {{
+        $crate::points::Points::<$t>::new(ndarray::Array3::from(vec![$([$([$($x,)*],)*],)*]))
     }};
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
+mod lib_tests {
     use num::complex::{Complex64, c64};
 
     #[test]
     fn test_point() {
         let test = point![
+            Complex64,
             [
                 c64(-0.4285714285714286, 0.0),
                 c64(1.4285714285714284, 0.0),
@@ -100,6 +103,7 @@ mod tests {
     #[test]
     fn test_points() {
         let test = points![
+            Complex64,
             [
                 [
                     c64(-0.4285714285714286, 0.0),

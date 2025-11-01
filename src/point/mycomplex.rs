@@ -1,7 +1,9 @@
+use crate::error::InversionError;
 use crate::mycomplex::MyComplex;
 use crate::myfloat::MyFloat;
-use crate::point::{InversionError, Point, Pt};
+use crate::point::{Point, Pt};
 use ndarray::{Array2, ArrayView2, ArrayViewMut2};
+use num::complex::Complex64;
 use num_traits::{One, Zero};
 use std::fmt;
 use std::ops::{
@@ -9,32 +11,115 @@ use std::ops::{
 };
 
 /// A matrix wrapper around ndarray::Array2 with MyComplex elements
-pub struct PointComplex(Array2<MyComplex>);
+// pub struct Point<MyComplex>(Array2<MyComplex>);
 
-impl PointComplex {
+impl Point<MyComplex> {
     pub fn new(array: Array2<MyComplex>) -> Self {
-        PointComplex(array)
+        Point(array)
+    }
+
+    /// Create a matrix from a 2D vector of f64 values
+    fn from_vec_float(data: Vec<Vec<MyFloat>>) -> Result<Self, &'static str> {
+        if data.is_empty() {
+            return Err("Cannot create matrix from empty data");
+        }
+
+        let rows = data.len();
+        let cols = data[0].len();
+
+        if cols == 0 {
+            return Err("Cannot create matrix with zero columns");
+        }
+
+        // Check all rows have the same length
+        if !data.iter().all(|row| row.len() == cols) {
+            return Err("All rows must have the same length");
+        }
+
+        let mut matrix = Self::zeros((rows, cols));
+        for (i, row) in data.iter().enumerate() {
+            for (j, value) in row.iter().enumerate() {
+                matrix[[i, j]] = MyComplex::from_real_f64(value.to_f64());
+            }
+        }
+
+        Ok(matrix)
+    }
+
+    /// Create a matrix from a 2D vector of complex tuples (real, imag)
+    fn from_vec_c64(data: Vec<Vec<(f64, f64)>>) -> Result<Self, &'static str> {
+        if data.is_empty() {
+            return Err("Cannot create matrix from empty data");
+        }
+
+        let rows = data.len();
+        let cols = data[0].len();
+
+        if cols == 0 {
+            return Err("Cannot create matrix with zero columns");
+        }
+
+        if !data.iter().all(|row| row.len() == cols) {
+            return Err("All rows must have the same length");
+        }
+
+        let mut matrix = Self::zeros((rows, cols));
+        for (i, row) in data.iter().enumerate() {
+            for (j, &(real, imag)) in row.clone().iter().enumerate() {
+                matrix[[i, j]] = MyComplex::from_f64(real, imag);
+            }
+        }
+
+        Ok(matrix)
     }
 }
 
-impl Pt<MyComplex, MyFloat> for PointComplex {
+impl Pt<MyComplex, MyFloat> for Point<MyComplex> {
     /// Create a new matrix with given dimensions filled with zeros
     fn zeros(shape: (usize, usize)) -> Self {
-        PointComplex(Array2::from_elem((shape.0, shape.1), MyComplex::zero()))
+        Point(Array2::from_elem((shape.0, shape.1), MyComplex::zero()))
     }
 
     /// Create a new matrix with given dimensions filled with ones
     fn ones(shape: (usize, usize)) -> Self {
-        PointComplex(Array2::from_elem((shape.0, shape.1), MyComplex::one()))
+        Point(Array2::from_elem((shape.0, shape.1), MyComplex::one()))
     }
 
     /// Create an identity matrix of given size
     fn eye(size: usize) -> Self {
         let mut matrix = Self::zeros((size, size));
         for i in 0..size {
-            matrix[(i, i)] = MyComplex::one();
+            matrix[[i, i]] = MyComplex::one();
         }
         matrix
+    }
+
+    /// Create a matrix from a 2D vector of f64 values
+    fn from_vec(data: Vec<Vec<MyComplex>>) -> Result<Self, &'static str> {
+        if data.is_empty() {
+            return Err("Cannot create matrix from empty data");
+        }
+
+        let rows = data.len();
+        let cols = data[0].len();
+
+        if cols == 0 {
+            return Err("Cannot create matrix with zero columns");
+        }
+
+        // Check all rows have the same length
+        if !data.iter().all(|row| row.len() == cols) {
+            return Err("All rows must have the same length");
+        }
+
+        let mut matrix = Self::zeros((rows, cols));
+        for (i, row) in data.iter().enumerate() {
+            for (j, value) in row.iter().enumerate() {
+                matrix[[i, j]] = value.clone();
+            }
+        }
+
+        Ok(matrix)
     }
 
     /// Create a matrix from a 2D vector of f64 values
@@ -57,8 +142,36 @@ impl Pt<MyComplex, MyFloat> for PointComplex {
 
         let mut matrix = Self::zeros((rows, cols));
         for (i, row) in data.iter().enumerate() {
-            for (j, &value) in row.iter().enumerate() {
-                matrix[(i, j)] = MyComplex::from_real_f64(value);
+            for (j, value) in row.iter().enumerate() {
+                matrix[[i, j]] = MyComplex::from_real_f64(*value);
+            }
+        }
+
+        Ok(matrix)
+    }
+
+    /// Create a matrix from a 2D vector of f64 values
+    fn from_vec_float(data: Vec<Vec<MyFloat>>) -> Result<Self, &'static str> {
+        if data.is_empty() {
+            return Err("Cannot create matrix from empty data");
+        }
+
+        let rows = data.len();
+        let cols = data[0].len();
+
+        if cols == 0 {
+            return Err("Cannot create matrix with zero columns");
+        }
+
+        // Check all rows have the same length
+        if !data.iter().all(|row| row.len() == cols) {
+            return Err("All rows must have the same length");
+        }
+
+        let mut matrix = Self::zeros((rows, cols));
+        for (i, row) in data.iter().enumerate() {
+            for (j, value) in row.iter().enumerate() {
+                matrix[[i, j]] = MyComplex::from_real_f64(value.to_f64());
             }
         }
 
@@ -66,7 +179,7 @@ impl Pt<MyComplex, MyFloat> for PointComplex {
     }
 
     /// Create a matrix from a 2D vector of complex tuples (real, imag)
-    fn from_vec_complex(data: Vec<Vec<(f64, f64)>>) -> Result<Self, &'static str> {
+    fn from_vec_c64(data: Vec<Vec<(f64, f64)>>) -> Result<Self, &'static str> {
         if data.is_empty() {
             return Err("Cannot create matrix from empty data");
         }
@@ -84,8 +197,35 @@ impl Pt<MyComplex, MyFloat> for PointComplex {
 
         let mut matrix = Self::zeros((rows, cols));
         for (i, row) in data.iter().enumerate() {
-            for (j, &(real, imag)) in row.iter().enumerate() {
-                matrix[(i, j)] = MyComplex::from_f64(real, imag);
+            for (j, (real, imag)) in row.clone().iter().enumerate() {
+                matrix[[i, j]] = MyComplex::from_f64(*real, *imag);
+            }
+        }
+
+        Ok(matrix)
+    }
+
+    /// Create a matrix from a 2D vector of complex tuples (real, imag)
+    fn from_vec_complex(data: Vec<Vec<(MyFloat, MyFloat)>>) -> Result<Self, &'static str> {
+        if data.is_empty() {
+            return Err("Cannot create matrix from empty data");
+        }
+
+        let rows = data.len();
+        let cols = data[0].len();
+
+        if cols == 0 {
+            return Err("Cannot create matrix with zero columns");
+        }
+
+        if !data.iter().all(|row| row.len() == cols) {
+            return Err("All rows must have the same length");
+        }
+
+        let mut matrix = Self::zeros((rows, cols));
+        for (i, row) in data.iter().enumerate() {
+            for (j, (real, imag)) in row.clone().iter().enumerate() {
+                matrix[[i, j]] = MyComplex::new(real.clone(), imag.clone());
             }
         }
 
@@ -93,16 +233,16 @@ impl Pt<MyComplex, MyFloat> for PointComplex {
     }
 
     /// Create a matrix from a flat vector with specified dimensions
-    fn from_flat_f64(data: Vec<f64>, rows: usize, cols: usize) -> Result<Self, &'static str> {
+    fn from_flat_f64(data: Vec<MyFloat>, rows: usize, cols: usize) -> Result<Self, &'static str> {
         if data.len() != rows * cols {
             return Err("Data length does not match matrix dimensions");
         }
 
         let mut matrix = Self::zeros((rows, cols));
-        for (idx, &value) in data.iter().enumerate() {
+        for (idx, value) in data.clone().iter().enumerate() {
             let i = idx / cols;
             let j = idx % cols;
-            matrix[(i, j)] = MyComplex::from_real_f64(value);
+            matrix[[i, j]] = MyComplex::from_real(value.clone());
         }
 
         Ok(matrix)
@@ -112,12 +252,12 @@ impl Pt<MyComplex, MyFloat> for PointComplex {
     where
         F: Fn((usize, usize)) -> MyComplex,
     {
-        PointComplex(Array2::<MyComplex>::from_shape_fn(shape, f))
+        Point(Array2::<MyComplex>::from_shape_fn(shape, f))
     }
 
     fn from_shape_vec(shape: (usize, usize), v: Vec<MyComplex>) -> Result<Self, &'static str> {
         match Array2::<MyComplex>::from_shape_vec(shape, v) {
-            Ok(x) => Ok(PointComplex(x)),
+            Ok(x) => Ok(Point(x)),
             Err(_) => Err("Cannot create vector"),
         }
     }
@@ -171,18 +311,18 @@ impl Pt<MyComplex, MyFloat> for PointComplex {
     }
 
     /// Get a view of the matrix
-    fn view(&self) -> ArrayView2<MyComplex> {
+    fn view(&self) -> ArrayView2<'_, MyComplex> {
         self.0.view()
     }
 
     /// Get a mutable view of the matrix
-    fn view_mut(&mut self) -> ArrayViewMut2<MyComplex> {
+    fn view_mut(&mut self) -> ArrayViewMut2<'_, MyComplex> {
         self.0.view_mut()
     }
 
     /// Transpose the matrix
     fn t(&self) -> Self {
-        PointComplex(self.0.t().to_owned())
+        Point(self.0.t().to_owned())
     }
 
     /// Transpose the matrix
@@ -213,7 +353,7 @@ impl Pt<MyComplex, MyFloat> for PointComplex {
 
         let mut sum = MyComplex::zero();
         for i in 0..self.nrows() {
-            sum += &self[(i, i)];
+            sum += &self[[i, i]];
         }
         sum
     }
@@ -226,18 +366,18 @@ impl Pt<MyComplex, MyFloat> for PointComplex {
 
         match self.nrows() {
             0 => MyComplex::one(),
-            1 => self[(0, 0)].clone(),
-            2 => &self[(0, 0)] * &self[(1, 1)] - &self[(0, 1)] * &self[(1, 0)],
+            1 => self[[0, 0]].clone(),
+            2 => &self[[0, 0]] * &self[[1, 1]] - &self[[0, 1]] * &self[[1, 0]],
             3 => {
-                let a00 = &self[(0, 0)];
-                let a01 = &self[(0, 1)];
-                let a02 = &self[(0, 2)];
-                let a10 = &self[(1, 0)];
-                let a11 = &self[(1, 1)];
-                let a12 = &self[(1, 2)];
-                let a20 = &self[(2, 0)];
-                let a21 = &self[(2, 1)];
-                let a22 = &self[(2, 2)];
+                let a00 = &self[[0, 0]];
+                let a01 = &self[[0, 1]];
+                let a02 = &self[[0, 2]];
+                let a10 = &self[[1, 0]];
+                let a11 = &self[[1, 1]];
+                let a12 = &self[[1, 2]];
+                let a20 = &self[[2, 0]];
+                let a21 = &self[[2, 1]];
+                let a22 = &self[[2, 2]];
 
                 a00 * (a11 * a22 - a12 * a21) - a01 * (a10 * a22 - a12 * a20)
                     + a02 * (a10 * a21 - a11 * a20)
@@ -264,11 +404,11 @@ impl Pt<MyComplex, MyFloat> for PointComplex {
         sum.sqrt()
     }
 
-    /// PointComplex multiplication
+    /// Point multiplication
     fn dot(&self, other: &Self) -> Self {
         if self.ncols() != other.nrows() {
             panic!(
-                "PointComplex dimensions incompatible for multiplication: {}x{} * {}x{}",
+                "Point dimensions incompatible for multiplication: {}x{} * {}x{}",
                 self.nrows(),
                 self.ncols(),
                 other.nrows(),
@@ -282,14 +422,22 @@ impl Pt<MyComplex, MyFloat> for PointComplex {
             for j in 0..other.ncols() {
                 let mut sum = MyComplex::zero();
                 for k in 0..self.ncols() {
-                    sum += &self[(i, k)] * &other[(k, j)];
+                    sum += &self[[i, k]] * &other[[k, j]];
                 }
-                result[(i, j)] = sum;
+                result[[i, j]] = sum;
             }
         }
 
         result
     }
+
+    // fn not(&self) -> Self {
+    //     let mut result = self.clone();
+    //     for element in result.0.iter_mut() {
+    //         *element = element.conj();
+    //     }
+    //     result
+    // }
 
     /// Get a row as a new matrix (1 x ncols)
     fn row(&self, index: usize) -> Self {
@@ -303,7 +451,7 @@ impl Pt<MyComplex, MyFloat> for PointComplex {
 
         let mut result = Self::zeros((1, self.ncols()));
         for j in 0..self.ncols() {
-            result[(0, j)] = self[(index, j)].clone();
+            result[[0, j]] = self[[index, j]].clone();
         }
         result
     }
@@ -320,7 +468,7 @@ impl Pt<MyComplex, MyFloat> for PointComplex {
 
         let mut result = Self::zeros((self.nrows(), 1));
         for i in 0..self.nrows() {
-            result[(i, 0)] = self[(i, index)].clone();
+            result[[i, 0]] = self[[i, index]].clone();
         }
         result
     }
@@ -344,7 +492,7 @@ impl Pt<MyComplex, MyFloat> for PointComplex {
         }
 
         for j in 0..self.ncols() {
-            self[(index, j)] = row[(0, j)].clone();
+            self[[index, j]] = row[[0, j]].clone();
         }
     }
 
@@ -367,7 +515,7 @@ impl Pt<MyComplex, MyFloat> for PointComplex {
         }
 
         for i in 0..self.nrows() {
-            self[(i, index)] = col[(i, 0)].clone();
+            self[[i, index]] = col[[i, 0]].clone();
         }
     }
 
@@ -383,7 +531,7 @@ impl Pt<MyComplex, MyFloat> for PointComplex {
 
     /// Create a matrix filled with the given value
     fn fill(rows: usize, cols: usize, value: MyComplex) -> Self {
-        PointComplex(Array2::from_elem((rows, cols), value))
+        Point(Array2::from_elem((rows, cols), value))
     }
 
     /// Apply a function element-wise
@@ -391,7 +539,7 @@ impl Pt<MyComplex, MyFloat> for PointComplex {
     where
         F: Fn(&MyComplex) -> MyComplex,
     {
-        PointComplex(self.0.map(&f))
+        Point(self.0.map(&f))
     }
 
     /// Apply a function element-wise in place
@@ -425,11 +573,11 @@ impl Pt<MyComplex, MyFloat> for PointComplex {
     ///
     /// let inv_matrix = MyComplex::matrix_inverse(&matrix.view())?;
     /// ```
-    fn inv(&self) -> PointComplex {
+    fn inv(&self) -> Point<MyComplex> {
         self.try_inv().unwrap()
     }
 
-    fn try_inv(&self) -> Result<PointComplex, InversionError> {
+    fn try_inv(&self) -> Result<Point<MyComplex>, InversionError> {
         let (rows, cols) = self.dim();
 
         // Check if matrix is square
@@ -514,7 +662,7 @@ impl Pt<MyComplex, MyFloat> for PointComplex {
             }
         }
 
-        Ok(PointComplex(inverse))
+        Ok(Point(inverse))
     }
 
     /// Solve the linear system Ax = b using LU decomposition
@@ -656,7 +804,7 @@ impl Pt<MyComplex, MyFloat> for PointComplex {
 }
 
 // Indexing
-impl Index<(usize, usize)> for PointComplex {
+impl Index<(usize, usize)> for Point<MyComplex> {
     type Output = MyComplex;
 
     fn index(&self, index: (usize, usize)) -> &Self::Output {
@@ -664,7 +812,7 @@ impl Index<(usize, usize)> for PointComplex {
     }
 }
 
-impl Index<[usize; 2]> for PointComplex {
+impl Index<[usize; 2]> for Point<MyComplex> {
     type Output = MyComplex;
 
     fn index(&self, index: [usize; 2]) -> &Self::Output {
@@ -672,114 +820,185 @@ impl Index<[usize; 2]> for PointComplex {
     }
 }
 
-impl IndexMut<(usize, usize)> for PointComplex {
+impl IndexMut<(usize, usize)> for Point<MyComplex> {
     fn index_mut(&mut self, index: (usize, usize)) -> &mut Self::Output {
         &mut self.0[index]
     }
 }
 
-impl IndexMut<[usize; 2]> for PointComplex {
+impl IndexMut<[usize; 2]> for Point<MyComplex> {
     fn index_mut(&mut self, index: [usize; 2]) -> &mut Self::Output {
         &mut self.0[index]
     }
 }
 
 // Addition implementations
-impl Add for PointComplex {
+impl Add for Point<MyComplex> {
     type Output = Self;
 
     fn add(self, other: Self) -> Self {
         if self.shape() != other.shape() {
             panic!(
-                "PointComplex dimensions must match for addition: {:?} vs {:?}",
+                "Point dimensions must match for addition: {:?} vs {:?}",
                 self.shape(),
                 other.shape()
             );
         }
-        PointComplex(&self.0 + &other.0)
+        Point(&self.0 + &other.0)
     }
 }
 
-impl Add<&PointComplex> for PointComplex {
+impl Add<&Point<MyComplex>> for Point<MyComplex> {
     type Output = Self;
 
     fn add(self, other: &Self) -> Self {
         if self.shape() != other.shape() {
             panic!(
-                "PointComplex dimensions must match for addition: {:?} vs {:?}",
+                "Point dimensions must match for addition: {:?} vs {:?}",
                 self.shape(),
                 other.shape()
             );
         }
-        PointComplex(&self.0 + &other.0)
+        Point(&self.0 + &other.0)
     }
 }
 
-impl Add<PointComplex> for &PointComplex {
-    type Output = PointComplex;
+impl Add<Point<MyComplex>> for &Point<MyComplex> {
+    type Output = Point<MyComplex>;
 
-    fn add(self, other: PointComplex) -> PointComplex {
+    fn add(self, other: Point<MyComplex>) -> Point<MyComplex> {
         if self.shape() != other.shape() {
             panic!(
-                "PointComplex dimensions must match for addition: {:?} vs {:?}",
+                "Point dimensions must match for addition: {:?} vs {:?}",
                 self.shape(),
                 other.shape()
             );
         }
-        PointComplex(&self.0 + &other.0)
+        Point(&self.0 + &other.0)
     }
 }
 
-impl Add<&PointComplex> for &PointComplex {
-    type Output = PointComplex;
+impl Add<&Point<MyComplex>> for &Point<MyComplex> {
+    type Output = Point<MyComplex>;
 
-    fn add(self, other: &PointComplex) -> PointComplex {
+    fn add(self, other: &Point<MyComplex>) -> Point<MyComplex> {
         if self.shape() != other.shape() {
             panic!(
-                "PointComplex dimensions must match for addition: {:?} vs {:?}",
+                "Point dimensions must match for addition: {:?} vs {:?}",
                 self.shape(),
                 other.shape()
             );
         }
-        PointComplex(&self.0 + &other.0)
+        Point(&self.0 + &other.0)
     }
 }
 
-// Scalar addition with MyComplex
-impl Add<MyComplex> for PointComplex {
+// Scalar addition
+impl Add<MyComplex> for Point<MyComplex> {
     type Output = Self;
 
     fn add(self, scalar: MyComplex) -> Self {
-        PointComplex(self.0.map(|x| x + &scalar))
+        Point(self.0.map(|x| x + &scalar))
     }
 }
 
-impl Add<MyComplex> for &PointComplex {
-    type Output = PointComplex;
+impl Add<MyComplex> for &Point<MyComplex> {
+    type Output = Point<MyComplex>;
 
-    fn add(self, scalar: MyComplex) -> PointComplex {
-        PointComplex(self.0.map(|x| x + &scalar))
+    fn add(self, scalar: MyComplex) -> Point<MyComplex> {
+        Point(self.0.map(|x| x + &scalar))
     }
 }
 
-impl Add<&MyComplex> for PointComplex {
+impl Add<&MyComplex> for Point<MyComplex> {
     type Output = Self;
 
     fn add(self, scalar: &MyComplex) -> Self {
-        PointComplex(self.0.map(|x| x + scalar))
+        Point(self.0.map(|x| x + scalar))
     }
 }
 
-impl Add<&MyComplex> for &PointComplex {
-    type Output = PointComplex;
+impl Add<&MyComplex> for &Point<MyComplex> {
+    type Output = Point<MyComplex>;
 
-    fn add(self, scalar: &MyComplex) -> PointComplex {
-        PointComplex(self.0.map(|x| x + scalar))
+    fn add(self, scalar: &MyComplex) -> Point<MyComplex> {
+        Point(self.0.map(|x| x + scalar))
     }
 }
 
-// Scalar addition with f64
-impl Add<f64> for PointComplex {
+impl Add<MyFloat> for Point<MyComplex> {
+    type Output = Self;
+
+    fn add(self, scalar: MyFloat) -> Self {
+        let scalar_complex = MyComplex::from_real(scalar);
+        self + scalar_complex
+    }
+}
+
+impl Add<&MyFloat> for Point<MyComplex> {
+    type Output = Self;
+
+    fn add(self, scalar: &MyFloat) -> Self {
+        let scalar_complex = MyComplex::from_real(scalar.clone());
+        self + scalar_complex
+    }
+}
+
+impl Add<MyFloat> for &Point<MyComplex> {
+    type Output = Point<MyComplex>;
+
+    fn add(self, scalar: MyFloat) -> Point<MyComplex> {
+        let scalar_complex = MyComplex::from_real(scalar);
+        self + scalar_complex
+    }
+}
+
+impl Add<&MyFloat> for &Point<MyComplex> {
+    type Output = Point<MyComplex>;
+
+    fn add(self, scalar: &MyFloat) -> Point<MyComplex> {
+        let scalar_complex = MyComplex::from_real(scalar.clone());
+        self + scalar_complex
+    }
+}
+
+impl Add<Complex64> for Point<MyComplex> {
+    type Output = Self;
+
+    fn add(self, scalar: Complex64) -> Self {
+        let scalar_complex = MyComplex::from_c64(scalar);
+        self + scalar_complex
+    }
+}
+
+impl Add<&Complex64> for Point<MyComplex> {
+    type Output = Self;
+
+    fn add(self, scalar: &Complex64) -> Self {
+        let scalar_complex = MyComplex::from_c64(*scalar);
+        self + scalar_complex
+    }
+}
+
+impl Add<Complex64> for &Point<MyComplex> {
+    type Output = Point<MyComplex>;
+
+    fn add(self, scalar: Complex64) -> Point<MyComplex> {
+        let scalar_complex = MyComplex::from_c64(scalar);
+        self + scalar_complex
+    }
+}
+
+impl Add<&Complex64> for &Point<MyComplex> {
+    type Output = Point<MyComplex>;
+
+    fn add(self, scalar: &Complex64) -> Point<MyComplex> {
+        let scalar_complex = MyComplex::from_c64(*scalar);
+        self + scalar_complex
+    }
+}
+
+impl Add<f64> for Point<MyComplex> {
     type Output = Self;
 
     fn add(self, scalar: f64) -> Self {
@@ -788,86 +1007,200 @@ impl Add<f64> for PointComplex {
     }
 }
 
-impl Add<f64> for &PointComplex {
-    type Output = PointComplex;
+impl Add<&f64> for Point<MyComplex> {
+    type Output = Self;
 
-    fn add(self, scalar: f64) -> PointComplex {
+    fn add(self, scalar: &f64) -> Self {
+        let scalar_complex = MyComplex::from_real_f64(*scalar);
+        self + scalar_complex
+    }
+}
+
+impl Add<f64> for &Point<MyComplex> {
+    type Output = Point<MyComplex>;
+
+    fn add(self, scalar: f64) -> Point<MyComplex> {
         let scalar_complex = MyComplex::from_real_f64(scalar);
         self + scalar_complex
     }
 }
 
+impl Add<&f64> for &Point<MyComplex> {
+    type Output = Point<MyComplex>;
+
+    fn add(self, scalar: &f64) -> Point<MyComplex> {
+        let scalar_complex = MyComplex::from_real_f64(*scalar);
+        self + scalar_complex
+    }
+}
+
 // Subtraction implementations
-impl Sub for PointComplex {
+impl Sub for Point<MyComplex> {
     type Output = Self;
 
     fn sub(self, other: Self) -> Self {
         if self.shape() != other.shape() {
             panic!(
-                "PointComplex dimensions must match for subtraction: {:?} vs {:?}",
+                "Point dimensions must match for subtraction: {:?} vs {:?}",
                 self.shape(),
                 other.shape()
             );
         }
-        PointComplex(&self.0 - &other.0)
+        Point(&self.0 - &other.0)
     }
 }
 
-impl Sub<&PointComplex> for PointComplex {
+impl Sub<&Point<MyComplex>> for Point<MyComplex> {
     type Output = Self;
 
     fn sub(self, other: &Self) -> Self {
         if self.shape() != other.shape() {
             panic!(
-                "PointComplex dimensions must match for subtraction: {:?} vs {:?}",
+                "Point dimensions must match for subtraction: {:?} vs {:?}",
                 self.shape(),
                 other.shape()
             );
         }
-        PointComplex(&self.0 - &other.0)
+        Point(&self.0 - &other.0)
     }
 }
 
-impl Sub<PointComplex> for &PointComplex {
-    type Output = PointComplex;
+impl Sub<Point<MyComplex>> for &Point<MyComplex> {
+    type Output = Point<MyComplex>;
 
-    fn sub(self, other: PointComplex) -> PointComplex {
+    fn sub(self, other: Point<MyComplex>) -> Point<MyComplex> {
         if self.shape() != other.shape() {
             panic!(
-                "PointComplex dimensions must match for subtraction: {:?} vs {:?}",
+                "Point dimensions must match for subtraction: {:?} vs {:?}",
                 self.shape(),
                 other.shape()
             );
         }
-        PointComplex(&self.0 - &other.0)
+        Point(&self.0 - &other.0)
     }
 }
 
-impl Sub<&PointComplex> for &PointComplex {
-    type Output = PointComplex;
+impl Sub<&Point<MyComplex>> for &Point<MyComplex> {
+    type Output = Point<MyComplex>;
 
-    fn sub(self, other: &PointComplex) -> PointComplex {
+    fn sub(self, other: &Point<MyComplex>) -> Point<MyComplex> {
         if self.shape() != other.shape() {
             panic!(
-                "PointComplex dimensions must match for subtraction: {:?} vs {:?}",
+                "Point dimensions must match for subtraction: {:?} vs {:?}",
                 self.shape(),
                 other.shape()
             );
         }
-        PointComplex(&self.0 - &other.0)
+        Point(&self.0 - &other.0)
     }
 }
 
 // Scalar subtraction
-impl Sub<MyComplex> for PointComplex {
+impl Sub<MyComplex> for Point<MyComplex> {
     type Output = Self;
 
     fn sub(self, scalar: MyComplex) -> Self {
-        PointComplex(self.0.map(|x| x - &scalar))
+        Point(self.0.map(|x| x - &scalar))
     }
 }
 
-impl Sub<f64> for PointComplex {
+impl Sub<MyComplex> for &Point<MyComplex> {
+    type Output = Point<MyComplex>;
+
+    fn sub(self, scalar: MyComplex) -> Point<MyComplex> {
+        Point(self.0.map(|x| x - &scalar))
+    }
+}
+
+impl Sub<&MyComplex> for Point<MyComplex> {
+    type Output = Self;
+
+    fn sub(self, scalar: &MyComplex) -> Self {
+        Point(self.0.map(|x| x - scalar))
+    }
+}
+
+impl Sub<&MyComplex> for &Point<MyComplex> {
+    type Output = Point<MyComplex>;
+
+    fn sub(self, scalar: &MyComplex) -> Point<MyComplex> {
+        Point(self.0.map(|x| x - scalar))
+    }
+}
+
+impl Sub<MyFloat> for Point<MyComplex> {
+    type Output = Self;
+
+    fn sub(self, scalar: MyFloat) -> Self {
+        let scalar_complex = MyComplex::from_real(scalar);
+        self - scalar_complex
+    }
+}
+
+impl Sub<&MyFloat> for Point<MyComplex> {
+    type Output = Self;
+
+    fn sub(self, scalar: &MyFloat) -> Self {
+        let scalar_complex = MyComplex::from_real(scalar.clone());
+        self - scalar_complex
+    }
+}
+
+impl Sub<MyFloat> for &Point<MyComplex> {
+    type Output = Point<MyComplex>;
+
+    fn sub(self, scalar: MyFloat) -> Point<MyComplex> {
+        let scalar_complex = MyComplex::from_real(scalar);
+        self - scalar_complex
+    }
+}
+
+impl Sub<&MyFloat> for &Point<MyComplex> {
+    type Output = Point<MyComplex>;
+
+    fn sub(self, scalar: &MyFloat) -> Point<MyComplex> {
+        let scalar_complex = MyComplex::from_real(scalar.clone());
+        self - scalar_complex
+    }
+}
+
+impl Sub<Complex64> for Point<MyComplex> {
+    type Output = Self;
+
+    fn sub(self, scalar: Complex64) -> Self {
+        let scalar_complex = MyComplex::from_c64(scalar);
+        self - scalar_complex
+    }
+}
+
+impl Sub<&Complex64> for Point<MyComplex> {
+    type Output = Self;
+
+    fn sub(self, scalar: &Complex64) -> Self {
+        let scalar_complex = MyComplex::from_c64(*scalar);
+        self - scalar_complex
+    }
+}
+
+impl Sub<Complex64> for &Point<MyComplex> {
+    type Output = Point<MyComplex>;
+
+    fn sub(self, scalar: Complex64) -> Point<MyComplex> {
+        let scalar_complex = MyComplex::from_c64(scalar);
+        self - scalar_complex
+    }
+}
+
+impl Sub<&Complex64> for &Point<MyComplex> {
+    type Output = Point<MyComplex>;
+
+    fn sub(self, scalar: &Complex64) -> Point<MyComplex> {
+        let scalar_complex = MyComplex::from_c64(*scalar);
+        self - scalar_complex
+    }
+}
+
+impl Sub<f64> for Point<MyComplex> {
     type Output = Self;
 
     fn sub(self, scalar: f64) -> Self {
@@ -876,101 +1209,200 @@ impl Sub<f64> for PointComplex {
     }
 }
 
+impl Sub<&f64> for Point<MyComplex> {
+    type Output = Self;
+
+    fn sub(self, scalar: &f64) -> Self {
+        let scalar_complex = MyComplex::from_real_f64(*scalar);
+        self - scalar_complex
+    }
+}
+
+impl Sub<f64> for &Point<MyComplex> {
+    type Output = Point<MyComplex>;
+
+    fn sub(self, scalar: f64) -> Point<MyComplex> {
+        let scalar_complex = MyComplex::from_real_f64(scalar);
+        self - scalar_complex
+    }
+}
+
+impl Sub<&f64> for &Point<MyComplex> {
+    type Output = Point<MyComplex>;
+
+    fn sub(self, scalar: &f64) -> Point<MyComplex> {
+        let scalar_complex = MyComplex::from_real_f64(*scalar);
+        self - scalar_complex
+    }
+}
+
 // Element-wise multiplication
-impl Mul for PointComplex {
+impl Mul for Point<MyComplex> {
     type Output = Self;
 
     fn mul(self, other: Self) -> Self {
         if self.shape() != other.shape() {
             panic!(
-                "PointComplex dimensions must match for element-wise multiplication: {:?} vs {:?}",
+                "Point dimensions must match for element-wise multiplication: {:?} vs {:?}",
                 self.shape(),
                 other.shape()
             );
         }
-        PointComplex(&self.0 * &other.0)
+        Point(&self.0 * &other.0)
     }
 }
 
-impl Mul<&PointComplex> for PointComplex {
+impl Mul<&Point<MyComplex>> for Point<MyComplex> {
     type Output = Self;
 
     fn mul(self, other: &Self) -> Self {
         if self.shape() != other.shape() {
             panic!(
-                "PointComplex dimensions must match for element-wise multiplication: {:?} vs {:?}",
+                "Point dimensions must match for element-wise multiplication: {:?} vs {:?}",
                 self.shape(),
                 other.shape()
             );
         }
-        PointComplex(&self.0 * &other.0)
+        Point(&self.0 * &other.0)
     }
 }
 
-impl Mul<PointComplex> for &PointComplex {
-    type Output = PointComplex;
+impl Mul<Point<MyComplex>> for &Point<MyComplex> {
+    type Output = Point<MyComplex>;
 
-    fn mul(self, other: PointComplex) -> PointComplex {
+    fn mul(self, other: Point<MyComplex>) -> Point<MyComplex> {
         if self.shape() != other.shape() {
             panic!(
-                "PointComplex dimensions must match for element-wise multiplication: {:?} vs {:?}",
+                "Point dimensions must match for element-wise multiplication: {:?} vs {:?}",
                 self.shape(),
                 other.shape()
             );
         }
-        PointComplex(&self.0 * &other.0)
+        Point(&self.0 * &other.0)
     }
 }
 
-impl Mul<&PointComplex> for &PointComplex {
-    type Output = PointComplex;
+impl Mul<&Point<MyComplex>> for &Point<MyComplex> {
+    type Output = Point<MyComplex>;
 
-    fn mul(self, other: &PointComplex) -> PointComplex {
+    fn mul(self, other: &Point<MyComplex>) -> Point<MyComplex> {
         if self.shape() != other.shape() {
             panic!(
-                "PointComplex dimensions must match for element-wise multiplication: {:?} vs {:?}",
+                "Point dimensions must match for element-wise multiplication: {:?} vs {:?}",
                 self.shape(),
                 other.shape()
             );
         }
-        PointComplex(&self.0 * &other.0)
+        Point(&self.0 * &other.0)
     }
 }
 
 // Scalar multiplication
-impl Mul<MyComplex> for PointComplex {
+impl Mul<MyComplex> for Point<MyComplex> {
     type Output = Self;
 
     fn mul(self, scalar: MyComplex) -> Self {
-        PointComplex(self.0.map(|x| x * &scalar))
+        Point(self.0.map(|x| x * &scalar))
     }
 }
 
-impl Mul<MyComplex> for &PointComplex {
-    type Output = PointComplex;
+impl Mul<MyComplex> for &Point<MyComplex> {
+    type Output = Point<MyComplex>;
 
-    fn mul(self, scalar: MyComplex) -> PointComplex {
-        PointComplex(self.0.map(|x| x * &scalar))
+    fn mul(self, scalar: MyComplex) -> Point<MyComplex> {
+        Point(self.0.map(|x| x * &scalar))
     }
 }
 
-impl Mul<&MyComplex> for PointComplex {
+impl Mul<&MyComplex> for Point<MyComplex> {
     type Output = Self;
 
     fn mul(self, scalar: &MyComplex) -> Self {
-        PointComplex(self.0.map(|x| x * scalar))
+        Point(self.0.map(|x| x * scalar))
     }
 }
 
-impl Mul<&MyComplex> for &PointComplex {
-    type Output = PointComplex;
+impl Mul<&MyComplex> for &Point<MyComplex> {
+    type Output = Point<MyComplex>;
 
-    fn mul(self, scalar: &MyComplex) -> PointComplex {
-        PointComplex(self.0.map(|x| x * scalar))
+    fn mul(self, scalar: &MyComplex) -> Point<MyComplex> {
+        Point(self.0.map(|x| x * scalar))
     }
 }
 
-impl Mul<f64> for PointComplex {
+impl Mul<MyFloat> for Point<MyComplex> {
+    type Output = Self;
+
+    fn mul(self, scalar: MyFloat) -> Self {
+        let scalar_complex = MyComplex::from_real(scalar);
+        self * scalar_complex
+    }
+}
+
+impl Mul<&MyFloat> for Point<MyComplex> {
+    type Output = Self;
+
+    fn mul(self, scalar: &MyFloat) -> Self {
+        let scalar_complex = MyComplex::from_real(scalar.clone());
+        self * scalar_complex
+    }
+}
+
+impl Mul<MyFloat> for &Point<MyComplex> {
+    type Output = Point<MyComplex>;
+
+    fn mul(self, scalar: MyFloat) -> Point<MyComplex> {
+        let scalar_complex = MyComplex::from_real(scalar);
+        self * scalar_complex
+    }
+}
+
+impl Mul<&MyFloat> for &Point<MyComplex> {
+    type Output = Point<MyComplex>;
+
+    fn mul(self, scalar: &MyFloat) -> Point<MyComplex> {
+        let scalar_complex = MyComplex::from_real(scalar.clone());
+        self * scalar_complex
+    }
+}
+
+impl Mul<Complex64> for Point<MyComplex> {
+    type Output = Self;
+
+    fn mul(self, scalar: Complex64) -> Self {
+        let scalar_complex = MyComplex::from_c64(scalar);
+        self * scalar_complex
+    }
+}
+
+impl Mul<&Complex64> for Point<MyComplex> {
+    type Output = Self;
+
+    fn mul(self, scalar: &Complex64) -> Self {
+        let scalar_complex = MyComplex::from_c64(*scalar);
+        self * scalar_complex
+    }
+}
+
+impl Mul<Complex64> for &Point<MyComplex> {
+    type Output = Point<MyComplex>;
+
+    fn mul(self, scalar: Complex64) -> Point<MyComplex> {
+        let scalar_complex = MyComplex::from_c64(scalar);
+        self * scalar_complex
+    }
+}
+
+impl Mul<&Complex64> for &Point<MyComplex> {
+    type Output = Point<MyComplex>;
+
+    fn mul(self, scalar: &Complex64) -> Point<MyComplex> {
+        let scalar_complex = MyComplex::from_c64(*scalar);
+        self * scalar_complex
+    }
+}
+
+impl Mul<f64> for Point<MyComplex> {
     type Output = Self;
 
     fn mul(self, scalar: f64) -> Self {
@@ -979,86 +1411,200 @@ impl Mul<f64> for PointComplex {
     }
 }
 
-impl Mul<f64> for &PointComplex {
-    type Output = PointComplex;
+impl Mul<&f64> for Point<MyComplex> {
+    type Output = Self;
 
-    fn mul(self, scalar: f64) -> PointComplex {
+    fn mul(self, scalar: &f64) -> Self {
+        let scalar_complex = MyComplex::from_real_f64(*scalar);
+        self * scalar_complex
+    }
+}
+
+impl Mul<f64> for &Point<MyComplex> {
+    type Output = Point<MyComplex>;
+
+    fn mul(self, scalar: f64) -> Point<MyComplex> {
         let scalar_complex = MyComplex::from_real_f64(scalar);
         self * scalar_complex
     }
 }
 
+impl Mul<&f64> for &Point<MyComplex> {
+    type Output = Point<MyComplex>;
+
+    fn mul(self, scalar: &f64) -> Point<MyComplex> {
+        let scalar_complex = MyComplex::from_real_f64(*scalar);
+        self * scalar_complex
+    }
+}
+
 // Division implementations
-impl Div for PointComplex {
+impl Div for Point<MyComplex> {
     type Output = Self;
 
     fn div(self, other: Self) -> Self {
         if self.shape() != other.shape() {
             panic!(
-                "PointComplex dimensions must match for element-wise division: {:?} vs {:?}",
+                "Point dimensions must match for element-wise division: {:?} vs {:?}",
                 self.shape(),
                 other.shape()
             );
         }
-        PointComplex(&self.0 / &other.0)
+        Point(&self.0 / &other.0)
     }
 }
 
-impl Div<&PointComplex> for PointComplex {
+impl Div<&Point<MyComplex>> for Point<MyComplex> {
     type Output = Self;
 
     fn div(self, other: &Self) -> Self {
         if self.shape() != other.shape() {
             panic!(
-                "PointComplex dimensions must match for element-wise division: {:?} vs {:?}",
+                "Point dimensions must match for element-wise division: {:?} vs {:?}",
                 self.shape(),
                 other.shape()
             );
         }
-        PointComplex(&self.0 / &other.0)
+        Point(&self.0 / &other.0)
     }
 }
 
-impl Div<PointComplex> for &PointComplex {
-    type Output = PointComplex;
+impl Div<Point<MyComplex>> for &Point<MyComplex> {
+    type Output = Point<MyComplex>;
 
-    fn div(self, other: PointComplex) -> PointComplex {
+    fn div(self, other: Point<MyComplex>) -> Point<MyComplex> {
         if self.shape() != other.shape() {
             panic!(
-                "PointComplex dimensions must match for element-wise division: {:?} vs {:?}",
+                "Point dimensions must match for element-wise division: {:?} vs {:?}",
                 self.shape(),
                 other.shape()
             );
         }
-        PointComplex(&self.0 / &other.0)
+        Point(&self.0 / &other.0)
     }
 }
 
-impl Div<&PointComplex> for &PointComplex {
-    type Output = PointComplex;
+impl Div<&Point<MyComplex>> for &Point<MyComplex> {
+    type Output = Point<MyComplex>;
 
-    fn div(self, other: &PointComplex) -> PointComplex {
+    fn div(self, other: &Point<MyComplex>) -> Point<MyComplex> {
         if self.shape() != other.shape() {
             panic!(
-                "PointComplex dimensions must match for element-wise division: {:?} vs {:?}",
+                "Point dimensions must match for element-wise division: {:?} vs {:?}",
                 self.shape(),
                 other.shape()
             );
         }
-        PointComplex(&self.0 / &other.0)
+        Point(&self.0 / &other.0)
     }
 }
 
 // Scalar division
-impl Div<MyComplex> for PointComplex {
+impl Div<MyComplex> for Point<MyComplex> {
     type Output = Self;
 
     fn div(self, scalar: MyComplex) -> Self {
-        PointComplex(self.0.map(|x| x / &scalar))
+        Point(self.0.map(|x| x / &scalar))
     }
 }
 
-impl Div<f64> for PointComplex {
+impl Div<MyComplex> for &Point<MyComplex> {
+    type Output = Point<MyComplex>;
+
+    fn div(self, scalar: MyComplex) -> Point<MyComplex> {
+        Point(self.0.map(|x| x / &scalar))
+    }
+}
+
+impl Div<&MyComplex> for Point<MyComplex> {
+    type Output = Self;
+
+    fn div(self, scalar: &MyComplex) -> Self {
+        Point(self.0.map(|x| x / scalar))
+    }
+}
+
+impl Div<&MyComplex> for &Point<MyComplex> {
+    type Output = Point<MyComplex>;
+
+    fn div(self, scalar: &MyComplex) -> Point<MyComplex> {
+        Point(self.0.map(|x| x / scalar))
+    }
+}
+
+impl Div<MyFloat> for Point<MyComplex> {
+    type Output = Self;
+
+    fn div(self, scalar: MyFloat) -> Self {
+        let scalar_complex = MyComplex::from_real(scalar);
+        self / scalar_complex
+    }
+}
+
+impl Div<&MyFloat> for Point<MyComplex> {
+    type Output = Self;
+
+    fn div(self, scalar: &MyFloat) -> Self {
+        let scalar_complex = MyComplex::from_real(scalar.clone());
+        self / scalar_complex
+    }
+}
+
+impl Div<MyFloat> for &Point<MyComplex> {
+    type Output = Point<MyComplex>;
+
+    fn div(self, scalar: MyFloat) -> Point<MyComplex> {
+        let scalar_complex = MyComplex::from_real(scalar);
+        self / scalar_complex
+    }
+}
+
+impl Div<&MyFloat> for &Point<MyComplex> {
+    type Output = Point<MyComplex>;
+
+    fn div(self, scalar: &MyFloat) -> Point<MyComplex> {
+        let scalar_complex = MyComplex::from_real(scalar.clone());
+        self / scalar_complex
+    }
+}
+
+impl Div<Complex64> for Point<MyComplex> {
+    type Output = Self;
+
+    fn div(self, scalar: Complex64) -> Self {
+        let scalar_complex = MyComplex::from_c64(scalar);
+        self / scalar_complex
+    }
+}
+
+impl Div<&Complex64> for Point<MyComplex> {
+    type Output = Self;
+
+    fn div(self, scalar: &Complex64) -> Self {
+        let scalar_complex = MyComplex::from_c64(*scalar);
+        self / scalar_complex
+    }
+}
+
+impl Div<Complex64> for &Point<MyComplex> {
+    type Output = Point<MyComplex>;
+
+    fn div(self, scalar: Complex64) -> Point<MyComplex> {
+        let scalar_complex = MyComplex::from_c64(scalar);
+        self / scalar_complex
+    }
+}
+
+impl Div<&Complex64> for &Point<MyComplex> {
+    type Output = Point<MyComplex>;
+
+    fn div(self, scalar: &Complex64) -> Point<MyComplex> {
+        let scalar_complex = MyComplex::from_c64(*scalar);
+        self / scalar_complex
+    }
+}
+
+impl Div<f64> for Point<MyComplex> {
     type Output = Self;
 
     fn div(self, scalar: f64) -> Self {
@@ -1067,29 +1613,56 @@ impl Div<f64> for PointComplex {
     }
 }
 
-// Negation
-impl Neg for PointComplex {
+impl Div<&f64> for Point<MyComplex> {
     type Output = Self;
 
-    fn neg(self) -> Self {
-        PointComplex(-self.0)
+    fn div(self, scalar: &f64) -> Self {
+        let scalar_complex = MyComplex::from_real_f64(*scalar);
+        self / scalar_complex
     }
 }
 
-impl Neg for &PointComplex {
-    type Output = PointComplex;
+impl Div<f64> for &Point<MyComplex> {
+    type Output = Point<MyComplex>;
 
-    fn neg(self) -> PointComplex {
-        PointComplex(-&self.0)
+    fn div(self, scalar: f64) -> Point<MyComplex> {
+        let scalar_complex = MyComplex::from_real_f64(scalar);
+        self / scalar_complex
+    }
+}
+
+impl Div<&f64> for &Point<MyComplex> {
+    type Output = Point<MyComplex>;
+
+    fn div(self, scalar: &f64) -> Point<MyComplex> {
+        let scalar_complex = MyComplex::from_real_f64(*scalar);
+        self / scalar_complex
+    }
+}
+
+// Negation
+impl Neg for Point<MyComplex> {
+    type Output = Self;
+
+    fn neg(self) -> Self {
+        Point(-self.0)
+    }
+}
+
+impl Neg for &Point<MyComplex> {
+    type Output = Point<MyComplex>;
+
+    fn neg(self) -> Point<MyComplex> {
+        Point(-&self.0)
     }
 }
 
 // Assignment operators
-impl AddAssign for PointComplex {
+impl AddAssign for Point<MyComplex> {
     fn add_assign(&mut self, other: Self) {
         if self.shape() != other.shape() {
             panic!(
-                "PointComplex dimensions must match for addition: {:?} vs {:?}",
+                "Point dimensions must match for addition: {:?} vs {:?}",
                 self.shape(),
                 other.shape()
             );
@@ -1098,11 +1671,11 @@ impl AddAssign for PointComplex {
     }
 }
 
-impl AddAssign<&PointComplex> for PointComplex {
-    fn add_assign(&mut self, other: &PointComplex) {
+impl AddAssign<&Point<MyComplex>> for Point<MyComplex> {
+    fn add_assign(&mut self, other: &Point<MyComplex>) {
         if self.shape() != other.shape() {
             panic!(
-                "PointComplex dimensions must match for addition: {:?} vs {:?}",
+                "Point dimensions must match for addition: {:?} vs {:?}",
                 self.shape(),
                 other.shape()
             );
@@ -1111,11 +1684,11 @@ impl AddAssign<&PointComplex> for PointComplex {
     }
 }
 
-impl SubAssign for PointComplex {
+impl SubAssign for Point<MyComplex> {
     fn sub_assign(&mut self, other: Self) {
         if self.shape() != other.shape() {
             panic!(
-                "PointComplex dimensions must match for subtraction: {:?} vs {:?}",
+                "Point dimensions must match for subtraction: {:?} vs {:?}",
                 self.shape(),
                 other.shape()
             );
@@ -1124,11 +1697,11 @@ impl SubAssign for PointComplex {
     }
 }
 
-impl SubAssign<&PointComplex> for PointComplex {
-    fn sub_assign(&mut self, other: &PointComplex) {
+impl SubAssign<&Point<MyComplex>> for Point<MyComplex> {
+    fn sub_assign(&mut self, other: &Point<MyComplex>) {
         if self.shape() != other.shape() {
             panic!(
-                "PointComplex dimensions must match for subtraction: {:?} vs {:?}",
+                "Point dimensions must match for subtraction: {:?} vs {:?}",
                 self.shape(),
                 other.shape()
             );
@@ -1137,11 +1710,11 @@ impl SubAssign<&PointComplex> for PointComplex {
     }
 }
 
-impl MulAssign for PointComplex {
+impl MulAssign for Point<MyComplex> {
     fn mul_assign(&mut self, other: Self) {
         if self.shape() != other.shape() {
             panic!(
-                "PointComplex dimensions must match for element-wise multiplication: {:?} vs {:?}",
+                "Point dimensions must match for element-wise multiplication: {:?} vs {:?}",
                 self.shape(),
                 other.shape()
             );
@@ -1150,11 +1723,11 @@ impl MulAssign for PointComplex {
     }
 }
 
-impl MulAssign<&PointComplex> for PointComplex {
-    fn mul_assign(&mut self, other: &PointComplex) {
+impl MulAssign<&Point<MyComplex>> for Point<MyComplex> {
+    fn mul_assign(&mut self, other: &Point<MyComplex>) {
         if self.shape() != other.shape() {
             panic!(
-                "PointComplex dimensions must match for element-wise multiplication: {:?} vs {:?}",
+                "Point dimensions must match for element-wise multiplication: {:?} vs {:?}",
                 self.shape(),
                 other.shape()
             );
@@ -1163,11 +1736,11 @@ impl MulAssign<&PointComplex> for PointComplex {
     }
 }
 
-impl DivAssign for PointComplex {
+impl DivAssign for Point<MyComplex> {
     fn div_assign(&mut self, other: Self) {
         if self.shape() != other.shape() {
             panic!(
-                "PointComplex dimensions must match for element-wise division: {:?} vs {:?}",
+                "Point dimensions must match for element-wise division: {:?} vs {:?}",
                 self.shape(),
                 other.shape()
             );
@@ -1176,11 +1749,11 @@ impl DivAssign for PointComplex {
     }
 }
 
-impl DivAssign<&PointComplex> for PointComplex {
-    fn div_assign(&mut self, other: &PointComplex) {
+impl DivAssign<&Point<MyComplex>> for Point<MyComplex> {
+    fn div_assign(&mut self, other: &Point<MyComplex>) {
         if self.shape() != other.shape() {
             panic!(
-                "PointComplex dimensions must match for element-wise division: {:?} vs {:?}",
+                "Point dimensions must match for element-wise division: {:?} vs {:?}",
                 self.shape(),
                 other.shape()
             );
@@ -1190,46 +1763,236 @@ impl DivAssign<&PointComplex> for PointComplex {
 }
 
 // Scalar assignment operators
-impl AddAssign<MyComplex> for PointComplex {
+impl AddAssign<MyComplex> for Point<MyComplex> {
     fn add_assign(&mut self, scalar: MyComplex) {
         self.0.map_inplace(|x| *x = &*x + &scalar);
     }
 }
 
-impl AddAssign<f64> for PointComplex {
+impl AddAssign<&MyComplex> for Point<MyComplex> {
+    fn add_assign(&mut self, scalar: &MyComplex) {
+        self.0.map_inplace(|x| *x = &*x + scalar);
+    }
+}
+
+impl AddAssign<MyFloat> for Point<MyComplex> {
+    fn add_assign(&mut self, scalar: MyFloat) {
+        let scalar_complex = MyComplex::from_real(scalar);
+        *self += scalar_complex;
+    }
+}
+
+impl AddAssign<&MyFloat> for Point<MyComplex> {
+    fn add_assign(&mut self, scalar: &MyFloat) {
+        let scalar_complex = MyComplex::from_real(scalar.clone());
+        *self += scalar_complex;
+    }
+}
+
+impl AddAssign<Complex64> for Point<MyComplex> {
+    fn add_assign(&mut self, scalar: Complex64) {
+        let scalar_complex = MyComplex::from_c64(scalar);
+        *self += scalar_complex;
+    }
+}
+
+impl AddAssign<&Complex64> for Point<MyComplex> {
+    fn add_assign(&mut self, scalar: &Complex64) {
+        let scalar_complex = MyComplex::from_c64(*scalar);
+        *self += scalar_complex;
+    }
+}
+
+impl AddAssign<f64> for Point<MyComplex> {
     fn add_assign(&mut self, scalar: f64) {
         let scalar_complex = MyComplex::from_real_f64(scalar);
         *self += scalar_complex;
     }
 }
 
-impl MulAssign<MyComplex> for PointComplex {
+impl AddAssign<&f64> for Point<MyComplex> {
+    fn add_assign(&mut self, scalar: &f64) {
+        let scalar_complex = MyComplex::from_real_f64(*scalar);
+        *self += scalar_complex;
+    }
+}
+
+impl SubAssign<MyComplex> for Point<MyComplex> {
+    fn sub_assign(&mut self, scalar: MyComplex) {
+        self.0.map_inplace(|x| *x = &*x - &scalar);
+    }
+}
+
+impl SubAssign<&MyComplex> for Point<MyComplex> {
+    fn sub_assign(&mut self, scalar: &MyComplex) {
+        self.0.map_inplace(|x| *x = &*x - scalar);
+    }
+}
+
+impl SubAssign<MyFloat> for Point<MyComplex> {
+    fn sub_assign(&mut self, scalar: MyFloat) {
+        let scalar_complex = MyComplex::from_real(scalar);
+        *self -= scalar_complex;
+    }
+}
+
+impl SubAssign<&MyFloat> for Point<MyComplex> {
+    fn sub_assign(&mut self, scalar: &MyFloat) {
+        let scalar_complex = MyComplex::from_real(scalar.clone());
+        *self -= scalar_complex;
+    }
+}
+
+impl SubAssign<Complex64> for Point<MyComplex> {
+    fn sub_assign(&mut self, scalar: Complex64) {
+        let scalar_complex = MyComplex::from_c64(scalar);
+        *self -= scalar_complex;
+    }
+}
+
+impl SubAssign<&Complex64> for Point<MyComplex> {
+    fn sub_assign(&mut self, scalar: &Complex64) {
+        let scalar_complex = MyComplex::from_c64(*scalar);
+        *self -= scalar_complex;
+    }
+}
+
+impl SubAssign<f64> for Point<MyComplex> {
+    fn sub_assign(&mut self, scalar: f64) {
+        let scalar_complex = MyComplex::from_real_f64(scalar);
+        *self -= scalar_complex;
+    }
+}
+
+impl SubAssign<&f64> for Point<MyComplex> {
+    fn sub_assign(&mut self, scalar: &f64) {
+        let scalar_complex = MyComplex::from_real_f64(*scalar);
+        *self -= scalar_complex;
+    }
+}
+
+impl MulAssign<MyComplex> for Point<MyComplex> {
     fn mul_assign(&mut self, scalar: MyComplex) {
         self.0.map_inplace(|x| *x = &*x * &scalar);
     }
 }
 
-impl MulAssign<f64> for PointComplex {
+impl MulAssign<&MyComplex> for Point<MyComplex> {
+    fn mul_assign(&mut self, scalar: &MyComplex) {
+        self.0.map_inplace(|x| *x = &*x * scalar);
+    }
+}
+
+impl MulAssign<MyFloat> for Point<MyComplex> {
+    fn mul_assign(&mut self, scalar: MyFloat) {
+        let scalar_complex = MyComplex::from_real(scalar);
+        *self *= scalar_complex;
+    }
+}
+
+impl MulAssign<&MyFloat> for Point<MyComplex> {
+    fn mul_assign(&mut self, scalar: &MyFloat) {
+        let scalar_complex = MyComplex::from_real(scalar.clone());
+        *self *= scalar_complex;
+    }
+}
+
+impl MulAssign<Complex64> for Point<MyComplex> {
+    fn mul_assign(&mut self, scalar: Complex64) {
+        let scalar_complex = MyComplex::from_c64(scalar);
+        *self *= scalar_complex;
+    }
+}
+
+impl MulAssign<&Complex64> for Point<MyComplex> {
+    fn mul_assign(&mut self, scalar: &Complex64) {
+        let scalar_complex = MyComplex::from_c64(*scalar);
+        *self *= scalar_complex;
+    }
+}
+
+impl MulAssign<f64> for Point<MyComplex> {
     fn mul_assign(&mut self, scalar: f64) {
         let scalar_complex = MyComplex::from_real_f64(scalar);
         *self *= scalar_complex;
     }
 }
 
+impl MulAssign<&f64> for Point<MyComplex> {
+    fn mul_assign(&mut self, scalar: &f64) {
+        let scalar_complex = MyComplex::from_real_f64(*scalar);
+        *self *= scalar_complex;
+    }
+}
+
+impl DivAssign<MyComplex> for Point<MyComplex> {
+    fn div_assign(&mut self, scalar: MyComplex) {
+        self.0.map_inplace(|x| *x = &*x / &scalar);
+    }
+}
+
+impl DivAssign<&MyComplex> for Point<MyComplex> {
+    fn div_assign(&mut self, scalar: &MyComplex) {
+        self.0.map_inplace(|x| *x = &*x / scalar);
+    }
+}
+
+impl DivAssign<MyFloat> for Point<MyComplex> {
+    fn div_assign(&mut self, scalar: MyFloat) {
+        let scalar_complex = MyComplex::from_real(scalar);
+        *self /= scalar_complex;
+    }
+}
+
+impl DivAssign<&MyFloat> for Point<MyComplex> {
+    fn div_assign(&mut self, scalar: &MyFloat) {
+        let scalar_complex = MyComplex::from_real(scalar.clone());
+        *self /= scalar_complex;
+    }
+}
+
+impl DivAssign<Complex64> for Point<MyComplex> {
+    fn div_assign(&mut self, scalar: Complex64) {
+        let scalar_complex = MyComplex::from_c64(scalar);
+        *self /= scalar_complex;
+    }
+}
+
+impl DivAssign<&Complex64> for Point<MyComplex> {
+    fn div_assign(&mut self, scalar: &Complex64) {
+        let scalar_complex = MyComplex::from_c64(*scalar);
+        *self /= scalar_complex;
+    }
+}
+
+impl DivAssign<f64> for Point<MyComplex> {
+    fn div_assign(&mut self, scalar: f64) {
+        let scalar_complex = MyComplex::from_real_f64(scalar);
+        *self /= scalar_complex;
+    }
+}
+
+impl DivAssign<&f64> for Point<MyComplex> {
+    fn div_assign(&mut self, scalar: &f64) {
+        let scalar_complex = MyComplex::from_real_f64(*scalar);
+        *self /= scalar_complex;
+    }
+}
+
 // Traits
-impl Clone for PointComplex {
+impl Clone for Point<MyComplex> {
     fn clone(&self) -> Self {
-        PointComplex(self.0.clone())
+        Point(self.0.clone())
     }
 }
 
-impl Default for PointComplex {
+impl Default for Point<MyComplex> {
     fn default() -> Self {
-        PointComplex::zeros((0, 0))
+        Point::zeros((0, 0))
     }
 }
 
-impl PartialEq for PointComplex {
+impl PartialEq for Point<MyComplex> {
     fn eq(&self, other: &Self) -> bool {
         if self.shape() != other.shape() {
             return false;
@@ -1239,9 +2002,9 @@ impl PartialEq for PointComplex {
     }
 }
 
-impl Zero for PointComplex {
+impl Zero for Point<MyComplex> {
     fn zero() -> Self {
-        PointComplex::zeros((0, 0))
+        Point::zeros((0, 0))
     }
 
     fn is_zero(&self) -> bool {
@@ -1250,7 +2013,7 @@ impl Zero for PointComplex {
 }
 
 // Display implementation
-impl fmt::Display for PointComplex {
+impl fmt::Display for Point<MyComplex> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.nrows() == 0 || self.ncols() == 0 {
             return write!(f, "[]");
@@ -1263,7 +2026,7 @@ impl fmt::Display for PointComplex {
                 if j > 0 {
                     write!(f, ", ")?;
                 }
-                write!(f, "{}", self[(i, j)])?;
+                write!(f, "{}", self[[i, j]])?;
             }
             if i < self.nrows() - 1 {
                 writeln!(f, "],")?;
@@ -1275,175 +2038,255 @@ impl fmt::Display for PointComplex {
     }
 }
 
-impl fmt::Debug for PointComplex {
+impl fmt::Debug for Point<MyComplex> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "PointComplex({}x{}) {}",
-            self.nrows(),
-            self.ncols(),
-            self
-        )
+        write!(f, "Point({}x{}) {}", self.nrows(), self.ncols(), self)
     }
 }
 
 // Conversion traits
-impl From<Array2<MyComplex>> for PointComplex {
+impl From<Array2<MyComplex>> for Point<MyComplex> {
     fn from(array: Array2<MyComplex>) -> Self {
-        PointComplex(array)
+        Point(array)
     }
 }
 
-impl From<ArrayView2<'_, MyComplex>> for PointComplex {
+impl From<ArrayView2<'_, MyComplex>> for Point<MyComplex> {
     fn from(array: ArrayView2<MyComplex>) -> Self {
-        PointComplex(array.to_owned())
+        Point(array.to_owned())
     }
 }
 
-impl From<PointComplex> for Array2<MyComplex> {
-    fn from(matrix: PointComplex) -> Self {
+impl From<Point<MyComplex>> for Array2<MyComplex> {
+    fn from(matrix: Point<MyComplex>) -> Self {
         matrix.0
     }
 }
 
-impl From<Vec<Vec<f64>>> for PointComplex {
-    fn from(data: Vec<Vec<f64>>) -> Self {
-        PointComplex::from_vec_f64(data).expect("Invalid matrix data")
+impl From<Vec<Vec<MyFloat>>> for Point<MyComplex> {
+    fn from(data: Vec<Vec<MyFloat>>) -> Self {
+        Point::<MyComplex>::from_vec_float(data).expect("Invalid matrix data")
     }
 }
 
-impl From<Vec<Vec<(f64, f64)>>> for PointComplex {
+impl From<Vec<Vec<(f64, f64)>>> for Point<MyComplex> {
     fn from(data: Vec<Vec<(f64, f64)>>) -> Self {
-        PointComplex::from_vec_complex(data).expect("Invalid matrix data")
+        Point::<MyComplex>::from_vec_c64(data).expect("Invalid matrix data")
     }
 }
 
-impl From<Point> for PointComplex {
-    fn from(point: Point) -> Self {
-        PointComplex::from_shape_fn(point.dim(), |(j, k)| point[[j, k]].into())
+impl From<Vec<Vec<(MyFloat, MyFloat)>>> for Point<MyComplex> {
+    fn from(data: Vec<Vec<(MyFloat, MyFloat)>>) -> Self {
+        Point::<MyComplex>::from_vec_complex(data).expect("Invalid matrix data")
     }
 }
 
-impl From<&Point> for PointComplex {
-    fn from(point: &Point) -> Self {
-        PointComplex::from_shape_fn(point.dim(), |(j, k)| point[[j, k]].into())
+impl From<Point<Complex64>> for Point<MyComplex> {
+    fn from(point: Point<Complex64>) -> Self {
+        Point::from_shape_fn(point.dim(), |(j, k)| point[[j, k]].into())
+    }
+}
+
+impl From<&Point<Complex64>> for Point<MyComplex> {
+    fn from(point: &Point<Complex64>) -> Self {
+        Point::from_shape_fn(point.dim(), |(j, k)| point[[j, k]].into())
+    }
+}
+
+impl From<&Point<MyComplex>> for Point<MyComplex> {
+    fn from(point: &Point<MyComplex>) -> Self {
+        point.clone()
     }
 }
 
 #[cfg(test)]
-mod tests {
+mod point_mycomplex_tests {
     use super::*;
     use float_cmp::*;
 
     #[test]
     fn test_creation() {
-        let zeros = PointComplex::zeros((2, 3));
+        let zeros = Point::<MyComplex>::zeros((2, 3));
         assert_eq!(zeros.shape(), (2, 3));
-        assert!(zeros[(0, 0)].is_zero());
-        assert!(zeros[(1, 2)].is_zero());
+        assert!(zeros[[0, 0]].is_zero());
+        assert!(zeros[[1, 2]].is_zero());
 
-        let ones = PointComplex::ones((3, 2));
+        let ones = Point::<MyComplex>::ones((3, 2));
         assert_eq!(ones.shape(), (3, 2));
-        assert!(ones[(0, 0)].is_one());
-        assert!(ones[(2, 1)].is_one());
+        assert!(ones[[0, 0]].is_one());
+        assert!(ones[[2, 1]].is_one());
 
-        let eye = PointComplex::eye(3);
+        let eye = Point::<MyComplex>::eye(3);
         assert_eq!(eye.shape(), (3, 3));
-        assert!(eye[(0, 0)].is_one());
-        assert!(eye[(1, 1)].is_one());
-        assert!(eye[(2, 2)].is_one());
-        assert!(eye[(0, 1)].is_zero());
-        assert!(eye[(1, 0)].is_zero());
+        assert!(eye[[0, 0]].is_one());
+        assert!(eye[[1, 1]].is_one());
+        assert!(eye[[2, 2]].is_one());
+        assert!(eye[[0, 1]].is_zero());
+        assert!(eye[[1, 0]].is_zero());
+    }
+
+    #[test]
+    fn test_from_vec() {
+        let data: Vec<Vec<MyComplex>> = vec![
+            vec![1.0.into(), 2.0.into(), 3.0.into()],
+            vec![4.0.into(), 5.0.into(), 6.0.into()],
+        ];
+        let matrix = Point::<MyComplex>::from_vec(data).unwrap();
+
+        assert_eq!(matrix.shape(), (2, 3));
+        assert_eq!(matrix[[0, 0]].real().to_f64(), 1.0);
+        assert_eq!(matrix[[0, 1]].real().to_f64(), 2.0);
+        assert_eq!(matrix[[0, 2]].real().to_f64(), 3.0);
+        assert_eq!(matrix[[1, 0]].real().to_f64(), 4.0);
+        assert_eq!(matrix[[1, 1]].real().to_f64(), 5.0);
+        assert_eq!(matrix[[1, 2]].real().to_f64(), 6.0);
     }
 
     #[test]
     fn test_from_vec_f64() {
-        let data = vec![vec![1.0, 2.0, 3.0], vec![4.0, 5.0, 6.0]];
-        let matrix = PointComplex::from_vec_f64(data).unwrap();
+        let data: Vec<Vec<f64>> = vec![vec![1.0, 2.0, 3.0], vec![4.0, 5.0, 6.0]];
+        let matrix = Point::<MyComplex>::from_vec_f64(data).unwrap();
 
         assert_eq!(matrix.shape(), (2, 3));
-        assert_eq!(matrix[(0, 0)].real().to_f64(), 1.0);
-        assert_eq!(matrix[(0, 1)].real().to_f64(), 2.0);
-        assert_eq!(matrix[(0, 2)].real().to_f64(), 3.0);
-        assert_eq!(matrix[(1, 0)].real().to_f64(), 4.0);
-        assert_eq!(matrix[(1, 1)].real().to_f64(), 5.0);
-        assert_eq!(matrix[(1, 2)].real().to_f64(), 6.0);
+        assert_eq!(matrix[[0, 0]].real().to_f64(), 1.0);
+        assert_eq!(matrix[[0, 1]].real().to_f64(), 2.0);
+        assert_eq!(matrix[[0, 2]].real().to_f64(), 3.0);
+        assert_eq!(matrix[[1, 0]].real().to_f64(), 4.0);
+        assert_eq!(matrix[[1, 1]].real().to_f64(), 5.0);
+        assert_eq!(matrix[[1, 2]].real().to_f64(), 6.0);
+    }
+
+    #[test]
+    fn test_from_vec_float() {
+        let data: Vec<Vec<MyFloat>> = vec![
+            vec![1.0.into(), 2.0.into(), 3.0.into()],
+            vec![4.0.into(), 5.0.into(), 6.0.into()],
+        ];
+        let matrix = Point::<MyComplex>::from_vec_float(data).unwrap();
+
+        assert_eq!(matrix.shape(), (2, 3));
+        assert_eq!(matrix[[0, 0]].real().to_f64(), 1.0);
+        assert_eq!(matrix[[0, 1]].real().to_f64(), 2.0);
+        assert_eq!(matrix[[0, 2]].real().to_f64(), 3.0);
+        assert_eq!(matrix[[1, 0]].real().to_f64(), 4.0);
+        assert_eq!(matrix[[1, 1]].real().to_f64(), 5.0);
+        assert_eq!(matrix[[1, 2]].real().to_f64(), 6.0);
+    }
+
+    #[test]
+    fn test_from_vec_c64() {
+        let data = vec![vec![(1.0, 2.0), (3.0, 4.0)], vec![(5.0, 6.0), (7.0, 8.0)]];
+        let matrix = Point::<MyComplex>::from_vec_c64(data).unwrap();
+
+        assert_eq!(matrix.shape(), (2, 2));
+        assert_eq!(matrix[[0, 0]].real().to_f64(), 1.0);
+        assert_eq!(matrix[[0, 0]].imag().to_f64(), 2.0);
+        assert_eq!(matrix[[1, 1]].real().to_f64(), 7.0);
+        assert_eq!(matrix[[1, 1]].imag().to_f64(), 8.0);
     }
 
     #[test]
     fn test_from_vec_complex() {
-        let data = vec![vec![(1.0, 2.0), (3.0, 4.0)], vec![(5.0, 6.0), (7.0, 8.0)]];
-        let matrix = PointComplex::from_vec_complex(data).unwrap();
+        let data = vec![
+            vec![
+                (MyFloat::new(1.0), MyFloat::new(2.0)),
+                (MyFloat::new(3.0), MyFloat::new(4.0)),
+            ],
+            vec![
+                (MyFloat::new(5.0), MyFloat::new(6.0)),
+                (MyFloat::new(7.0), MyFloat::new(8.0)),
+            ],
+        ];
+        let matrix = Point::<MyComplex>::from_vec_complex(data).unwrap();
 
         assert_eq!(matrix.shape(), (2, 2));
-        assert_eq!(matrix[(0, 0)].real().to_f64(), 1.0);
-        assert_eq!(matrix[(0, 0)].imag().to_f64(), 2.0);
-        assert_eq!(matrix[(1, 1)].real().to_f64(), 7.0);
-        assert_eq!(matrix[(1, 1)].imag().to_f64(), 8.0);
+        assert_eq!(matrix[[0, 0]].real().to_f64(), 1.0);
+        assert_eq!(matrix[[0, 0]].imag().to_f64(), 2.0);
+        assert_eq!(matrix[[1, 1]].real().to_f64(), 7.0);
+        assert_eq!(matrix[[1, 1]].imag().to_f64(), 8.0);
     }
 
     #[test]
     fn test_arithmetic() {
-        let a = PointComplex::from_vec_f64(vec![vec![1.0, 2.0], vec![3.0, 4.0]]).unwrap();
+        let a = Point::<MyComplex>::from_vec_float(vec![
+            vec![1.0.into(), 2.0.into()],
+            vec![3.0.into(), 4.0.into()],
+        ])
+        .unwrap();
 
-        let b = PointComplex::from_vec_f64(vec![vec![5.0, 6.0], vec![7.0, 8.0]]).unwrap();
+        let b = Point::<MyComplex>::from_vec_float(vec![
+            vec![5.0.into(), 6.0.into()],
+            vec![7.0.into(), 8.0.into()],
+        ])
+        .unwrap();
 
         // Addition
         let sum = &a + &b;
-        assert_eq!(sum[(0, 0)].real().to_f64(), 6.0);
-        assert_eq!(sum[(0, 1)].real().to_f64(), 8.0);
-        assert_eq!(sum[(1, 0)].real().to_f64(), 10.0);
-        assert_eq!(sum[(1, 1)].real().to_f64(), 12.0);
+        assert_eq!(sum[[0, 0]].real().to_f64(), 6.0);
+        assert_eq!(sum[[0, 1]].real().to_f64(), 8.0);
+        assert_eq!(sum[[1, 0]].real().to_f64(), 10.0);
+        assert_eq!(sum[[1, 1]].real().to_f64(), 12.0);
 
         // Subtraction
         let diff = &b - &a;
-        assert_eq!(diff[(0, 0)].real().to_f64(), 4.0);
-        assert_eq!(diff[(0, 1)].real().to_f64(), 4.0);
-        assert_eq!(diff[(1, 0)].real().to_f64(), 4.0);
-        assert_eq!(diff[(1, 1)].real().to_f64(), 4.0);
+        assert_eq!(diff[[0, 0]].real().to_f64(), 4.0);
+        assert_eq!(diff[[0, 1]].real().to_f64(), 4.0);
+        assert_eq!(diff[[1, 0]].real().to_f64(), 4.0);
+        assert_eq!(diff[[1, 1]].real().to_f64(), 4.0);
 
         // Element-wise multiplication
         let prod = &a * &b;
-        assert_eq!(prod[(0, 0)].real().to_f64(), 5.0);
-        assert_eq!(prod[(0, 1)].real().to_f64(), 12.0);
-        assert_eq!(prod[(1, 0)].real().to_f64(), 21.0);
-        assert_eq!(prod[(1, 1)].real().to_f64(), 32.0);
+        assert_eq!(prod[[0, 0]].real().to_f64(), 5.0);
+        assert_eq!(prod[[0, 1]].real().to_f64(), 12.0);
+        assert_eq!(prod[[1, 0]].real().to_f64(), 21.0);
+        assert_eq!(prod[[1, 1]].real().to_f64(), 32.0);
     }
 
     #[test]
     fn test_matrix_multiplication() {
-        let a = PointComplex::from_vec_f64(vec![vec![1.0, 2.0], vec![3.0, 4.0]]).unwrap();
+        let a = Point::<MyComplex>::from_vec_float(vec![
+            vec![1.0.into(), 2.0.into()],
+            vec![3.0.into(), 4.0.into()],
+        ])
+        .unwrap();
 
-        let b = PointComplex::from_vec_f64(vec![vec![5.0, 6.0], vec![7.0, 8.0]]).unwrap();
+        let b = Point::<MyComplex>::from_vec_float(vec![
+            vec![5.0.into(), 6.0.into()],
+            vec![7.0.into(), 8.0.into()],
+        ])
+        .unwrap();
 
         let result = a.dot(&b);
 
         // Expected: [1*5+2*7, 1*6+2*8] = [19, 22]
         //           [3*5+4*7, 3*6+4*8] = [43, 50]
-        assert_eq!(result[(0, 0)].real().to_f64(), 19.0);
-        assert_eq!(result[(0, 1)].real().to_f64(), 22.0);
-        assert_eq!(result[(1, 0)].real().to_f64(), 43.0);
-        assert_eq!(result[(1, 1)].real().to_f64(), 50.0);
+        assert_eq!(result[[0, 0]].real().to_f64(), 19.0);
+        assert_eq!(result[[0, 1]].real().to_f64(), 22.0);
+        assert_eq!(result[[1, 0]].real().to_f64(), 43.0);
+        assert_eq!(result[[1, 1]].real().to_f64(), 50.0);
     }
 
     #[test]
     fn test_transpose() {
-        let matrix =
-            PointComplex::from_vec_f64(vec![vec![1.0, 2.0, 3.0], vec![4.0, 5.0, 6.0]]).unwrap();
+        let matrix = Point::<MyComplex>::from_vec_float(vec![
+            vec![1.0.into(), 2.0.into(), 3.0.into()],
+            vec![4.0.into(), 5.0.into(), 6.0.into()],
+        ])
+        .unwrap();
 
         let transposed = matrix.transpose();
         assert_eq!(transposed.shape(), (3, 2));
-        assert_eq!(transposed[(0, 0)].real().to_f64(), 1.0);
-        assert_eq!(transposed[(0, 1)].real().to_f64(), 4.0);
-        assert_eq!(transposed[(1, 0)].real().to_f64(), 2.0);
-        assert_eq!(transposed[(1, 1)].real().to_f64(), 5.0);
-        assert_eq!(transposed[(2, 0)].real().to_f64(), 3.0);
-        assert_eq!(transposed[(2, 1)].real().to_f64(), 6.0);
+        assert_eq!(transposed[[0, 0]].real().to_f64(), 1.0);
+        assert_eq!(transposed[[0, 1]].real().to_f64(), 4.0);
+        assert_eq!(transposed[[1, 0]].real().to_f64(), 2.0);
+        assert_eq!(transposed[[1, 1]].real().to_f64(), 5.0);
+        assert_eq!(transposed[[2, 0]].real().to_f64(), 3.0);
+        assert_eq!(transposed[[2, 1]].real().to_f64(), 6.0);
     }
 
     #[test]
     fn test_conjugate_transpose() {
-        let matrix = PointComplex::from_vec_complex(vec![
+        let matrix = Point::<MyComplex>::from_vec_c64(vec![
             vec![(1.0, 2.0), (3.0, 4.0)],
             vec![(5.0, 6.0), (7.0, 8.0)],
         ])
@@ -1454,22 +2297,22 @@ mod tests {
 
         // Original: [(1+2i, 3+4i), (5+6i, 7+8i)]
         // Conj transpose: [(1-2i, 5-6i), (3-4i, 7-8i)]
-        assert_eq!(conj_t[(0, 0)].real().to_f64(), 1.0);
-        assert_eq!(conj_t[(0, 0)].imag().to_f64(), -2.0);
-        assert_eq!(conj_t[(0, 1)].real().to_f64(), 5.0);
-        assert_eq!(conj_t[(0, 1)].imag().to_f64(), -6.0);
-        assert_eq!(conj_t[(1, 0)].real().to_f64(), 3.0);
-        assert_eq!(conj_t[(1, 0)].imag().to_f64(), -4.0);
-        assert_eq!(conj_t[(1, 1)].real().to_f64(), 7.0);
-        assert_eq!(conj_t[(1, 1)].imag().to_f64(), -8.0);
+        assert_eq!(conj_t[[0, 0]].real().to_f64(), 1.0);
+        assert_eq!(conj_t[[0, 0]].imag().to_f64(), -2.0);
+        assert_eq!(conj_t[[0, 1]].real().to_f64(), 5.0);
+        assert_eq!(conj_t[[0, 1]].imag().to_f64(), -6.0);
+        assert_eq!(conj_t[[1, 0]].real().to_f64(), 3.0);
+        assert_eq!(conj_t[[1, 0]].imag().to_f64(), -4.0);
+        assert_eq!(conj_t[[1, 1]].real().to_f64(), 7.0);
+        assert_eq!(conj_t[[1, 1]].imag().to_f64(), -8.0);
     }
 
     #[test]
     fn test_trace() {
-        let matrix = PointComplex::from_vec_f64(vec![
-            vec![1.0, 2.0, 3.0],
-            vec![4.0, 5.0, 6.0],
-            vec![7.0, 8.0, 9.0],
+        let matrix = Point::<MyComplex>::from_vec_float(vec![
+            vec![1.0.into(), 2.0.into(), 3.0.into()],
+            vec![4.0.into(), 5.0.into(), 6.0.into()],
+            vec![7.0.into(), 8.0.into(), 9.0.into()],
         ])
         .unwrap();
 
@@ -1481,16 +2324,20 @@ mod tests {
     #[test]
     fn test_determinant() {
         // Test 2x2 determinant
-        let matrix2x2 = PointComplex::from_vec_f64(vec![vec![1.0, 2.0], vec![3.0, 4.0]]).unwrap();
+        let matrix2x2 = Point::<MyComplex>::from_vec_float(vec![
+            vec![1.0.into(), 2.0.into()],
+            vec![3.0.into(), 4.0.into()],
+        ])
+        .unwrap();
 
         let det2 = matrix2x2.det();
         assert_eq!(det2.real().to_f64(), -2.0); // 1*4 - 2*3 = -2
 
         // Test 3x3 determinant
-        let matrix3x3 = PointComplex::from_vec_f64(vec![
-            vec![1.0, 2.0, 3.0],
-            vec![0.0, 1.0, 4.0],
-            vec![5.0, 6.0, 0.0],
+        let matrix3x3 = Point::<MyComplex>::from_vec_float(vec![
+            vec![1.0.into(), 2.0.into(), 3.0.into()],
+            vec![0.0.into(), 1.0.into(), 4.0.into()],
+            vec![5.0.into(), 6.0.into(), 0.0.into()],
         ])
         .unwrap();
 
@@ -1500,73 +2347,91 @@ mod tests {
 
     #[test]
     fn test_scalar_operations() {
-        let matrix = PointComplex::from_vec_f64(vec![vec![1.0, 2.0], vec![3.0, 4.0]]).unwrap();
+        let matrix = Point::<MyComplex>::from_vec_float(vec![
+            vec![1.0.into(), 2.0.into()],
+            vec![3.0.into(), 4.0.into()],
+        ])
+        .unwrap();
 
         // Scalar addition
         let added = &matrix + 5.0;
-        assert_eq!(added[(0, 0)].real().to_f64(), 6.0);
-        assert_eq!(added[(1, 1)].real().to_f64(), 9.0);
+        assert_eq!(added[[0, 0]].real().to_f64(), 6.0);
+        assert_eq!(added[[1, 1]].real().to_f64(), 9.0);
 
         // Scalar multiplication
         let multiplied = &matrix * 2.0;
-        assert_eq!(multiplied[(0, 0)].real().to_f64(), 2.0);
-        assert_eq!(multiplied[(0, 1)].real().to_f64(), 4.0);
-        assert_eq!(multiplied[(1, 0)].real().to_f64(), 6.0);
-        assert_eq!(multiplied[(1, 1)].real().to_f64(), 8.0);
+        assert_eq!(multiplied[[0, 0]].real().to_f64(), 2.0);
+        assert_eq!(multiplied[[0, 1]].real().to_f64(), 4.0);
+        assert_eq!(multiplied[[1, 0]].real().to_f64(), 6.0);
+        assert_eq!(multiplied[[1, 1]].real().to_f64(), 8.0);
     }
 
     #[test]
     fn test_assignment_operators() {
-        let mut matrix = PointComplex::from_vec_f64(vec![vec![1.0, 2.0], vec![3.0, 4.0]]).unwrap();
+        let mut matrix = Point::<MyComplex>::from_vec_float(vec![
+            vec![1.0.into(), 2.0.into()],
+            vec![3.0.into(), 4.0.into()],
+        ])
+        .unwrap();
 
-        let other = PointComplex::from_vec_f64(vec![vec![5.0, 6.0], vec![7.0, 8.0]]).unwrap();
+        let other = Point::<MyComplex>::from_vec_float(vec![
+            vec![5.0.into(), 6.0.into()],
+            vec![7.0.into(), 8.0.into()],
+        ])
+        .unwrap();
 
         // Test AddAssign
         matrix += &other;
-        assert_eq!(matrix[(0, 0)].real().to_f64(), 6.0);
-        assert_eq!(matrix[(1, 1)].real().to_f64(), 12.0);
+        assert_eq!(matrix[[0, 0]].real().to_f64(), 6.0);
+        assert_eq!(matrix[[1, 1]].real().to_f64(), 12.0);
 
         // Test MulAssign with scalar
         matrix *= 2.0;
-        assert_eq!(matrix[(0, 0)].real().to_f64(), 12.0);
-        assert_eq!(matrix[(1, 1)].real().to_f64(), 24.0);
+        assert_eq!(matrix[[0, 0]].real().to_f64(), 12.0);
+        assert_eq!(matrix[[1, 1]].real().to_f64(), 24.0);
     }
 
     #[test]
     fn test_row_col_operations() {
-        let matrix = PointComplex::from_vec_f64(vec![
-            vec![1.0, 2.0, 3.0],
-            vec![4.0, 5.0, 6.0],
-            vec![7.0, 8.0, 9.0],
+        let matrix = Point::<MyComplex>::from_vec_float(vec![
+            vec![1.0.into(), 2.0.into(), 3.0.into()],
+            vec![4.0.into(), 5.0.into(), 6.0.into()],
+            vec![7.0.into(), 8.0.into(), 9.0.into()],
         ])
         .unwrap();
 
         // Test getting a row
         let row1 = matrix.row(1);
         assert_eq!(row1.shape(), (1, 3));
-        assert_eq!(row1[(0, 0)].real().to_f64(), 4.0);
-        assert_eq!(row1[(0, 1)].real().to_f64(), 5.0);
-        assert_eq!(row1[(0, 2)].real().to_f64(), 6.0);
+        assert_eq!(row1[[0, 0]].real().to_f64(), 4.0);
+        assert_eq!(row1[[0, 1]].real().to_f64(), 5.0);
+        assert_eq!(row1[[0, 2]].real().to_f64(), 6.0);
 
         // Test getting a column
         let col2 = matrix.col(2);
         assert_eq!(col2.shape(), (3, 1));
-        assert_eq!(col2[(0, 0)].real().to_f64(), 3.0);
-        assert_eq!(col2[(1, 0)].real().to_f64(), 6.0);
-        assert_eq!(col2[(2, 0)].real().to_f64(), 9.0);
+        assert_eq!(col2[[0, 0]].real().to_f64(), 3.0);
+        assert_eq!(col2[[1, 0]].real().to_f64(), 6.0);
+        assert_eq!(col2[[2, 0]].real().to_f64(), 9.0);
 
         // Test setting a row
         let mut matrix_mut = matrix.clone();
-        let new_row = PointComplex::from_vec_f64(vec![vec![10.0, 11.0, 12.0]]).unwrap();
+        let new_row =
+            Point::<MyComplex>::from_vec_float(vec![vec![10.0.into(), 11.0.into(), 12.0.into()]])
+                .unwrap();
         matrix_mut.set_row(0, &new_row);
-        assert_eq!(matrix_mut[(0, 0)].real().to_f64(), 10.0);
-        assert_eq!(matrix_mut[(0, 1)].real().to_f64(), 11.0);
-        assert_eq!(matrix_mut[(0, 2)].real().to_f64(), 12.0);
+        assert_eq!(matrix_mut[[0, 0]].real().to_f64(), 10.0);
+        assert_eq!(matrix_mut[[0, 1]].real().to_f64(), 11.0);
+        assert_eq!(matrix_mut[[0, 2]].real().to_f64(), 12.0);
     }
 
     #[test]
     fn test_frobenius_norm() {
-        let matrix = PointComplex::from_vec_f64(vec![vec![3.0, 4.0], vec![0.0, 0.0]]).unwrap();
+        let matrix = Point::<MyComplex>::from_vec_float(vec![
+            vec![3.0.into(), 4.0.into()],
+            vec![0.0.into(), 0.0.into()],
+        ])
+        .unwrap();
 
         let norm = matrix.frobenius_norm();
         assert!((norm.to_f64() - 5.0).abs() < 1e-10); // sqrt(3^2 + 4^2) = 5
@@ -1574,31 +2439,39 @@ mod tests {
 
     #[test]
     fn test_map_functions() {
-        let matrix = PointComplex::from_vec_f64(vec![vec![1.0, 2.0], vec![3.0, 4.0]]).unwrap();
+        let matrix = Point::<MyComplex>::from_vec_float(vec![
+            vec![1.0.into(), 2.0.into()],
+            vec![3.0.into(), 4.0.into()],
+        ])
+        .unwrap();
 
         // Test map (immutable)
         let squared = matrix.map(|x| x * x);
-        assert_eq!(squared[(0, 0)].real().to_f64(), 1.0);
-        assert_eq!(squared[(0, 1)].real().to_f64(), 4.0);
-        assert_eq!(squared[(1, 0)].real().to_f64(), 9.0);
-        assert_eq!(squared[(1, 1)].real().to_f64(), 16.0);
+        assert_eq!(squared[[0, 0]].real().to_f64(), 1.0);
+        assert_eq!(squared[[0, 1]].real().to_f64(), 4.0);
+        assert_eq!(squared[[1, 0]].real().to_f64(), 9.0);
+        assert_eq!(squared[[1, 1]].real().to_f64(), 16.0);
 
         // Original should be unchanged
-        assert_eq!(matrix[(0, 0)].real().to_f64(), 1.0);
-        assert_eq!(matrix[(1, 1)].real().to_f64(), 4.0);
+        assert_eq!(matrix[[0, 0]].real().to_f64(), 1.0);
+        assert_eq!(matrix[[1, 1]].real().to_f64(), 4.0);
 
         // Test map_inplace (mutable)
         let mut matrix_mut = matrix.clone();
         matrix_mut.map_inplace(|x| x * &MyComplex::from_real_f64(2.0));
-        assert_eq!(matrix_mut[(0, 0)].real().to_f64(), 2.0);
-        assert_eq!(matrix_mut[(0, 1)].real().to_f64(), 4.0);
-        assert_eq!(matrix_mut[(1, 0)].real().to_f64(), 6.0);
-        assert_eq!(matrix_mut[(1, 1)].real().to_f64(), 8.0);
+        assert_eq!(matrix_mut[[0, 0]].real().to_f64(), 2.0);
+        assert_eq!(matrix_mut[[0, 1]].real().to_f64(), 4.0);
+        assert_eq!(matrix_mut[[1, 0]].real().to_f64(), 6.0);
+        assert_eq!(matrix_mut[[1, 1]].real().to_f64(), 8.0);
     }
 
     #[test]
     fn test_display() {
-        let matrix = PointComplex::from_vec_f64(vec![vec![1.0, 2.0], vec![3.0, 4.0]]).unwrap();
+        let matrix = Point::<MyComplex>::from_vec_float(vec![
+            vec![1.0.into(), 2.0.into()],
+            vec![3.0.into(), 4.0.into()],
+        ])
+        .unwrap();
 
         let display_str = format!("{}", matrix);
         assert!(display_str.contains("1"));
@@ -1609,11 +2482,23 @@ mod tests {
 
     #[test]
     fn test_equality() {
-        let matrix1 = PointComplex::from_vec_f64(vec![vec![1.0, 2.0], vec![3.0, 4.0]]).unwrap();
+        let matrix1 = Point::<MyComplex>::from_vec_float(vec![
+            vec![1.0.into(), 2.0.into()],
+            vec![3.0.into(), 4.0.into()],
+        ])
+        .unwrap();
 
-        let matrix2 = PointComplex::from_vec_f64(vec![vec![1.0, 2.0], vec![3.0, 4.0]]).unwrap();
+        let matrix2 = Point::<MyComplex>::from_vec_float(vec![
+            vec![1.0.into(), 2.0.into()],
+            vec![3.0.into(), 4.0.into()],
+        ])
+        .unwrap();
 
-        let matrix3 = PointComplex::from_vec_f64(vec![vec![1.0, 2.0], vec![3.0, 5.0]]).unwrap();
+        let matrix3 = Point::<MyComplex>::from_vec_float(vec![
+            vec![1.0.into(), 2.0.into()],
+            vec![3.0.into(), 5.0.into()],
+        ])
+        .unwrap();
 
         assert_eq!(matrix1, matrix2);
         assert_ne!(matrix1, matrix3);
@@ -1622,8 +2507,8 @@ mod tests {
     #[test]
     fn test_error_cases() {
         // Test mismatched dimensions for addition
-        let matrix1 = PointComplex::zeros((2, 4));
-        let matrix2 = PointComplex::zeros((3, 2));
+        let matrix1 = Point::<MyComplex>::zeros((2, 4));
+        let matrix2 = Point::<MyComplex>::zeros((3, 2));
 
         std::panic::catch_unwind(|| {
             let _ = &matrix1 + &matrix2;
@@ -1645,17 +2530,18 @@ mod tests {
 
     #[test]
     fn test_conversions() {
-        let data = vec![vec![1.0, 2.0], vec![3.0, 4.0]];
+        let data: Vec<Vec<MyFloat>> =
+            vec![vec![1.0.into(), 2.0.into()], vec![3.0.into(), 4.0.into()]];
 
         // Test From<Vec<Vec<f64>>>
-        let matrix: PointComplex = data.into();
-        assert_eq!(matrix[(0, 0)].real().to_f64(), 1.0);
-        assert_eq!(matrix[(1, 1)].real().to_f64(), 4.0);
+        let matrix: Point<MyComplex> = data.into();
+        assert_eq!(matrix[[0, 0]].real().to_f64(), 1.0);
+        assert_eq!(matrix[[1, 1]].real().to_f64(), 4.0);
 
         // Test conversion to Array2
         let array: Array2<MyComplex> = matrix.into();
-        assert_eq!(array[(0, 0)].real().to_f64(), 1.0);
-        assert_eq!(array[(1, 1)].real().to_f64(), 4.0);
+        assert_eq!(array[[0, 0]].real().to_f64(), 1.0);
+        assert_eq!(array[[1, 1]].real().to_f64(), 4.0);
     }
 
     #[test]
@@ -1664,7 +2550,7 @@ mod tests {
         // A = [1 2]  =>  A^(-1) = [-2  1]
         //     [3 4]               [1.5 -0.5]
 
-        let matrix = PointComplex::from_shape_vec(
+        let matrix = Point::from_shape_vec(
             (2, 2),
             vec![
                 MyComplex::from_f64(1.0, 0.0),
@@ -1705,19 +2591,15 @@ mod tests {
 
         // Verify A * A^(-1) = I
         let product = &matrix.dot(&inverse);
-        let identity = PointComplex::eye(2);
+        let identity = Point::eye(2);
 
-        assert!(PointComplex::approx_eq(
-            &product.view(),
-            &identity.view(),
-            1e-10
-        ));
+        assert!(Point::approx_eq(&product.view(), &identity.view(), 1e-10));
     }
 
     #[test]
     fn test_complex_matrix_inversion() {
         // Test with complex numbers
-        let matrix = PointComplex::from_shape_vec(
+        let matrix = Point::from_shape_vec(
             (2, 2),
             vec![
                 MyComplex::from_f64(1.0, 1.0),
@@ -1732,19 +2614,15 @@ mod tests {
 
         // Verify A * A^(-1) = I
         let product = matrix.dot(&inverse);
-        let identity = PointComplex::eye(2);
+        let identity = Point::eye(2);
 
-        assert!(PointComplex::approx_eq(
-            &product.view(),
-            &identity.view(),
-            1e-10
-        ));
+        assert!(Point::approx_eq(&product.view(), &identity.view(), 1e-10));
     }
 
     #[test]
     fn test_3x3_matrix_inversion() {
         // Test with a 3x3 matrix
-        let matrix = PointComplex::from_shape_vec(
+        let matrix = Point::from_shape_vec(
             (3, 3),
             vec![
                 MyComplex::from_f64(2.0, 0.0),
@@ -1764,19 +2642,15 @@ mod tests {
 
         // Verify A * A^(-1) = I
         let product = matrix.dot(&inverse);
-        let identity = PointComplex::eye(3);
+        let identity = Point::eye(3);
 
-        assert!(PointComplex::approx_eq(
-            &product.view(),
-            &identity.view(),
-            1e-10
-        ));
+        assert!(Point::approx_eq(&product.view(), &identity.view(), 1e-10));
     }
 
     #[test]
     fn test_singular_matrix() {
         // Test with a singular matrix (determinant = 0)
-        let matrix = PointComplex::from_shape_vec(
+        let matrix = Point::from_shape_vec(
             (2, 2),
             vec![
                 MyComplex::from_f64(1.0, 0.0),
@@ -1799,7 +2673,7 @@ mod tests {
     #[test]
     fn test_non_square_matrix() {
         // Test with a non-square matrix
-        let matrix = PointComplex::from_shape_vec(
+        let matrix = Point::from_shape_vec(
             (2, 3),
             vec![
                 MyComplex::from_f64(1.0, 0.0),
@@ -1824,13 +2698,9 @@ mod tests {
     #[test]
     fn test_identity_matrix_inversion() {
         // Identity matrix should be its own inverse
-        let identity = PointComplex::eye(4);
+        let identity = Point::<MyComplex>::eye(4);
         let inverse = identity.inv();
 
-        assert!(PointComplex::approx_eq(
-            &identity.view(),
-            &inverse.view(),
-            1e-10
-        ));
+        assert!(Point::approx_eq(&identity.view(), &inverse.view(), 1e-10));
     }
 }

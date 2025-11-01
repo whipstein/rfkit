@@ -5,7 +5,7 @@ use rug::ops::{Pow, PowAssign};
 use rug::{Complex, Float};
 use std::fmt;
 use std::ops::{
-    Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, RemAssign, Sub, SubAssign,
+    Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Not, Rem, RemAssign, Sub, SubAssign,
 };
 
 // pub mod inverse;
@@ -22,7 +22,7 @@ impl MyComplex {
     pub fn new(real: MyFloat, imag: MyFloat) -> Self {
         MyComplex(Complex::with_val(
             Self::PRECISION,
-            (real.to_float(), imag.to_float()),
+            (real.into_inner(), imag.into_inner()),
         ))
     }
 
@@ -41,12 +41,12 @@ impl MyComplex {
     /// Create a new complex number from a real number (imaginary part = 0)
     pub fn from_real(real: MyFloat) -> Self {
         // let real_float = Float::with_val(Self::PRECISION, real);
-        MyComplex(Complex::with_val(Self::PRECISION, real.to_float()))
+        MyComplex(Complex::with_val(Self::PRECISION, real.into_inner()))
     }
 
     /// Create a new complex number from an imaginary number (real part = 0)
     pub fn from_imag(imag: MyFloat) -> Self {
-        MyComplex(Complex::with_val(Self::PRECISION, (0, imag.to_float())))
+        MyComplex(Complex::with_val(Self::PRECISION, (0, imag.into_inner())))
     }
 
     /// Create a new complex number from a real number (imaginary part = 0)
@@ -60,18 +60,41 @@ impl MyComplex {
     }
 
     /// Create a new complex number from a magnitude and angle in radians
-    pub fn from_polar(mag: MyFloat, ang: MyFloat) -> Self {
-        MyComplex::new(&mag * ang.cos(), &mag * ang.sin())
+    pub fn from_polar(mag: &MyFloat, ang: &MyFloat) -> Self {
+        MyComplex::new(mag * ang.cos(), mag * ang.sin())
     }
 
     /// Create a new complex number from a magnitude and angle in radians as f64
     pub fn from_polar_f64(mag: f64, ang: f64) -> Self {
-        MyComplex::from_polar(mag.into(), ang.into())
+        MyComplex::from_polar(&mag.into(), &ang.into())
+    }
+
+    /// Create a new complex number from real and imaginary parts
+    pub fn from_tuple(num: &(MyFloat, MyFloat)) -> Self {
+        MyComplex(Complex::with_val(
+            Self::PRECISION,
+            (num.0.clone().into_inner(), num.1.clone().into_inner()),
+        ))
+    }
+
+    /// Create a new complex number from real and imaginary parts
+    pub fn from_tuple_f64(num: (f64, f64)) -> Self {
+        MyComplex(Complex::with_val(Self::PRECISION, num))
+    }
+
+    /// Get the real part as MyFloat
+    pub fn re(&self) -> MyFloat {
+        MyFloat::from_float(self.0.real().clone())
     }
 
     /// Get the real part as MyFloat
     pub fn real(&self) -> MyFloat {
         MyFloat::from_float(self.0.real().clone())
+    }
+
+    /// Get the imaginary part as MyFloat
+    pub fn im(&self) -> MyFloat {
+        MyFloat::from_float(self.0.imag().clone())
     }
 
     /// Get the imaginary part as MyFloat
@@ -108,6 +131,11 @@ impl MyComplex {
     /// Get the magnitude in dB of the complex number
     pub fn db10(&self) -> MyFloat {
         10.0 * self.abs().log10()
+    }
+
+    /// Calculate the square of the magnitude (norm squared)
+    pub fn norm(&self) -> MyFloat {
+        self.abs()
     }
 
     /// Calculate the square of the magnitude (norm squared)
@@ -217,6 +245,38 @@ impl Add for MyComplex {
     }
 }
 
+impl Add<Complex64> for MyComplex {
+    type Output = Self;
+
+    fn add(self, other: Complex64) -> Self::Output {
+        self + MyComplex::from_c64(other)
+    }
+}
+
+impl Add<&Complex64> for MyComplex {
+    type Output = Self;
+
+    fn add(self, other: &Complex64) -> Self::Output {
+        self + MyComplex::from_c64(*other)
+    }
+}
+
+impl Add<Complex64> for &MyComplex {
+    type Output = MyComplex;
+
+    fn add(self, other: Complex64) -> Self::Output {
+        self.clone() + MyComplex::from_c64(other)
+    }
+}
+
+impl Add<&Complex64> for &MyComplex {
+    type Output = MyComplex;
+
+    fn add(self, other: &Complex64) -> Self::Output {
+        self.clone() + MyComplex::from_c64(*other)
+    }
+}
+
 impl Add<&MyComplex> for MyComplex {
     type Output = Self;
 
@@ -273,6 +333,70 @@ impl Add<&MyFloat> for &MyComplex {
     }
 }
 
+impl Add<f64> for MyComplex {
+    type Output = Self;
+
+    fn add(self, other: f64) -> Self::Output {
+        MyComplex(self.0 + other)
+    }
+}
+
+impl Add<&f64> for MyComplex {
+    type Output = Self;
+
+    fn add(self, other: &f64) -> Self::Output {
+        MyComplex(self.0 + other)
+    }
+}
+
+impl Add<f64> for &MyComplex {
+    type Output = MyComplex;
+
+    fn add(self, other: f64) -> Self::Output {
+        MyComplex(self.0.clone() + other)
+    }
+}
+
+impl Add<&f64> for &MyComplex {
+    type Output = MyComplex;
+
+    fn add(self, other: &f64) -> Self::Output {
+        MyComplex(self.0.clone() + other)
+    }
+}
+
+impl Add<MyComplex> for Complex64 {
+    type Output = MyComplex;
+
+    fn add(self, other: MyComplex) -> Self::Output {
+        &MyComplex::from_c64(self) + &other
+    }
+}
+
+impl Add<&MyComplex> for Complex64 {
+    type Output = MyComplex;
+
+    fn add(self, other: &MyComplex) -> Self::Output {
+        MyComplex::from_c64(self) + other
+    }
+}
+
+impl Add<MyComplex> for &Complex64 {
+    type Output = MyComplex;
+
+    fn add(self, other: MyComplex) -> Self::Output {
+        &MyComplex::from_c64(*self) + &other
+    }
+}
+
+impl Add<&MyComplex> for &Complex64 {
+    type Output = MyComplex;
+
+    fn add(self, other: &MyComplex) -> Self::Output {
+        MyComplex::from_c64(*self) + other
+    }
+}
+
 impl Add<MyComplex> for MyFloat {
     type Output = MyComplex;
 
@@ -305,22 +429,6 @@ impl Add<&MyComplex> for &MyFloat {
     }
 }
 
-impl Add<f64> for MyComplex {
-    type Output = Self;
-
-    fn add(self, other: f64) -> Self::Output {
-        MyComplex(self.0 + other)
-    }
-}
-
-impl Add<f64> for &MyComplex {
-    type Output = MyComplex;
-
-    fn add(self, other: f64) -> Self::Output {
-        MyComplex(self.0.clone() + other)
-    }
-}
-
 impl Add<MyComplex> for f64 {
     type Output = MyComplex;
 
@@ -337,35 +445,19 @@ impl Add<&MyComplex> for f64 {
     }
 }
 
-impl Add<Complex64> for MyComplex {
-    type Output = Self;
-
-    fn add(self, other: Complex64) -> Self::Output {
-        self + MyComplex::from_c64(other)
-    }
-}
-
-impl Add<Complex64> for &MyComplex {
-    type Output = MyComplex;
-
-    fn add(self, other: Complex64) -> Self::Output {
-        self.clone() + MyComplex::from_c64(other)
-    }
-}
-
-impl Add<MyComplex> for Complex64 {
+impl Add<MyComplex> for &f64 {
     type Output = MyComplex;
 
     fn add(self, other: MyComplex) -> Self::Output {
-        &MyComplex::from_c64(self) + &other
+        MyComplex(self + other.0.clone())
     }
 }
 
-impl Add<&MyComplex> for Complex64 {
+impl Add<&MyComplex> for &f64 {
     type Output = MyComplex;
 
     fn add(self, other: &MyComplex) -> Self::Output {
-        MyComplex::from_c64(self) + other
+        MyComplex(self + other.0.clone())
     }
 }
 
@@ -374,6 +466,38 @@ impl Sub for MyComplex {
 
     fn sub(self, other: Self) -> Self {
         MyComplex(self.0 - other.0)
+    }
+}
+
+impl Sub<Complex64> for MyComplex {
+    type Output = Self;
+
+    fn sub(self, other: Complex64) -> Self::Output {
+        self - MyComplex::from_c64(other)
+    }
+}
+
+impl Sub<&Complex64> for MyComplex {
+    type Output = Self;
+
+    fn sub(self, other: &Complex64) -> Self::Output {
+        self - MyComplex::from_c64(*other)
+    }
+}
+
+impl Sub<Complex64> for &MyComplex {
+    type Output = MyComplex;
+
+    fn sub(self, other: Complex64) -> Self::Output {
+        self.clone() - MyComplex::from_c64(other)
+    }
+}
+
+impl Sub<&Complex64> for &MyComplex {
+    type Output = MyComplex;
+
+    fn sub(self, other: &Complex64) -> Self::Output {
+        self.clone() - MyComplex::from_c64(*other)
     }
 }
 
@@ -433,6 +557,70 @@ impl Sub<&MyFloat> for &MyComplex {
     }
 }
 
+impl Sub<f64> for MyComplex {
+    type Output = Self;
+
+    fn sub(self, other: f64) -> Self::Output {
+        MyComplex(self.0 - other)
+    }
+}
+
+impl Sub<&f64> for MyComplex {
+    type Output = Self;
+
+    fn sub(self, other: &f64) -> Self::Output {
+        MyComplex(self.0 - other)
+    }
+}
+
+impl Sub<f64> for &MyComplex {
+    type Output = MyComplex;
+
+    fn sub(self, other: f64) -> Self::Output {
+        MyComplex(self.0.clone() - other)
+    }
+}
+
+impl Sub<&f64> for &MyComplex {
+    type Output = MyComplex;
+
+    fn sub(self, other: &f64) -> Self::Output {
+        MyComplex(self.0.clone() - other)
+    }
+}
+
+impl Sub<MyComplex> for Complex64 {
+    type Output = MyComplex;
+
+    fn sub(self, other: MyComplex) -> Self::Output {
+        &MyComplex::from_c64(self) - &other
+    }
+}
+
+impl Sub<&MyComplex> for Complex64 {
+    type Output = MyComplex;
+
+    fn sub(self, other: &MyComplex) -> Self::Output {
+        MyComplex::from_c64(self) - other
+    }
+}
+
+impl Sub<MyComplex> for &Complex64 {
+    type Output = MyComplex;
+
+    fn sub(self, other: MyComplex) -> Self::Output {
+        &MyComplex::from_c64(*self) - &other
+    }
+}
+
+impl Sub<&MyComplex> for &Complex64 {
+    type Output = MyComplex;
+
+    fn sub(self, other: &MyComplex) -> Self::Output {
+        MyComplex::from_c64(*self) - other
+    }
+}
+
 impl Sub<MyComplex> for MyFloat {
     type Output = MyComplex;
 
@@ -465,22 +653,6 @@ impl Sub<&MyComplex> for &MyFloat {
     }
 }
 
-impl Sub<f64> for MyComplex {
-    type Output = Self;
-
-    fn sub(self, other: f64) -> Self::Output {
-        MyComplex(self.0 - other)
-    }
-}
-
-impl Sub<f64> for &MyComplex {
-    type Output = MyComplex;
-
-    fn sub(self, other: f64) -> Self::Output {
-        MyComplex(self.0.clone() - other)
-    }
-}
-
 impl Sub<MyComplex> for f64 {
     type Output = MyComplex;
 
@@ -497,35 +669,19 @@ impl Sub<&MyComplex> for f64 {
     }
 }
 
-impl Sub<Complex64> for MyComplex {
-    type Output = Self;
-
-    fn sub(self, other: Complex64) -> Self::Output {
-        self - MyComplex::from_c64(other)
-    }
-}
-
-impl Sub<Complex64> for &MyComplex {
-    type Output = MyComplex;
-
-    fn sub(self, other: Complex64) -> Self::Output {
-        self.clone() - MyComplex::from_c64(other)
-    }
-}
-
-impl Sub<MyComplex> for Complex64 {
+impl Sub<MyComplex> for &f64 {
     type Output = MyComplex;
 
     fn sub(self, other: MyComplex) -> Self::Output {
-        &MyComplex::from_c64(self) - &other
+        MyComplex(self - other.0.clone())
     }
 }
 
-impl Sub<&MyComplex> for Complex64 {
+impl Sub<&MyComplex> for &f64 {
     type Output = MyComplex;
 
     fn sub(self, other: &MyComplex) -> Self::Output {
-        MyComplex::from_c64(self) - other
+        MyComplex(self - other.0.clone())
     }
 }
 
@@ -534,6 +690,38 @@ impl Mul for MyComplex {
 
     fn mul(self, other: Self) -> Self {
         MyComplex(self.0 * other.0)
+    }
+}
+
+impl Mul<Complex64> for MyComplex {
+    type Output = Self;
+
+    fn mul(self, other: Complex64) -> Self::Output {
+        self * MyComplex::from_c64(other)
+    }
+}
+
+impl Mul<&Complex64> for MyComplex {
+    type Output = Self;
+
+    fn mul(self, other: &Complex64) -> Self::Output {
+        self * MyComplex::from_c64(*other)
+    }
+}
+
+impl Mul<Complex64> for &MyComplex {
+    type Output = MyComplex;
+
+    fn mul(self, other: Complex64) -> Self::Output {
+        self.clone() * MyComplex::from_c64(other)
+    }
+}
+
+impl Mul<&Complex64> for &MyComplex {
+    type Output = MyComplex;
+
+    fn mul(self, other: &Complex64) -> Self::Output {
+        self.clone() * MyComplex::from_c64(*other)
     }
 }
 
@@ -593,6 +781,70 @@ impl Mul<&MyFloat> for &MyComplex {
     }
 }
 
+impl Mul<f64> for MyComplex {
+    type Output = Self;
+
+    fn mul(self, other: f64) -> Self::Output {
+        MyComplex(self.0 * other)
+    }
+}
+
+impl Mul<&f64> for MyComplex {
+    type Output = Self;
+
+    fn mul(self, other: &f64) -> Self::Output {
+        MyComplex(self.0 * other)
+    }
+}
+
+impl Mul<f64> for &MyComplex {
+    type Output = MyComplex;
+
+    fn mul(self, other: f64) -> Self::Output {
+        MyComplex(self.0.clone() * other)
+    }
+}
+
+impl Mul<&f64> for &MyComplex {
+    type Output = MyComplex;
+
+    fn mul(self, other: &f64) -> Self::Output {
+        MyComplex(self.0.clone() * other)
+    }
+}
+
+impl Mul<MyComplex> for Complex64 {
+    type Output = MyComplex;
+
+    fn mul(self, other: MyComplex) -> Self::Output {
+        &MyComplex::from_c64(self) * &other
+    }
+}
+
+impl Mul<&MyComplex> for Complex64 {
+    type Output = MyComplex;
+
+    fn mul(self, other: &MyComplex) -> Self::Output {
+        MyComplex::from_c64(self) * other
+    }
+}
+
+impl Mul<MyComplex> for &Complex64 {
+    type Output = MyComplex;
+
+    fn mul(self, other: MyComplex) -> Self::Output {
+        &MyComplex::from_c64(*self) * &other
+    }
+}
+
+impl Mul<&MyComplex> for &Complex64 {
+    type Output = MyComplex;
+
+    fn mul(self, other: &MyComplex) -> Self::Output {
+        MyComplex::from_c64(*self) * other
+    }
+}
+
 impl Mul<MyComplex> for MyFloat {
     type Output = MyComplex;
 
@@ -625,22 +877,6 @@ impl Mul<&MyComplex> for &MyFloat {
     }
 }
 
-impl Mul<f64> for MyComplex {
-    type Output = Self;
-
-    fn mul(self, other: f64) -> Self::Output {
-        MyComplex(self.0 * other)
-    }
-}
-
-impl Mul<f64> for &MyComplex {
-    type Output = MyComplex;
-
-    fn mul(self, other: f64) -> Self::Output {
-        MyComplex(self.0.clone() * other)
-    }
-}
-
 impl Mul<MyComplex> for f64 {
     type Output = MyComplex;
 
@@ -657,35 +893,19 @@ impl Mul<&MyComplex> for f64 {
     }
 }
 
-impl Mul<Complex64> for MyComplex {
-    type Output = Self;
-
-    fn mul(self, other: Complex64) -> Self::Output {
-        self * MyComplex::from_c64(other)
-    }
-}
-
-impl Mul<Complex64> for &MyComplex {
-    type Output = MyComplex;
-
-    fn mul(self, other: Complex64) -> Self::Output {
-        self.clone() * MyComplex::from_c64(other)
-    }
-}
-
-impl Mul<MyComplex> for Complex64 {
+impl Mul<MyComplex> for &f64 {
     type Output = MyComplex;
 
     fn mul(self, other: MyComplex) -> Self::Output {
-        &MyComplex::from_c64(self) * &other
+        MyComplex(self * other.0.clone())
     }
 }
 
-impl Mul<&MyComplex> for Complex64 {
+impl Mul<&MyComplex> for &f64 {
     type Output = MyComplex;
 
     fn mul(self, other: &MyComplex) -> Self::Output {
-        MyComplex::from_c64(self) * other
+        MyComplex(self * other.0.clone())
     }
 }
 
@@ -694,6 +914,38 @@ impl Div for MyComplex {
 
     fn div(self, other: Self) -> Self {
         MyComplex(self.0 / other.0)
+    }
+}
+
+impl Div<Complex64> for MyComplex {
+    type Output = Self;
+
+    fn div(self, other: Complex64) -> Self::Output {
+        self / MyComplex::from_c64(other)
+    }
+}
+
+impl Div<&Complex64> for MyComplex {
+    type Output = Self;
+
+    fn div(self, other: &Complex64) -> Self::Output {
+        self / MyComplex::from_c64(*other)
+    }
+}
+
+impl Div<Complex64> for &MyComplex {
+    type Output = MyComplex;
+
+    fn div(self, other: Complex64) -> Self::Output {
+        self.clone() / MyComplex::from_c64(other)
+    }
+}
+
+impl Div<&Complex64> for &MyComplex {
+    type Output = MyComplex;
+
+    fn div(self, other: &Complex64) -> Self::Output {
+        self.clone() / MyComplex::from_c64(*other)
     }
 }
 
@@ -753,6 +1005,70 @@ impl Div<&MyFloat> for &MyComplex {
     }
 }
 
+impl Div<f64> for MyComplex {
+    type Output = Self;
+
+    fn div(self, other: f64) -> Self::Output {
+        MyComplex(self.0 / other)
+    }
+}
+
+impl Div<&f64> for MyComplex {
+    type Output = Self;
+
+    fn div(self, other: &f64) -> Self::Output {
+        MyComplex(self.0 / other)
+    }
+}
+
+impl Div<f64> for &MyComplex {
+    type Output = MyComplex;
+
+    fn div(self, other: f64) -> Self::Output {
+        MyComplex(self.0.clone() / other)
+    }
+}
+
+impl Div<&f64> for &MyComplex {
+    type Output = MyComplex;
+
+    fn div(self, other: &f64) -> Self::Output {
+        MyComplex(self.0.clone() / other)
+    }
+}
+
+impl Div<MyComplex> for Complex64 {
+    type Output = MyComplex;
+
+    fn div(self, other: MyComplex) -> Self::Output {
+        &MyComplex::from_c64(self) / &other
+    }
+}
+
+impl Div<&MyComplex> for Complex64 {
+    type Output = MyComplex;
+
+    fn div(self, other: &MyComplex) -> Self::Output {
+        MyComplex::from_c64(self) / other
+    }
+}
+
+impl Div<MyComplex> for &Complex64 {
+    type Output = MyComplex;
+
+    fn div(self, other: MyComplex) -> Self::Output {
+        &MyComplex::from_c64(*self) / &other
+    }
+}
+
+impl Div<&MyComplex> for &Complex64 {
+    type Output = MyComplex;
+
+    fn div(self, other: &MyComplex) -> Self::Output {
+        MyComplex::from_c64(*self) / other
+    }
+}
+
 impl Div<MyComplex> for MyFloat {
     type Output = MyComplex;
 
@@ -785,22 +1101,6 @@ impl Div<&MyComplex> for &MyFloat {
     }
 }
 
-impl Div<f64> for MyComplex {
-    type Output = Self;
-
-    fn div(self, other: f64) -> Self::Output {
-        MyComplex(self.0 / other)
-    }
-}
-
-impl Div<f64> for &MyComplex {
-    type Output = MyComplex;
-
-    fn div(self, other: f64) -> Self::Output {
-        MyComplex(self.0.clone() / other)
-    }
-}
-
 impl Div<MyComplex> for f64 {
     type Output = MyComplex;
 
@@ -817,35 +1117,19 @@ impl Div<&MyComplex> for f64 {
     }
 }
 
-impl Div<Complex64> for MyComplex {
-    type Output = Self;
-
-    fn div(self, other: Complex64) -> Self::Output {
-        self / MyComplex::from_c64(other)
-    }
-}
-
-impl Div<Complex64> for &MyComplex {
-    type Output = MyComplex;
-
-    fn div(self, other: Complex64) -> Self::Output {
-        self.clone() / MyComplex::from_c64(other)
-    }
-}
-
-impl Div<MyComplex> for Complex64 {
+impl Div<MyComplex> for &f64 {
     type Output = MyComplex;
 
     fn div(self, other: MyComplex) -> Self::Output {
-        &MyComplex::from_c64(self) / &other
+        MyComplex(self / other.0.clone())
     }
 }
 
-impl Div<&MyComplex> for Complex64 {
+impl Div<&MyComplex> for &f64 {
     type Output = MyComplex;
 
     fn div(self, other: &MyComplex) -> Self::Output {
-        MyComplex::from_c64(self) / other
+        MyComplex(self / other.0.clone())
     }
 }
 
@@ -872,9 +1156,45 @@ impl AddAssign for MyComplex {
     }
 }
 
+impl AddAssign<Complex64> for MyComplex {
+    fn add_assign(&mut self, other: Complex64) {
+        self.0 += MyComplex::from_c64(other).inner();
+    }
+}
+
+impl AddAssign<&Complex64> for MyComplex {
+    fn add_assign(&mut self, other: &Complex64) {
+        self.0 += MyComplex::from_c64(*other).inner();
+    }
+}
+
+impl AddAssign<f64> for MyComplex {
+    fn add_assign(&mut self, other: f64) {
+        self.0 += MyComplex::from_f64(other, 0.0).inner();
+    }
+}
+
+impl AddAssign<&f64> for MyComplex {
+    fn add_assign(&mut self, other: &f64) {
+        self.0 += MyComplex::from_f64(*other, 0.0).inner();
+    }
+}
+
 impl AddAssign<&MyComplex> for MyComplex {
     fn add_assign(&mut self, other: &MyComplex) {
         self.0 += &other.0;
+    }
+}
+
+impl AddAssign<MyFloat> for MyComplex {
+    fn add_assign(&mut self, other: MyFloat) {
+        self.0 += MyComplex::from_real(other).inner();
+    }
+}
+
+impl AddAssign<&MyFloat> for MyComplex {
+    fn add_assign(&mut self, other: &MyFloat) {
+        self.0 += MyComplex::from_real(other.clone()).inner();
     }
 }
 
@@ -884,9 +1204,45 @@ impl SubAssign for MyComplex {
     }
 }
 
+impl SubAssign<Complex64> for MyComplex {
+    fn sub_assign(&mut self, other: Complex64) {
+        self.0 -= MyComplex::from_c64(other).inner();
+    }
+}
+
+impl SubAssign<&Complex64> for MyComplex {
+    fn sub_assign(&mut self, other: &Complex64) {
+        self.0 -= MyComplex::from_c64(*other).inner();
+    }
+}
+
+impl SubAssign<f64> for MyComplex {
+    fn sub_assign(&mut self, other: f64) {
+        self.0 -= MyComplex::from_f64(other, 0.0).inner();
+    }
+}
+
+impl SubAssign<&f64> for MyComplex {
+    fn sub_assign(&mut self, other: &f64) {
+        self.0 -= MyComplex::from_f64(*other, 0.0).inner();
+    }
+}
+
 impl SubAssign<&MyComplex> for MyComplex {
     fn sub_assign(&mut self, other: &MyComplex) {
         self.0 -= &other.0;
+    }
+}
+
+impl SubAssign<MyFloat> for MyComplex {
+    fn sub_assign(&mut self, other: MyFloat) {
+        self.0 -= MyComplex::from_real(other).inner();
+    }
+}
+
+impl SubAssign<&MyFloat> for MyComplex {
+    fn sub_assign(&mut self, other: &MyFloat) {
+        self.0 -= MyComplex::from_real(other.clone()).inner();
     }
 }
 
@@ -896,9 +1252,45 @@ impl MulAssign for MyComplex {
     }
 }
 
+impl MulAssign<Complex64> for MyComplex {
+    fn mul_assign(&mut self, other: Complex64) {
+        self.0 *= MyComplex::from_c64(other).inner();
+    }
+}
+
+impl MulAssign<&Complex64> for MyComplex {
+    fn mul_assign(&mut self, other: &Complex64) {
+        self.0 *= MyComplex::from_c64(*other).inner();
+    }
+}
+
+impl MulAssign<f64> for MyComplex {
+    fn mul_assign(&mut self, other: f64) {
+        self.0 *= MyComplex::from_f64(other, 0.0).inner();
+    }
+}
+
+impl MulAssign<&f64> for MyComplex {
+    fn mul_assign(&mut self, other: &f64) {
+        self.0 *= MyComplex::from_f64(*other, 0.0).inner();
+    }
+}
+
 impl MulAssign<&MyComplex> for MyComplex {
     fn mul_assign(&mut self, other: &MyComplex) {
         self.0 *= &other.0;
+    }
+}
+
+impl MulAssign<MyFloat> for MyComplex {
+    fn mul_assign(&mut self, other: MyFloat) {
+        self.0 *= MyComplex::from_real(other).inner();
+    }
+}
+
+impl MulAssign<&MyFloat> for MyComplex {
+    fn mul_assign(&mut self, other: &MyFloat) {
+        self.0 *= MyComplex::from_real(other.clone()).inner();
     }
 }
 
@@ -908,9 +1300,45 @@ impl DivAssign for MyComplex {
     }
 }
 
+impl DivAssign<Complex64> for MyComplex {
+    fn div_assign(&mut self, other: Complex64) {
+        self.0 /= MyComplex::from_c64(other).inner();
+    }
+}
+
+impl DivAssign<&Complex64> for MyComplex {
+    fn div_assign(&mut self, other: &Complex64) {
+        self.0 /= MyComplex::from_c64(*other).inner();
+    }
+}
+
+impl DivAssign<f64> for MyComplex {
+    fn div_assign(&mut self, other: f64) {
+        self.0 /= MyComplex::from_f64(other, 0.0).inner();
+    }
+}
+
+impl DivAssign<&f64> for MyComplex {
+    fn div_assign(&mut self, other: &f64) {
+        self.0 /= MyComplex::from_f64(*other, 0.0).inner();
+    }
+}
+
 impl DivAssign<&MyComplex> for MyComplex {
     fn div_assign(&mut self, other: &MyComplex) {
         self.0 /= &other.0;
+    }
+}
+
+impl DivAssign<MyFloat> for MyComplex {
+    fn div_assign(&mut self, other: MyFloat) {
+        self.0 /= MyComplex::from_real(other).inner();
+    }
+}
+
+impl DivAssign<&MyFloat> for MyComplex {
+    fn div_assign(&mut self, other: &MyFloat) {
+        self.0 /= MyComplex::from_real(other.clone()).inner();
     }
 }
 
@@ -1178,6 +1606,31 @@ impl Num for MyComplex {
     }
 }
 
+// Implement Not trait (logical NOT: 0+0i -> 1+0i, non-zero -> 0+0i)
+impl Not for MyComplex {
+    type Output = Self;
+
+    fn not(self) -> Self::Output {
+        if self.0.is_zero() {
+            MyComplex::one()
+        } else {
+            MyComplex::zero()
+        }
+    }
+}
+
+impl Not for &MyComplex {
+    type Output = MyComplex;
+
+    fn not(self) -> Self::Output {
+        if self.0.is_zero() {
+            MyComplex::one()
+        } else {
+            MyComplex::zero()
+        }
+    }
+}
+
 // Implement Clone
 impl Clone for MyComplex {
     fn clone(&self) -> Self {
@@ -1287,7 +1740,7 @@ impl From<MyFloat> for MyComplex {
 }
 
 #[cfg(test)]
-mod tests {
+mod mycomplex_tests {
 
     use super::*;
     use core::f64;
@@ -1546,5 +1999,43 @@ mod tests {
         let a = MyComplex::from_f64(5.0, 3.0);
         let default_zero = MyComplex::default();
         let _ = a % default_zero;
+    }
+
+    #[test]
+    fn test_not_operator() {
+        let zero = MyComplex::zero();
+        let non_zero = MyComplex::from_f64(5.0, 3.0);
+        let one = MyComplex::one();
+        let pure_imag = MyComplex::from_imag_f64(2.0);
+
+        // !0+0i should be 1+0i
+        let not_zero = !zero;
+        assert_eq!(not_zero.real(), MyFloat::new(1.0));
+        assert_eq!(not_zero.imag(), MyFloat::new(0.0));
+
+        // !(5+3i) should be 0+0i
+        let not_non_zero = !non_zero;
+        assert_eq!(not_non_zero.real(), MyFloat::new(0.0));
+        assert_eq!(not_non_zero.imag(), MyFloat::new(0.0));
+
+        // !(1+0i) should be 0+0i
+        let not_one = !one;
+        assert_eq!(not_one.real(), MyFloat::new(0.0));
+        assert_eq!(not_one.imag(), MyFloat::new(0.0));
+
+        // !(0+2i) should be 0+0i (non-zero imaginary part)
+        let not_pure_imag = !pure_imag;
+        assert_eq!(not_pure_imag.real(), MyFloat::new(0.0));
+        assert_eq!(not_pure_imag.imag(), MyFloat::new(0.0));
+
+        // Test with reference
+        let borrowed = MyComplex::from_f64(3.14, 2.71);
+        let not_borrowed = !&borrowed;
+        assert_eq!(not_borrowed.real(), MyFloat::new(0.0));
+        assert_eq!(not_borrowed.imag(), MyFloat::new(0.0));
+
+        // Test double negation
+        let double_not = !!MyComplex::zero();
+        assert_eq!(double_not, MyComplex::zero());
     }
 }

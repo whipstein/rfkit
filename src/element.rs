@@ -1,14 +1,3 @@
-use crate::elements::{
-    capacitor::{Capacitor, CapacitorBuilder},
-    ground::Ground,
-    inductor::{Inductor, InductorBuilder},
-    mbend::{Mbend, MbendBuilder},
-    mlef::{Mlef, MlefBuilder},
-    mlin::{Mlin, MlinBuilder},
-    msub::Msub,
-    port::{Port, PortBuilder},
-    resistor::{Resistor, ResistorBuilder},
-};
 use crate::frequency::Frequency;
 use crate::point::Point;
 use crate::points::Points;
@@ -28,6 +17,16 @@ pub mod mlin;
 pub mod msub;
 pub mod port;
 pub mod resistor;
+
+pub use self::capacitor::{Capacitor, CapacitorBuilder};
+pub use self::ground::Ground;
+pub use self::inductor::{Inductor, InductorBuilder};
+pub use self::mbend::{Mbend, MbendBuilder};
+pub use self::mlef::{Mlef, MlefBuilder};
+pub use self::mlin::{Mlin, MlinBuilder};
+pub use self::msub::Msub;
+pub use self::port::{Port, PortBuilder};
+pub use self::resistor::{Resistor, ResistorBuilder};
 
 #[derive(Copy, Clone, Debug, Default, PartialEq, Serialize)]
 pub enum ElemType {
@@ -102,7 +101,7 @@ impl fmt::Display for ElemType {
 macro_rules! define_element_impl {
     (variants: [$($variant:ident),+ $(,)?]) => {
         impl Elem for Element {
-            fn c(&self, freq: &Frequency) -> Point {
+            fn c(&self, freq: &Frequency) -> Point<Complex64> {
                 match self {
                     $(
                         Element::$variant(elem) => elem.c(freq),
@@ -142,7 +141,7 @@ macro_rules! define_element_impl {
                 }
             }
 
-            fn net(&self, freq: &Frequency) -> Points {
+            fn net(&self, freq: &Frequency) -> Points<Complex64> {
                 match self {
                     $(
                         Element::$variant(elem) => elem.net(freq),
@@ -186,12 +185,12 @@ macro_rules! define_element_impl {
 }
 
 pub trait Elem {
-    fn c(&self, freq: &Frequency) -> Point;
+    fn c(&self, freq: &Frequency) -> Point<Complex64>;
     fn c_at(&self, freq: &Frequency, j: usize, k: usize) -> Complex64;
     fn id(&self) -> String;
     fn elem(&self) -> ElemType;
     fn name(&self) -> &String;
-    fn net(&self, freq: &Frequency) -> Points;
+    fn net(&self, freq: &Frequency) -> Points<Complex64>;
     fn nodes(&self) -> Vec<usize>;
     fn z(&self, freq: &Frequency) -> Complex64;
     fn z_at(&self, freq: &Frequency, i: usize) -> Complex64;

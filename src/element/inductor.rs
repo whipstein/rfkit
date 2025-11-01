@@ -1,4 +1,4 @@
-use crate::elements::{Elem, ElemType, Lumped};
+use crate::element::{Elem, ElemType, Lumped};
 use crate::frequency::Frequency;
 use crate::point;
 use crate::point::Point;
@@ -6,25 +6,26 @@ use crate::points::{Points, Pts};
 use crate::scale::Scale;
 use crate::unit::{Unit, UnitVal, Unitized};
 use ndarray::prelude::*;
-use num::complex::{Complex64, c64};
+use num::complex::{Complex, Complex64, c64};
 use std::f64::consts::PI;
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct Capacitor {
+pub struct Inductor {
     id: String,
-    cap: UnitVal,
+    ind: UnitVal,
     nodes: [usize; 2],
-    c: Point,
+    c: Point<Complex64>,
     z0: Complex64,
 }
 
-impl Capacitor {
-    pub fn new(id: String, cap: UnitVal, nodes: [usize; 2], z0: Complex64) -> Capacitor {
-        Capacitor {
+impl Inductor {
+    pub fn new(id: String, ind: UnitVal, nodes: [usize; 2], z0: Complex64) -> Inductor {
+        Inductor {
             id: id,
-            cap: cap,
+            ind: ind,
             nodes: nodes,
             c: point![
+                Complex64,
                 [c64(1.0 / 3.0, 0.0), c64(2.0 / 3.0, 0.0)],
                 [c64(2.0 / 3.0, 0.0), c64(1.0 / 3.0, 0.0)]
             ],
@@ -37,13 +38,14 @@ impl Capacitor {
     }
 }
 
-impl Default for Capacitor {
+impl Default for Inductor {
     fn default() -> Self {
         Self {
-            id: "C0".to_string(),
-            cap: UnitVal::default(),
+            id: "L0".to_string(),
+            ind: UnitVal::default(),
             nodes: [0, 0],
             c: point![
+                Complex64,
                 [c64(1.0 / 3.0, 0.0), c64(2.0 / 3.0, 0.0)],
                 [c64(2.0 / 3.0, 0.0), c64(1.0 / 3.0, 0.0)]
             ],
@@ -52,8 +54,8 @@ impl Default for Capacitor {
     }
 }
 
-impl Elem for Capacitor {
-    fn c(&self, _freq: &Frequency) -> Point {
+impl Elem for Inductor {
+    fn c(&self, _freq: &Frequency) -> Point<Complex64> {
         self.c.clone()
     }
 
@@ -66,14 +68,14 @@ impl Elem for Capacitor {
     }
 
     fn elem(&self) -> ElemType {
-        ElemType::Capacitor
+        ElemType::Inductor
     }
 
     fn name(&self) -> &String {
         &self.id
     }
 
-    fn net(&self, freq: &Frequency) -> Points {
+    fn net(&self, freq: &Frequency) -> Points<Complex64> {
         Points::from_shape_fn((freq.npts(), 2, 2), |(_, j, k)| match (j, k) {
             (0, 0) | (1, 1) => c64(1.0 / 3.0, 0.0),
             (1, 0) | (0, 1) => c64(2.0 / 3.0, 0.0),
@@ -85,9 +87,8 @@ impl Elem for Capacitor {
         self.nodes.to_vec()
     }
 
-    fn z(&self, freq: &Frequency) -> Complex64 {
-        let out = 1.0 / (Complex64::I * 2.0 * PI * freq.freq(0) * self.cap.val());
-        out
+    fn z(&self, freq: &Frequency) -> Complex<f64> {
+        Complex64::I * 2.0 * PI * freq.freq(0) * self.ind.val()
     }
 
     fn z_at(&self, freq: &Frequency, i: usize) -> Complex64 {
@@ -100,60 +101,60 @@ impl Elem for Capacitor {
     }
 }
 
-impl Lumped for Capacitor {
+impl Lumped for Inductor {
     fn val(&self) -> f64 {
-        self.cap.val()
+        self.ind.val()
     }
 
     fn set_val(&mut self, val: f64) {
-        self.cap.set_val(val);
+        self.ind.set_val(val);
     }
 }
 
-impl Unitized for Capacitor {
+impl Unitized for Inductor {
     fn val_scaled(&self) -> f64 {
-        self.cap.val_scaled()
+        self.ind.val_scaled()
     }
 
     fn unitval(&self) -> UnitVal {
-        self.cap.clone()
+        self.ind.clone()
     }
 
     fn scale(&self) -> Scale {
-        self.cap.scale()
+        self.ind.scale()
     }
 
     fn unit(&self) -> Unit {
-        self.cap.unit()
+        self.ind.unit()
     }
 
     fn set_val_scaled(&mut self, val: f64) {
-        self.cap.set_val_scaled(val);
+        self.ind.set_val_scaled(val);
     }
 
     fn set_unitval(&mut self, val: UnitVal) {
-        self.cap = val;
+        self.ind = val;
     }
 
     fn set_scale(&mut self, scale: Scale) {
-        self.cap.set_scale(scale);
+        self.ind.set_scale(scale);
     }
 
     fn set_unit(&mut self, unit: Unit) {
-        self.cap.set_unit(unit);
+        self.ind.set_unit(unit);
     }
 }
 
-pub struct CapacitorBuilder {
+pub struct InductorBuilder {
     id: String,
-    cap: UnitVal,
+    ind: UnitVal,
     nodes: [usize; 2],
     z0: Complex64,
 }
 
-impl CapacitorBuilder {
+impl InductorBuilder {
     pub fn new() -> Self {
-        CapacitorBuilder::default()
+        InductorBuilder::default()
     }
 
     pub fn id(mut self, id: &str) -> Self {
@@ -161,19 +162,19 @@ impl CapacitorBuilder {
         self
     }
 
-    pub fn cap(mut self, cap: UnitVal) -> Self {
-        self.cap = cap;
+    pub fn ind(mut self, ind: UnitVal) -> Self {
+        self.ind = ind;
         self
     }
 
-    pub fn val(mut self, cap: f64) -> Self {
-        self.cap.set_val(cap);
+    pub fn val(mut self, ind: f64) -> Self {
+        self.ind.set_val(ind);
         self
     }
 
-    pub fn val_scaled(mut self, cap: f64, scale: Scale) -> Self {
-        self.cap.set_scale(scale);
-        self.cap.set_val_scaled(cap);
+    pub fn val_scaled(mut self, ind: f64, scale: Scale) -> Self {
+        self.ind.set_scale(scale);
+        self.ind.set_val_scaled(ind);
         self
     }
 
@@ -187,12 +188,13 @@ impl CapacitorBuilder {
         self
     }
 
-    pub fn build(self) -> Capacitor {
-        Capacitor {
+    pub fn build(self) -> Inductor {
+        Inductor {
             id: self.id,
-            cap: self.cap,
+            ind: self.ind,
             nodes: self.nodes,
             c: point![
+                Complex64,
                 [c64(1.0 / 3.0, 0.0), c64(2.0 / 3.0, 0.0)],
                 [c64(2.0 / 3.0, 0.0), c64(1.0 / 3.0, 0.0)]
             ],
@@ -201,11 +203,11 @@ impl CapacitorBuilder {
     }
 }
 
-impl Default for CapacitorBuilder {
+impl Default for InductorBuilder {
     fn default() -> Self {
         Self {
-            id: "C0".to_string(),
-            cap: *UnitVal::default().set_unit(Unit::Farad),
+            id: "L0".to_string(),
+            ind: *UnitVal::default().set_unit(Unit::Henry),
             nodes: [0, 0],
             z0: c64(50.0, 0.0),
         }
@@ -213,45 +215,42 @@ impl Default for CapacitorBuilder {
 }
 
 #[cfg(test)]
-mod test {
-    use float_cmp::F64Margin;
-
+mod element_inductor_tests {
     use super::*;
     use crate::unit::UnitValBuilder;
     use crate::util::{comp_c64, comp_point_c64};
+    use float_cmp::F64Margin;
 
     #[test]
-    fn element_capacitor() {
+    fn element_inductor() {
         let freq_unitval = UnitValBuilder::new().val_scaled(1.0, Scale::Giga).build();
         let freq = Frequency::from_unitval(&freq_unitval);
         let val_scaled = 1.0;
-        let scale = Scale::Pico;
-        let unitval = UnitValBuilder::new()
-            .val_scaled(val_scaled, scale)
-            .unit(Unit::Farad)
-            .build();
-        let exemplar = Capacitor {
-            id: "C1".to_string(),
-            cap: unitval,
+        let scale = Scale::Nano;
+        let unitval = UnitValBuilder::new().val_scaled(val_scaled, scale).build();
+        let exemplar = Inductor {
+            id: "L1".to_string(),
+            ind: unitval,
             nodes: [1, 2],
             c: point![
+                Complex64,
                 [c64(1.0 / 3.0, 0.0), c64(2.0 / 3.0, 0.0)],
                 [c64(2.0 / 3.0, 0.0), c64(1.0 / 3.0, 0.0)]
             ],
             z0: c64(50.0, 0.0),
         };
-        let exemplar_z = 1.0 / (Complex64::I * 2.0 * PI * freq.freq(0) * unitval.val());
-        let calc = CapacitorBuilder::new()
+        let exemplar_z = Complex64::I * 2.0 * PI * freq.freq(0) * unitval.val();
+        let calc = InductorBuilder::new()
             .val_scaled(val_scaled, scale)
             .nodes([1, 2])
-            .id("C1")
+            .id("L1")
             .build();
         let margin = F64Margin::default();
 
         assert_eq!(&exemplar.id(), &calc.id());
         assert_eq!(&exemplar.scale(), &calc.scale());
-        assert_eq!(&Unit::Farad, &calc.unit());
+        assert_eq!(&Unit::Henry, &calc.unit());
         comp_point_c64(&exemplar.c(&freq), &calc.c(&freq), margin, "calc.c()");
-        comp_c64(&exemplar_z, &calc.z(&freq), margin, "calc.z()", "0");
+        comp_c64(&exemplar_z.into(), &calc.z(&freq), margin, "calc.z()", "0");
     }
 }

@@ -341,7 +341,7 @@ pub fn unwrap(phi: &Array1<f64>) -> Array1<f64> {
 }
 
 #[cfg(test)]
-mod tests {
+mod math_tests {
     use super::*;
     use crate::scale::Scale;
     use crate::unit::UnitValBuilder;

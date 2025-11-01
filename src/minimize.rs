@@ -2,214 +2,37 @@
 use crate::myfloat::MyFloat;
 use dyn_clone::DynClone;
 use ndarray::prelude::*;
-use std::fmt;
 
 pub mod f64;
-pub mod multi;
-pub mod nelder_mead;
-pub mod nelder_mead_bounded;
-pub mod single;
-
-pub use self::nelder_mead::NelderMead;
-pub use self::nelder_mead_bounded::NelderMeadBounded;
-pub use self::single::{Bracket, Brent, DBrent, Golden};
-
-/// Error types for optimizers
-#[derive(Debug)]
-pub enum MinimizerError {
-    ConstraintViolation,
-    FileError(String),
-    FunctionEvaluationError,
-    GradientEvaluationError,
-    HessianEvaluationError,
-    InfeasibleStartingPoint,
-    InvalidBracket,
-    InvalidDimension,
-    InvalidDirectionSet,
-    InvalidInitialPoints,
-    InvalidInitialSimplex,
-    InvalidParameters(String),
-    InvalidStepSize,
-    InvalidTolerance,
-    LinearAlgebraError(String),
-    LinearSearchFailed,
-    LinearSystemSingular,
-    LineSearchFailed,
-    MaxIterationsExceeded,
-    NumericalError(String),
-    NoMinimumFound,
-    NumericalInstability,
-    NumericalOverflow,
-    SameSignError,
-    SingularHessianApproximation,
-    ZeroDerivative,
-    ZeroGradient,
-}
-
-impl fmt::Display for MinimizerError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            MinimizerError::ConstraintViolation => write!(f, "Constraint violation detected"),
-            MinimizerError::FileError(msg) => write!(f, "File error: {}", msg),
-            MinimizerError::FunctionEvaluationError => {
-                write!(f, "Function evaluation returned invalid value")
-            }
-            MinimizerError::GradientEvaluationError => write!(f, "Gradient evaluation error"),
-            MinimizerError::HessianEvaluationError => write!(f, "Hessian evaluation error"),
-            MinimizerError::InfeasibleStartingPoint => {
-                write!(f, "Starting point violates constraints")
-            }
-            MinimizerError::InvalidBracket => {
-                write!(f, "Invalid bracket: ensure a < b")
-            }
-            MinimizerError::InvalidDimension => write!(f, "Invalid dimension or empty vector"),
-            MinimizerError::InvalidDirectionSet => {
-                write!(f, "Invalid or linearly dependent direction set")
-            }
-            MinimizerError::InvalidInitialPoints => {
-                write!(f, "Invalid initial points: ensure a < b")
-            }
-            MinimizerError::InvalidInitialSimplex => {
-                write!(f, "Invalid initial simplex configuration")
-            }
-            MinimizerError::InvalidParameters(msg) => {
-                write!(f, "Invalid parameters: {}", msg)
-            }
-            MinimizerError::InvalidStepSize => {
-                write!(f, "Step size must be positive and finite")
-            }
-            MinimizerError::InvalidTolerance => write!(f, "Tolerance must be positive"),
-            MinimizerError::LinearAlgebraError(msg) => write!(f, "Linear algebra error: {}", msg),
-            MinimizerError::LinearSearchFailed => write!(f, "Line search failed to converge"),
-            MinimizerError::LinearSystemSingular => write!(f, "Linear system is singular"),
-            MinimizerError::LineSearchFailed => write!(f, "Line search failed to find valid step"),
-            MinimizerError::MaxIterationsExceeded => write!(f, "Maximum iterations exceeded"),
-            MinimizerError::NumericalError(msg) => write!(f, "Numerical error: {}", msg),
-            MinimizerError::NumericalInstability => write!(f, "Numerical instability detected"),
-            MinimizerError::NoMinimumFound => {
-                write!(f, "No minimum bracket found within search limits")
-            }
-            MinimizerError::NumericalOverflow => {
-                write!(f, "Numerical overflow during bracket expansion")
-            }
-            MinimizerError::SameSignError => {
-                write!(
-                    f,
-                    "Function values at bracket endpoints must have opposite signs"
-                )
-            }
-            MinimizerError::SingularHessianApproximation => {
-                write!(f, "Hessian approximation became singular")
-            }
-            MinimizerError::ZeroDerivative => {
-                write!(f, "Encountered zero derivative, cannot continue")
-            }
-            MinimizerError::ZeroGradient => write!(f, "Zero gradient encountered"),
-        }
-    }
-}
-
-impl std::error::Error for MinimizerError {}
+pub mod myfloat;
 
 // Define a trait for the objective function
-pub trait ObjectiveFn: DynClone {
-    fn call(&mut self, x: &Array1<MyFloat>) -> MyFloat;
-    fn call_scalar(&mut self, x: &MyFloat) -> MyFloat;
+pub trait ObjFn<T>: DynClone {
+    fn call(&self, x: &Array1<T>) -> T;
+    fn call_scalar(&self, x: &T) -> T;
 }
-dyn_clone::clone_trait_object!(ObjectiveFn);
+dyn_clone::clone_trait_object!(<T> ObjFn<T>);
 
 // Define a trait for the derivative function
-pub trait ObjectiveDerFn: ObjectiveFn + DynClone {
-    fn df(&self, x: &Array1<MyFloat>) -> MyFloat;
-    fn df_scalar(&self, x: &MyFloat) -> MyFloat;
+pub trait ObjDerFn<T>: ObjFn<T> + DynClone {
+    fn df(&self, x: &Array1<T>) -> T;
+    fn df_scalar(&self, x: &T) -> T;
 }
-dyn_clone::clone_trait_object!(ObjectiveDerFn);
+dyn_clone::clone_trait_object!(<T> ObjDerFn<T>);
 
 // Define a trait for the gradient function
-pub trait ObjectiveGradFn: ObjectiveFn + DynClone {
-    fn grad(&self, x: &Array1<MyFloat>) -> Array1<MyFloat>;
-    fn grad_scalar(&self, x: &MyFloat) -> Array1<MyFloat>;
+pub trait ObjGradFn<T>: ObjFn<T> + DynClone {
+    fn grad(&self, x: &Array1<T>) -> Array1<T>;
+    fn grad_scalar(&self, x: &T) -> Array1<T>;
 }
-dyn_clone::clone_trait_object!(ObjectiveGradFn);
+dyn_clone::clone_trait_object!(<T> ObjGradFn<T>);
 
 // Define a trait for the hessian function
-pub trait ObjectiveHessianFn: ObjectiveFn + DynClone {
-    fn hessian(&self, x: &Array1<MyFloat>) -> Array2<MyFloat>;
-    fn hessian_scalar(&self, x: &MyFloat) -> Array2<MyFloat>;
+pub trait ObjHessFn<T>: ObjGradFn<T> + DynClone {
+    fn hess(&self, x: &Array1<T>) -> Array2<T>;
+    fn hess_scalar(&self, x: &T) -> Array2<T>;
 }
-dyn_clone::clone_trait_object!(ObjectiveHessianFn);
-
-// Implement for closures
-impl<F> ObjectiveFn for F
-where
-    F: Fn(&Array1<MyFloat>) -> MyFloat + DynClone,
-{
-    fn call(&mut self, x: &Array1<MyFloat>) -> MyFloat {
-        self(x)
-    }
-
-    fn call_scalar(&mut self, x: &MyFloat) -> MyFloat {
-        self(&array![x.clone()])
-    }
-}
-
-impl<F, DF> ObjectiveFn for (F, DF)
-where
-    F: Fn(&Array1<MyFloat>) -> MyFloat + DynClone + Clone,
-    DF: Fn(&Array1<MyFloat>) -> MyFloat + DynClone + Clone,
-{
-    fn call(&mut self, x: &Array1<MyFloat>) -> MyFloat {
-        self.0(x)
-    }
-
-    fn call_scalar(&mut self, x: &MyFloat) -> MyFloat {
-        self.0(&array![x.clone()])
-    }
-}
-
-impl<F, DF, GF> ObjectiveFn for (F, DF, GF)
-where
-    F: Fn(&Array1<MyFloat>) -> MyFloat + DynClone + Clone,
-    DF: Fn(&Array1<MyFloat>) -> MyFloat + DynClone + Clone,
-    GF: Fn(&Array1<MyFloat>) -> Array1<MyFloat> + DynClone + Clone,
-{
-    fn call(&mut self, x: &Array1<MyFloat>) -> MyFloat {
-        self.0(x)
-    }
-
-    fn call_scalar(&mut self, x: &MyFloat) -> MyFloat {
-        self.0(&array![x.clone()])
-    }
-}
-
-impl<F, DF> ObjectiveDerFn for (F, DF)
-where
-    F: Fn(&Array1<MyFloat>) -> MyFloat + DynClone + Clone,
-    DF: Fn(&Array1<MyFloat>) -> MyFloat + DynClone + Clone,
-{
-    fn df(&self, x: &Array1<MyFloat>) -> MyFloat {
-        self.1(x)
-    }
-
-    fn df_scalar(&self, x: &MyFloat) -> MyFloat {
-        self.1(&array![x.clone()])
-    }
-}
-
-impl<F, DF, GF> ObjectiveGradFn for (F, DF, GF)
-where
-    F: Fn(&Array1<MyFloat>) -> MyFloat + DynClone + Clone,
-    DF: Fn(&Array1<MyFloat>) -> MyFloat + DynClone + Clone,
-    GF: Fn(&Array1<MyFloat>) -> Array1<MyFloat> + DynClone + Clone,
-{
-    fn grad(&self, x: &Array1<MyFloat>) -> Array1<MyFloat> {
-        self.2(x)
-    }
-
-    fn grad_scalar(&self, x: &MyFloat) -> Array1<MyFloat> {
-        self.2(&array![x.clone()])
-    }
-}
+dyn_clone::clone_trait_object!(<T> ObjHessFn<T>);
 
 // Wrapper for single-dimensional functions
 #[derive(Clone)]
@@ -228,16 +51,16 @@ where
 }
 
 // Implementation for single-dimensional functions
-impl<F> ObjectiveFn for SingleDimFn<F>
+impl<F> ObjFn<MyFloat> for SingleDimFn<F>
 where
     F: Fn(&MyFloat) -> MyFloat + Clone,
 {
-    fn call(&mut self, x: &Array1<MyFloat>) -> MyFloat {
+    fn call(&self, x: &Array1<MyFloat>) -> MyFloat {
         // Take the first element for single-dim functions
         (self.0)(&x[0])
     }
 
-    fn call_scalar(&mut self, x: &MyFloat) -> MyFloat {
+    fn call_scalar(&self, x: &MyFloat) -> MyFloat {
         (self.0)(x)
     }
 }
@@ -261,23 +84,23 @@ where
 }
 
 // Implementation for single-dimensional functions
-impl<F, DF> ObjectiveFn for SingleDimDerFn<F, DF>
+impl<F, DF> ObjFn<MyFloat> for SingleDimDerFn<F, DF>
 where
     F: Fn(&MyFloat) -> MyFloat + Clone,
     DF: Fn(&MyFloat) -> MyFloat + Clone,
 {
-    fn call(&mut self, x: &Array1<MyFloat>) -> MyFloat {
+    fn call(&self, x: &Array1<MyFloat>) -> MyFloat {
         // Take the first element for single-dim functions
         (self.0)(&x[0])
     }
 
-    fn call_scalar(&mut self, x: &MyFloat) -> MyFloat {
+    fn call_scalar(&self, x: &MyFloat) -> MyFloat {
         (self.0)(x)
     }
 }
 
 // Implementation for single-dimensional functions
-impl<F, DF> ObjectiveDerFn for SingleDimDerFn<F, DF>
+impl<F, DF> ObjDerFn<MyFloat> for SingleDimDerFn<F, DF>
 where
     F: Fn(&MyFloat) -> MyFloat + Clone,
     DF: Fn(&MyFloat) -> MyFloat + Clone,
@@ -309,21 +132,21 @@ where
 }
 
 // Implementation for multi-dimensional functions
-impl<F> ObjectiveFn for MultiDimFn<F>
+impl<F> ObjFn<MyFloat> for MultiDimFn<F>
 where
     F: Fn(&Array1<MyFloat>) -> MyFloat + Clone,
 {
-    fn call(&mut self, x: &Array1<MyFloat>) -> MyFloat {
+    fn call(&self, x: &Array1<MyFloat>) -> MyFloat {
         (self.0)(x)
     }
 
-    fn call_scalar(&mut self, x: &MyFloat) -> MyFloat {
+    fn call_scalar(&self, x: &MyFloat) -> MyFloat {
         (self.0)(&array![x.clone()])
     }
 }
 
 // Implementation for multi-dimensional functions
-impl<F> ObjectiveDerFn for MultiDimFn<F>
+impl<F> ObjDerFn<MyFloat> for MultiDimFn<F>
 where
     F: Fn(&Array1<MyFloat>) -> MyFloat + Clone,
 {
@@ -421,25 +244,15 @@ where
 //     let mut optimizer = NelderMead::new(x, scale, objective);
 //     optimizer.solve(100);
 // }
-pub trait Minimizer {
-    /// Calculate the objective function
-    fn calc_obj(&mut self, x: &Array1<MyFloat>) -> MyFloat;
-
+pub trait Minimizer<T> {
     /// Run the optimization for specified iterations
-    fn solve(&mut self, max_iters: usize);
+    fn minimize(&mut self, max_iters: Option<usize>) -> Box<dyn MinimizerResult<T>>;
+}
 
-    /// Get the final solution
-    fn x(&self) -> &Array1<f64>;
-
-    /// Get the final objective value
-    fn final_value(&self) -> Option<f64>;
-
-    /// Get the tolerance/convergence metric
-    fn tolerance(&self) -> Option<f64>;
-
-    /// Get the number of iterations performed
-    fn iterations(&self) -> usize;
-
-    /// Get optimizer name for reporting
-    fn name(&self) -> &str;
+pub trait MinimizerResult<T> {
+    fn xmin(&self) -> T;
+    fn fmin(&self) -> f64;
+    fn fn_evals(&self) -> usize;
+    fn iters(&self) -> usize;
+    fn converged(&self) -> bool;
 }

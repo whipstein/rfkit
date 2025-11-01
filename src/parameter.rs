@@ -107,7 +107,7 @@ impl fmt::Display for RFParameter {
 }
 
 #[cfg(test)]
-mod test {
+mod parameter_test {
     use super::*;
 
     #[test]

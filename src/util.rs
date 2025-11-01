@@ -1,6 +1,6 @@
 use crate::myfloat::MyFloat;
-use crate::point::{Point, Pointf64, Pt};
-use crate::points::{Points, Pointsf64, Pts};
+use crate::point::{Point, Pt};
+use crate::points::{Points, Pts};
 use float_cmp::{F64Margin, approx_eq};
 use ndarray::prelude::*;
 use num::complex::Complex64;
@@ -29,7 +29,12 @@ pub fn comp_line(exemplar: &str, net: &str, test: &str) {
     }
 }
 
-pub fn comp_points_c64(exemplar: &Points, calc: &Points, precision: F64Margin, test: &str) {
+pub fn comp_points_c64(
+    exemplar: &Points<Complex64>,
+    calc: &Points<Complex64>,
+    precision: F64Margin,
+    test: &str,
+) {
     // azip!((index (i,j,k), &e in exemplar, &c in calc) {
     //     comp_c64(&e, &c, precision, test, format!("{},{},{}", i,j,k).to_owned().as_str());
     // });
@@ -55,7 +60,12 @@ pub fn comp_points_c64(exemplar: &Points, calc: &Points, precision: F64Margin, t
     }
 }
 
-pub fn comp_points_f64(exemplar: &Pointsf64, calc: &Pointsf64, precision: F64Margin, test: &str) {
+pub fn comp_points_f64(
+    exemplar: &Points<f64>,
+    calc: &Points<f64>,
+    precision: F64Margin,
+    test: &str,
+) {
     // azip!((index (i,j,k), &e in exemplar, &c in calc) {
     //     comp_f64(&e, &c, precision, test, format!("{},{},{}", i,j,k).to_owned().as_str());
     // });
@@ -74,7 +84,12 @@ pub fn comp_points_f64(exemplar: &Pointsf64, calc: &Pointsf64, precision: F64Mar
     }
 }
 
-pub fn comp_point_c64(exemplar: &Point, calc: &Point, precision: F64Margin, test: &str) {
+pub fn comp_point_c64(
+    exemplar: &Point<Complex64>,
+    calc: &Point<Complex64>,
+    precision: F64Margin,
+    test: &str,
+) {
     for j in 0..calc.nrows() {
         for k in 0..calc.ncols() {
             comp_point(
@@ -95,7 +110,7 @@ pub fn comp_point_c64(exemplar: &Point, calc: &Point, precision: F64Margin, test
     }
 }
 
-pub fn comp_point_f64(exemplar: &Pointf64, calc: &Pointf64, precision: F64Margin, test: &str) {
+pub fn comp_point_f64(exemplar: &Point<f64>, calc: &Point<f64>, precision: F64Margin, test: &str) {
     for j in 0..calc.nrows() {
         for k in 0..calc.ncols() {
             comp_point(
@@ -131,6 +146,61 @@ pub fn comp_row_f64(exemplar: &Array1<f64>, calc: &Array1<f64>, precision: F64Ma
             precision,
             test,
             format!("({})", k),
+        );
+    }
+}
+
+pub fn comp_point_myfloat(
+    exemplar: &Point<MyFloat>,
+    calc: &Point<MyFloat>,
+    precision: F64Margin,
+    test: &str,
+) {
+    for j in 0..calc.nrows() {
+        for k in 0..calc.ncols() {
+            comp_myfloat(
+                &exemplar[(j, k)],
+                &calc[(j, k)],
+                precision,
+                test,
+                &format!("({},{})", j, k).to_owned(),
+            );
+        }
+    }
+}
+
+pub fn comp_mat_myfloat(
+    exemplar: &Array2<MyFloat>,
+    calc: &Array2<MyFloat>,
+    precision: F64Margin,
+    test: &str,
+) {
+    for j in 0..calc.nrows() {
+        for k in 0..calc.ncols() {
+            comp_myfloat(
+                &exemplar[(j, k)],
+                &calc[(j, k)],
+                precision,
+                test,
+                &format!("({}, {})", j, k).to_owned(),
+            );
+        }
+    }
+}
+
+pub fn comp_row_myfloat(
+    exemplar: &Array1<MyFloat>,
+    calc: &Array1<MyFloat>,
+    precision: F64Margin,
+    test: &str,
+) {
+    for k in 0..calc.len() {
+        comp_myfloat(
+            exemplar.get(k).unwrap(),
+            calc.get(k).unwrap(),
+            precision,
+            test,
+            &format!("({})", k).to_owned(),
         );
     }
 }

@@ -113,7 +113,7 @@ impl fmt::Display for Scale {
 }
 
 #[cfg(test)]
-mod test {
+mod scale_tests {
     use super::*;
     use crate::util::comp_f64;
     use float_cmp::F64Margin;

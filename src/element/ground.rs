@@ -1,4 +1,4 @@
-use crate::elements::{Elem, ElemType, Term};
+use crate::element::{Elem, ElemType, Term};
 use crate::frequency::Frequency;
 use crate::point;
 use crate::point::Point;
@@ -11,7 +11,7 @@ pub struct Ground {
     id: String,
     z: Complex64,
     node: [usize; 1],
-    c: Point,
+    c: Point<Complex64>,
     z0: Complex64,
 }
 
@@ -31,14 +31,14 @@ impl Default for Ground {
             id: "gnd".to_string(),
             z: Complex64::ZERO,
             node: [0],
-            c: point![[Complex64::ZERO]],
+            c: point![Complex64, [Complex64::ZERO]],
             z0: Complex64::ZERO,
         }
     }
 }
 
 impl Elem for Ground {
-    fn c(&self, _freq: &Frequency) -> Point {
+    fn c(&self, _freq: &Frequency) -> Point<Complex64> {
         self.c.clone()
     }
 
@@ -58,7 +58,7 @@ impl Elem for Ground {
         &self.id
     }
 
-    fn net(&self, freq: &Frequency) -> Points {
+    fn net(&self, freq: &Frequency) -> Points<Complex64> {
         Points::zeros((freq.npts(), 1, 1))
     }
 

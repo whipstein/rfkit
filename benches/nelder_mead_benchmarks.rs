@@ -5,7 +5,7 @@ use ndarray::prelude::*;
 use std::time::Duration;
 
 // Import your crate modules - adjust the crate name as needed
-use rfkit_base_ndarray::prelude::*;
+use rfkit_base::prelude::*;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum TestType {

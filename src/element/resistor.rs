@@ -1,4 +1,4 @@
-use crate::elements::{Elem, ElemType, Lumped};
+use crate::element::{Elem, ElemType, Lumped};
 use crate::frequency::Frequency;
 use crate::point;
 use crate::point::Point;
@@ -13,7 +13,7 @@ pub struct Resistor {
     id: String,
     res: UnitVal,
     nodes: [usize; 2],
-    c: Point,
+    c: Point<Complex64>,
     z0: Complex64,
 }
 
@@ -24,6 +24,7 @@ impl Resistor {
             res: res,
             nodes: nodes,
             c: point![
+                Complex64,
                 [c64(1.0 / 3.0, 0.0), c64(2.0 / 3.0, 0.0)],
                 [c64(2.0 / 3.0, 0.0), c64(1.0 / 3.0, 0.0)]
             ],
@@ -43,6 +44,7 @@ impl Default for Resistor {
             res: UnitVal::default(),
             nodes: [0, 0],
             c: point![
+                Complex64,
                 [c64(1.0 / 3.0, 0.0), c64(2.0 / 3.0, 0.0)],
                 [c64(2.0 / 3.0, 0.0), c64(1.0 / 3.0, 0.0)]
             ],
@@ -52,7 +54,7 @@ impl Default for Resistor {
 }
 
 impl Elem for Resistor {
-    fn c(&self, _freq: &Frequency) -> Point {
+    fn c(&self, _freq: &Frequency) -> Point<Complex64> {
         self.c.clone()
     }
 
@@ -72,7 +74,7 @@ impl Elem for Resistor {
         &self.id
     }
 
-    fn net(&self, freq: &Frequency) -> Points {
+    fn net(&self, freq: &Frequency) -> Points<Complex64> {
         Points::from_shape_fn((freq.npts(), 2, 2), |(_, j, k)| match (j, k) {
             (0, 0) | (1, 1) => c64(1.0 / 3.0, 0.0),
             (1, 0) | (0, 1) => c64(2.0 / 3.0, 0.0),
@@ -191,6 +193,7 @@ impl ResistorBuilder {
             res: self.res,
             nodes: self.nodes,
             c: point![
+                Complex64,
                 [c64(1.0 / 3.0, 0.0), c64(2.0 / 3.0, 0.0)],
                 [c64(2.0 / 3.0, 0.0), c64(1.0 / 3.0, 0.0)]
             ],
@@ -211,7 +214,7 @@ impl Default for ResistorBuilder {
 }
 
 #[cfg(test)]
-mod test {
+mod element_resistor_tests {
     use super::*;
     use crate::unit::UnitValBuilder;
     use crate::util::{comp_c64, comp_point_c64};
@@ -229,6 +232,7 @@ mod test {
             res: unitval,
             nodes: [1, 2],
             c: point![
+                Complex64,
                 [c64(1.0 / 3.0, 0.0), c64(2.0 / 3.0, 0.0)],
                 [c64(2.0 / 3.0, 0.0), c64(1.0 / 3.0, 0.0)]
             ],

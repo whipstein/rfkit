@@ -1,4 +1,5 @@
-use crate::minimize::MinimizerError;
+use crate::error::MinimizerError;
+use crate::minimize::ObjFn;
 use ndarray::prelude::*;
 
 pub mod bracket;
@@ -9,6 +10,8 @@ pub mod constraint;
 pub mod dbrent;
 pub mod golden;
 pub mod interior_point;
+pub mod nelder_mead;
+pub mod nelder_mead_bounded;
 pub mod objective;
 pub mod powell;
 pub mod quasi_newton;
@@ -25,9 +28,11 @@ pub use self::constraint::{
 pub use self::dbrent::DBrent;
 pub use self::golden::Golden;
 pub use self::interior_point::InteriorPoint;
+pub use self::nelder_mead::{NelderMead, NelderMeadResult};
+pub use self::nelder_mead_bounded::{NelderMeadBounded, NelderMeadBoundedResult};
 pub use self::objective::{
-    F1dim, GF1dim, HF1dim, MultiDimFn, MultiDimGradFn, MultiDimHessFn, MultiDimNumGradFn, ObjDerFn,
-    ObjFn, ObjGradFn, ObjHessFn, SingleDimDerFn, SingleDimFn,
+    F1dim, GF1dim, HF1dim, MultiDimFn, MultiDimGradFn, MultiDimHessFn, MultiDimNumGradFn,
+    SingleDimDerFn, SingleDimFn,
 };
 pub use self::powell::Powell;
 pub use self::quasi_newton::QuasiNewton;
@@ -93,7 +98,10 @@ impl Vertex {
         Ok(Vertex { point, value })
     }
 
-    pub(crate) fn new_boxed(point: Array1<f64>, f: Box<dyn ObjFn>) -> Result<Self, MinimizerError> {
+    pub(crate) fn new_boxed(
+        point: Array1<f64>,
+        f: Box<dyn ObjFn<f64>>,
+    ) -> Result<Self, MinimizerError> {
         let value = f.call(&point);
         if !value.is_finite() {
             return Err(MinimizerError::FunctionEvaluationError);

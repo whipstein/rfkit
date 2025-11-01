@@ -5,8 +5,8 @@ use crate::mycomplex::MyComplex;
 use crate::myfloat::MyFloat;
 use crate::network::{Network, NetworkPoint, PortVal, WaveType, network_err_msg};
 use crate::parameter::RFParameter;
-use crate::point::{Point, PointComplex, Pt};
-use crate::points::{Points, Pointsf64, Pts};
+use crate::point::{Point, Pt};
+use crate::points::{Points, Pts};
 use crate::unit::Unit;
 use ndarray::OwnedRepr;
 use ndarray::prelude::*;
@@ -50,17 +50,17 @@ pub struct NetworkBuilder {
     dim: (usize, usize, usize),
     z0: Array1<Complex64>,
     param: RFParameter,
-    net: Option<Points>,
-    a: Option<Points>,
-    g: Option<Points>,
-    h: Option<Points>,
-    s: Option<Points>,
-    s_power: Option<Points>,
-    s_pseudo: Option<Points>,
-    s_traveling: Option<Points>,
-    t: Option<Points>,
-    y: Option<Points>,
-    z: Option<Points>,
+    net: Option<Points<Complex64>>,
+    a: Option<Points<Complex64>>,
+    g: Option<Points<Complex64>>,
+    h: Option<Points<Complex64>>,
+    s: Option<Points<Complex64>>,
+    s_power: Option<Points<Complex64>>,
+    s_pseudo: Option<Points<Complex64>>,
+    s_traveling: Option<Points<Complex64>>,
+    t: Option<Points<Complex64>>,
+    y: Option<Points<Complex64>>,
+    z: Option<Points<Complex64>>,
 }
 
 impl NetworkBuilder {
@@ -119,7 +119,7 @@ impl NetworkBuilder {
     }
 
     /// Provide ABCD parameters representation of Network
-    pub fn a(mut self, net: Points) -> Self {
+    pub fn a(mut self, net: Points<Complex64>) -> Self {
         self.param = RFParameter::A;
         self.nports = net.slice(s![0, .., ..]).nrows();
         self.net = Some(net);
@@ -127,7 +127,7 @@ impl NetworkBuilder {
     }
 
     /// Provide inverse hybrid parameters representation of Network
-    pub fn g(mut self, net: Points) -> Self {
+    pub fn g(mut self, net: Points<Complex64>) -> Self {
         self.param = RFParameter::G;
         self.nports = net.slice(s![0, .., ..]).nrows();
         self.net = Some(net);
@@ -135,7 +135,7 @@ impl NetworkBuilder {
     }
 
     /// Provide hybrid parameters representation of Network
-    pub fn h(mut self, net: Points) -> Self {
+    pub fn h(mut self, net: Points<Complex64>) -> Self {
         self.param = RFParameter::H;
         self.nports = net.slice(s![0, .., ..]).nrows();
         self.net = Some(net);
@@ -143,7 +143,7 @@ impl NetworkBuilder {
     }
 
     /// Provide S-parameter representation of Network
-    pub fn s(mut self, net: Points) -> Self {
+    pub fn s(mut self, net: Points<Complex64>) -> Self {
         self.param = RFParameter::S;
         self.nports = net.slice(s![0, .., ..]).nrows();
         self.net = Some(net);
@@ -151,7 +151,7 @@ impl NetworkBuilder {
     }
 
     /// Provide Power S-parameter representation of Network
-    pub fn s_power(mut self, net: Points) -> Self {
+    pub fn s_power(mut self, net: Points<Complex64>) -> Self {
         self.param = RFParameter::SPower;
         self.nports = net.slice(s![0, .., ..]).nrows();
         self.net = Some(net);
@@ -159,7 +159,7 @@ impl NetworkBuilder {
     }
 
     /// Provide Pseudo S-parameter representation of Network
-    pub fn s_pseudo(mut self, net: Points) -> Self {
+    pub fn s_pseudo(mut self, net: Points<Complex64>) -> Self {
         self.param = RFParameter::SPseudo;
         self.nports = net.slice(s![0, .., ..]).nrows();
         self.net = Some(net);
@@ -167,7 +167,7 @@ impl NetworkBuilder {
     }
 
     /// Provide Traveling S-parameter representation of Network
-    pub fn s_traveling(mut self, net: Points) -> Self {
+    pub fn s_traveling(mut self, net: Points<Complex64>) -> Self {
         self.param = RFParameter::STraveling;
         self.nports = net.slice(s![0, .., ..]).nrows();
         self.net = Some(net);
@@ -175,7 +175,7 @@ impl NetworkBuilder {
     }
 
     /// Provide cascade parameters representation of Network
-    pub fn t(mut self, net: Points) -> Self {
+    pub fn t(mut self, net: Points<Complex64>) -> Self {
         self.param = RFParameter::T;
         self.nports = net.slice(s![0, .., ..]).nrows();
         self.net = Some(net);
@@ -183,7 +183,7 @@ impl NetworkBuilder {
     }
 
     /// Provide admittance parameters representation of Network
-    pub fn y(mut self, net: Points) -> Self {
+    pub fn y(mut self, net: Points<Complex64>) -> Self {
         self.param = RFParameter::Y;
         self.nports = net.slice(s![0, .., ..]).nrows();
         self.net = Some(net);
@@ -191,7 +191,7 @@ impl NetworkBuilder {
     }
 
     /// Provide impedance parameters representation of Network
-    pub fn z(mut self, net: Points) -> Self {
+    pub fn z(mut self, net: Points<Complex64>) -> Self {
         self.param = RFParameter::Z;
         self.nports = net.slice(s![0, .., ..]).nrows();
         self.net = Some(net);
@@ -199,7 +199,7 @@ impl NetworkBuilder {
     }
 
     /// Provide RF parameters representation of Network
-    pub fn params(mut self, net: Points, param: RFParameter) -> Self {
+    pub fn params(mut self, net: Points<Complex64>, param: RFParameter) -> Self {
         self.param = param;
         self.nports = net.slice(s![0, .., ..]).nrows();
         self.net = Some(net);
@@ -587,7 +587,7 @@ impl Default for NetworkBuilder {
 }
 
 #[cfg(test)]
-mod test {
+mod network_builder_tests {
     use super::*;
     use crate::frequency::FrequencyBuilder;
     use crate::impedance::*;
@@ -604,10 +604,10 @@ mod test {
         ulps: 10,
     };
 
-    fn compare_2ports(calc: &Network, exemplars: HashMap<RFParameter, Points>) {
+    fn compare_2ports(calc: &Network, exemplars: HashMap<RFParameter, Points<Complex64>>) {
         let margin = MARGIN;
         let mut new_net = calc.clone();
-        let x = Points::new(array![
+        let x = Points::<Complex64>::new(array![
             [
                 [c64(1.0, 0.0), c64(2.0, 0.0)],
                 [c64(3.0, 0.0), c64(4.0, 0.0)]
@@ -824,7 +824,7 @@ mod test {
         let comments = String::from("here are some comments\nand some more");
         let fdata = array![1.0, 2.0, 3.0];
         let z0 = array![c64(50.0, 0.0), c64(50.0, 0.0),];
-        let ndata = Points::new(array![
+        let ndata = Points::<Complex64>::new(array![
             [
                 [c64(0.958, -0.263), c64(-0.846, 0.158)],
                 [c64(0.004, 0.022), c64(0.544, -0.129)]
@@ -910,7 +910,7 @@ mod test {
                     .build(),
             )
             .z0(array![src.z(), load.z()])
-            .s(Points::new(array![[
+            .s(Points::<Complex64>::new(array![[
                 [c64(0.0, 0.0), c64(1.0, 0.0)],
                 [c64(1.0, 0.0), c64(0.0, 0.0)]
             ]]))

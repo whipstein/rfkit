@@ -1,11 +1,13 @@
+use crate::error::InversionError;
 use ndarray::iter::{AxisIter, AxisIterMut, IndexedIter, IndexedIterMut};
 use ndarray::{ShapeError, SliceArg, prelude::*};
 
-mod complex;
-mod float;
+pub mod c64;
+pub mod f64;
+pub mod mycomplex;
+pub mod myfloat;
 
-pub use self::complex::Points;
-pub use self::float::Pointsf64;
+pub struct Points<T>(Array3<T>);
 
 pub trait Pts<T, U> {
     /// Create a new matrix with given dimensions filled with zeros
@@ -15,12 +17,24 @@ pub trait Pts<T, U> {
     /// Create an identity matrix of given (length, size)
     fn eye(size: (usize, usize)) -> Self;
 
-    /// Create a matrix from a 2D vector of f64 values
+    /// Create a matrix from a 3D vector
+    fn from_vec(data: Vec<Vec<Vec<T>>>) -> Result<Self, &'static str>
+    where
+        Self: Sized;
+    /// Create a matrix from a 3D vector of f64 values
     fn from_vec_f64(data: Vec<Vec<Vec<f64>>>) -> Result<Self, &'static str>
     where
         Self: Sized;
-    /// Create a matrix from a 2D vector of complex tuples (real, imag)
-    fn from_vec_complex(data: Vec<Vec<Vec<(f64, f64)>>>) -> Result<Self, &'static str>
+    /// Create a matrix from a 3D vector of float values
+    fn from_vec_float(data: Vec<Vec<Vec<U>>>) -> Result<Self, &'static str>
+    where
+        Self: Sized;
+    /// Create a matrix from a 3D vector of complex tuples (real, imag)
+    fn from_vec_c64(data: Vec<Vec<Vec<(f64, f64)>>>) -> Result<Self, &'static str>
+    where
+        Self: Sized;
+    /// Create a matrix from a 3D vector of complex tuples (real, imag)
+    fn from_vec_complex(data: Vec<Vec<Vec<(U, U)>>>) -> Result<Self, &'static str>
     where
         Self: Sized;
     /// Create a matrix from a flat vector with specified dimensions
@@ -60,18 +74,56 @@ pub trait Pts<T, U> {
 
     /// Get the len of axis
     fn len_of(&self, axis: Axis) -> usize;
+    /// Get the number of points
+    fn npts(&self) -> usize;
+    /// Get the number of rows
+    fn nrows(&self) -> usize;
+    /// Get the number of columns
+    fn ncols(&self) -> usize;
     /// Get the shape as (len, rows, cols)
     fn dim(&self) -> (usize, usize, usize);
     /// Get the shape as (len, rows, cols)
     fn shape(&self) -> (usize, usize, usize);
 
-    /// Get a view of the matrix
-    fn view(&self) -> ArrayView3<T>;
-    /// Get a mutable view of the matrix
-    fn view_mut(&mut self) -> ArrayViewMut3<T>;
+    /// Check if the matrix is square
+    fn is_square(&self) -> bool;
 
+    /// Get a view of the matrix
+    fn view(&self) -> ArrayView3<'_, T>;
+    /// Get a mutable view of the matrix
+    fn view_mut(&mut self) -> ArrayViewMut3<'_, T>;
+
+    /// Transpose the matrix
+    fn t(&self) -> Self;
+    /// Transpose the matrix
+    fn transpose(&self) -> Self;
+    /// Get the conjugate transpose (Hermitian transpose)
+    fn h(&self) -> Self;
+    /// Get the conjugate transpose (Hermitian transpose)
+    fn conj_transpose(&self) -> Self;
+
+    /// Calculate the trace (sum of diagonal elements)
+    fn trace(&self) -> Array1<T>;
+    /// Calculate the determinant (only for small matrices)
+    fn det(&self) -> Array1<T>;
     /// Element-wise conjugate
     fn conj(&self) -> Self;
+    /// Calculate the Frobenius norm
+    fn frobenius_norm(&self) -> Array1<U>;
+
+    /// Point multiplication
+    fn dot(&self, other: &Self) -> Self;
+    // fn not(&self) -> Self;
+
+    /// Get a row as a new matrix (1 x ncols)
+    fn row(&self, index: usize) -> Self;
+    /// Get a column as a new matrix (nrows x 1)
+    fn col(&self, index: usize) -> Self;
+
+    /// Set a row from another matrix
+    fn set_row(&mut self, index: usize, row: &Self);
+    /// Set a column from another matrix
+    fn set_col(&mut self, index: usize, col: &Self);
 
     /// Access the inner ndarray (for advanced operations)
     fn inner(&self) -> &Array3<T>;
@@ -90,4 +142,16 @@ pub trait Pts<T, U> {
     fn map_inplace<F>(&mut self, f: F)
     where
         F: Fn(&T) -> T;
+
+    /// Compute the inverse of a square matrix using LU decomposition with partial pivoting
+    fn inv(&self) -> Self;
+    fn try_inv(&self) -> Result<Self, InversionError>
+    where
+        Self: Sized;
+
+    /// Solve the linear system Ax = b using LU decomposition
+    fn solve_linear_system(&self, b: &ArrayView3<T>) -> Result<Array3<T>, InversionError>;
+
+    /// Check if a matrix is approximately equal to another matrix within a tolerance
+    fn approx_eq(a: &ArrayView3<T>, b: &ArrayView3<T>, tol: f64) -> bool;
 }

@@ -111,7 +111,7 @@ impl StringUtils for str {
 }
 
 fn parse_value(
-    pt: &mut Point,
+    pt: &mut Point<Complex64>,
     i: usize,
     j: usize,
     fmt: ComplexNumberType,
@@ -298,7 +298,7 @@ pub fn read_touchstone(file_path: &String) -> Result<Network, Box<dyn Error>> {
 }
 
 #[cfg(test)]
-mod test {
+mod file_tests {
     use crate::util::{comp_line, comp_points_c64};
     use float_cmp::F64Margin;
 
@@ -314,7 +314,7 @@ mod test {
                 .build(),
             array![c64(50.0, 0.0)],
             RFParameter::S,
-            Points::new(array![
+            Points::<Complex64>::new(array![
                 [[c64(0.45345337996, 0.891279996524)]],
                 [[c64(0.464543921496, 0.885550080459)]],
                 [[c64(0.475521092896, 0.879704319764)]],
@@ -373,7 +373,7 @@ mod test {
                 .build(),
             array![c64(50.0, 0.0), c64(50.0, 0.0)],
             RFParameter::S,
-            Points::new(array![
+            Points::<Complex64>::new(array![
                 [
                     [
                         c64(0.9881388526914863, -0.13442709904013195),
@@ -3313,7 +3313,7 @@ mod test {
                 .build(),
             array![c64(50.0, 0.0), c64(50.0, 0.0), c64(50.0, 0.0)],
             RFParameter::S,
-            Points::new(array![
+            Points::<Complex64>::new(array![
                 [
                     [
                         c64(-0.333333333333, 0.0),

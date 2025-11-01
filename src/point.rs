@@ -1,36 +1,14 @@
+use crate::error::InversionError;
 use ndarray::SliceArg;
 use ndarray::iter::{IndexedIter, IndexedIterMut};
 use ndarray::prelude::*;
 
-mod complex;
-mod float;
-mod mycomplex;
-mod myfloat;
+pub mod c64;
+pub mod f64;
+pub mod mycomplex;
+pub mod myfloat;
 
-pub use self::complex::Point;
-pub use self::float::Pointf64;
-pub use self::mycomplex::PointComplex;
-pub use self::myfloat::PointFloat;
-
-/// Additional error types for matrix inversion
-#[derive(Debug, PartialEq)]
-pub enum InversionError {
-    NotSquare(String),
-    Singular(String),
-    DimensionMismatch(String),
-}
-
-impl std::fmt::Display for InversionError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            InversionError::NotSquare(msg) => write!(f, "Matrix is not square: {}", msg),
-            InversionError::Singular(msg) => write!(f, "Matrix is singular: {}", msg),
-            InversionError::DimensionMismatch(msg) => write!(f, "Dimension mismatch: {}", msg),
-        }
-    }
-}
-
-impl std::error::Error for InversionError {}
+pub struct Point<T>(Array2<T>);
 
 pub trait Pt<T, U> {
     /// Create a new matrix with given dimensions filled with zeros
@@ -40,16 +18,28 @@ pub trait Pt<T, U> {
     /// Create an identity matrix of given size
     fn eye(size: usize) -> Self;
 
+    /// Create a matrix from a 2D vector
+    fn from_vec(data: Vec<Vec<T>>) -> Result<Self, &'static str>
+    where
+        Self: Sized;
     /// Create a matrix from a 2D vector of f64 values
     fn from_vec_f64(data: Vec<Vec<f64>>) -> Result<Self, &'static str>
     where
         Self: Sized;
+    /// Create a matrix from a 2D vector of U values
+    fn from_vec_float(data: Vec<Vec<U>>) -> Result<Self, &'static str>
+    where
+        Self: Sized;
     /// Create a matrix from a 2D vector of complex tuples (real, imag)
-    fn from_vec_complex(data: Vec<Vec<(f64, f64)>>) -> Result<Self, &'static str>
+    fn from_vec_c64(data: Vec<Vec<(f64, f64)>>) -> Result<Self, &'static str>
+    where
+        Self: Sized;
+    /// Create a matrix from a 2D vector of complex tuples (real, imag)
+    fn from_vec_complex(data: Vec<Vec<(U, U)>>) -> Result<Self, &'static str>
     where
         Self: Sized;
     /// Create a matrix from a flat vector with specified dimensions
-    fn from_flat_f64(data: Vec<f64>, rows: usize, cols: usize) -> Result<Self, &'static str>
+    fn from_flat_f64(data: Vec<U>, rows: usize, cols: usize) -> Result<Self, &'static str>
     where
         Self: Sized;
     fn from_shape_fn<F>(shape: (usize, usize), f: F) -> Self
@@ -81,9 +71,9 @@ pub trait Pt<T, U> {
     fn is_square(&self) -> bool;
 
     /// Get a view of the matrix
-    fn view(&self) -> ArrayView2<T>;
+    fn view(&self) -> ArrayView2<'_, T>;
     /// Get a mutable view of the matrix
-    fn view_mut(&mut self) -> ArrayViewMut2<T>;
+    fn view_mut(&mut self) -> ArrayViewMut2<'_, T>;
 
     /// Transpose the matrix
     fn t(&self) -> Self;
@@ -105,6 +95,7 @@ pub trait Pt<T, U> {
 
     /// Point multiplication
     fn dot(&self, other: &Self) -> Self;
+    // fn not(&self) -> Self;
 
     /// Get a row as a new matrix (1 x ncols)
     fn row(&self, index: usize) -> Self;
@@ -157,6 +148,9 @@ pub trait Pt<T, U> {
     /// let inv_matrix = Complex64::matrix_inverse(&matrix.view())?;
     /// ```
     fn inv(&self) -> Self;
+    fn try_inv(&self) -> Result<Self, InversionError>
+    where
+        Self: Sized;
 
     /// Solve the linear system Ax = b using LU decomposition
     ///
@@ -167,10 +161,6 @@ pub trait Pt<T, U> {
     /// # Returns
     /// * `Ok(Array2<MyComplex>)` - Solution vector x
     /// * `Err(InversionError)` - If the system cannot be solved
-    fn try_inv(&self) -> Result<Self, InversionError>
-    where
-        Self: Sized;
-
     fn solve_linear_system(&self, b: &ArrayView2<T>) -> Result<Array2<T>, InversionError>;
 
     /// Check if a matrix is approximately equal to another matrix within a tolerance

@@ -5,8 +5,8 @@ use crate::mycomplex::MyComplex;
 use crate::myfloat::MyFloat;
 use crate::network::{NetworkPoint, PortPoints, PortPointsf64, PortVal, WaveType, network_err_msg};
 use crate::parameter::RFParameter;
-use crate::point::{Point, PointComplex, Pt};
-use crate::points::{Points, Pointsf64, Pts};
+use crate::point::{Point, Pt};
+use crate::points::{Points, Pts};
 use crate::scale::Scale;
 use crate::unit::Unit;
 use ndarray::OwnedRepr;
@@ -70,16 +70,16 @@ pub struct Network {
     pub(super) npts: usize,
     pub(super) dim: (usize, usize, usize),
     pub(super) z0: Array1<Complex64>,
-    pub(super) a: Option<Points>,
-    pub(super) g: Option<Points>,
-    pub(super) h: Option<Points>,
-    pub(super) s: Option<Points>,
-    pub(super) s_power: Option<Points>,
-    pub(super) s_pseudo: Option<Points>,
-    pub(super) s_traveling: Option<Points>,
-    pub(super) t: Option<Points>,
-    pub(super) y: Option<Points>,
-    pub(super) z: Option<Points>,
+    pub(super) a: Option<Points<Complex64>>,
+    pub(super) g: Option<Points<Complex64>>,
+    pub(super) h: Option<Points<Complex64>>,
+    pub(super) s: Option<Points<Complex64>>,
+    pub(super) s_power: Option<Points<Complex64>>,
+    pub(super) s_pseudo: Option<Points<Complex64>>,
+    pub(super) s_traveling: Option<Points<Complex64>>,
+    pub(super) t: Option<Points<Complex64>>,
+    pub(super) y: Option<Points<Complex64>>,
+    pub(super) z: Option<Points<Complex64>>,
 }
 
 impl Network {
@@ -87,7 +87,7 @@ impl Network {
         freq: Frequency,
         z0: Array1<Complex64>,
         param: RFParameter,
-        net: Points,
+        net: Points<Complex64>,
         name: String,
         comments: String,
     ) -> Network {
@@ -169,7 +169,7 @@ impl Network {
         freq: Frequency,
         z0: Array1<Complex64>,
         param: RFParameter,
-        net: Points,
+        net: Points<Complex64>,
         name: String,
         comments: String,
         port_names: Vec<String>,
@@ -517,49 +517,49 @@ impl Network {
         out
     }
 
-    pub fn a(&self) -> &Points {
+    pub fn a(&self) -> &Points<Complex64> {
         if self.nports != 2 {
             panic!("{}", network_err_msg(RFParameter::A, self.nports));
         }
         self.a.as_ref().unwrap()
     }
 
-    pub fn a_db(&self) -> Pointsf64 {
+    pub fn a_db(&self) -> Points<f64> {
         if self.nports != 2 {
             panic!("{}", network_err_msg(RFParameter::A, self.nports));
         }
         self.net_db(RFParameter::A)
     }
 
-    pub fn a_deg(&self) -> Pointsf64 {
+    pub fn a_deg(&self) -> Points<f64> {
         if self.nports != 2 {
             panic!("{}", network_err_msg(RFParameter::A, self.nports));
         }
         self.net_deg(RFParameter::A)
     }
 
-    pub fn a_im(&self) -> Pointsf64 {
+    pub fn a_im(&self) -> Points<f64> {
         if self.nports != 2 {
             panic!("{}", network_err_msg(RFParameter::A, self.nports));
         }
         self.net_im(RFParameter::A)
     }
 
-    pub fn a_mag(&self) -> Pointsf64 {
+    pub fn a_mag(&self) -> Points<f64> {
         if self.nports != 2 {
             panic!("{}", network_err_msg(RFParameter::A, self.nports));
         }
         self.net_mag(RFParameter::A)
     }
 
-    pub fn a_rad(&self) -> Pointsf64 {
+    pub fn a_rad(&self) -> Points<f64> {
         if self.nports != 2 {
             panic!("{}", network_err_msg(RFParameter::A, self.nports));
         }
         self.net_rad(RFParameter::A)
     }
 
-    pub fn a_re(&self) -> Pointsf64 {
+    pub fn a_re(&self) -> Points<f64> {
         if self.nports != 2 {
             panic!("{}", network_err_msg(RFParameter::A, self.nports));
         }
@@ -620,49 +620,49 @@ impl Network {
         &self.freq
     }
 
-    pub fn g(&self) -> &Points {
+    pub fn g(&self) -> &Points<Complex64> {
         if self.nports != 2 {
             panic!("{}", network_err_msg(RFParameter::G, self.nports));
         }
         self.g.as_ref().unwrap()
     }
 
-    pub fn g_db(&self) -> Pointsf64 {
+    pub fn g_db(&self) -> Points<f64> {
         if self.nports != 2 {
             panic!("{}", network_err_msg(RFParameter::G, self.nports));
         }
         self.net_db(RFParameter::G)
     }
 
-    pub fn g_deg(&self) -> Pointsf64 {
+    pub fn g_deg(&self) -> Points<f64> {
         if self.nports != 2 {
             panic!("{}", network_err_msg(RFParameter::G, self.nports));
         }
         self.net_deg(RFParameter::G)
     }
 
-    pub fn g_im(&self) -> Pointsf64 {
+    pub fn g_im(&self) -> Points<f64> {
         if self.nports != 2 {
             panic!("{}", network_err_msg(RFParameter::G, self.nports));
         }
         self.net_im(RFParameter::G)
     }
 
-    pub fn g_mag(&self) -> Pointsf64 {
+    pub fn g_mag(&self) -> Points<f64> {
         if self.nports != 2 {
             panic!("{}", network_err_msg(RFParameter::G, self.nports));
         }
         self.net_mag(RFParameter::G)
     }
 
-    pub fn g_rad(&self) -> Pointsf64 {
+    pub fn g_rad(&self) -> Points<f64> {
         if self.nports != 2 {
             panic!("{}", network_err_msg(RFParameter::G, self.nports));
         }
         self.net_rad(RFParameter::G)
     }
 
-    pub fn g_re(&self) -> Pointsf64 {
+    pub fn g_re(&self) -> Points<f64> {
         if self.nports != 2 {
             panic!("{}", network_err_msg(RFParameter::G, self.nports));
         }
@@ -693,49 +693,49 @@ impl Network {
         Array1::<f64>::from_vec(out)
     }
 
-    pub fn h(&self) -> &Points {
+    pub fn h(&self) -> &Points<Complex64> {
         if self.nports != 2 {
             panic!("{}", network_err_msg(RFParameter::H, self.nports));
         }
         self.h.as_ref().unwrap()
     }
 
-    pub fn h_db(&self) -> Pointsf64 {
+    pub fn h_db(&self) -> Points<f64> {
         if self.nports != 2 {
             panic!("{}", network_err_msg(RFParameter::H, self.nports));
         }
         self.net_db(RFParameter::H)
     }
 
-    pub fn h_deg(&self) -> Pointsf64 {
+    pub fn h_deg(&self) -> Points<f64> {
         if self.nports != 2 {
             panic!("{}", network_err_msg(RFParameter::H, self.nports));
         }
         self.net_deg(RFParameter::H)
     }
 
-    pub fn h_im(&self) -> Pointsf64 {
+    pub fn h_im(&self) -> Points<f64> {
         if self.nports != 2 {
             panic!("{}", network_err_msg(RFParameter::H, self.nports));
         }
         self.net_im(RFParameter::H)
     }
 
-    pub fn h_mag(&self) -> Pointsf64 {
+    pub fn h_mag(&self) -> Points<f64> {
         if self.nports != 2 {
             panic!("{}", network_err_msg(RFParameter::H, self.nports));
         }
         self.net_mag(RFParameter::H)
     }
 
-    pub fn h_rad(&self) -> Pointsf64 {
+    pub fn h_rad(&self) -> Points<f64> {
         if self.nports != 2 {
             panic!("{}", network_err_msg(RFParameter::H, self.nports));
         }
         self.net_rad(RFParameter::H)
     }
 
-    pub fn h_re(&self) -> Pointsf64 {
+    pub fn h_re(&self) -> Points<f64> {
         if self.nports != 2 {
             panic!("{}", network_err_msg(RFParameter::H, self.nports));
         }
@@ -753,7 +753,7 @@ impl Network {
 
     pub fn is_reciprocal(&self) -> bool {
         for pt in self.s().outer_iter() {
-            if !Point::new(pt.to_owned()).is_reciprocal() {
+            if !Point::<Complex64>::new(pt.to_owned()).is_reciprocal() {
                 return false;
             }
         }
@@ -878,7 +878,7 @@ impl Network {
         &self.name
     }
 
-    pub fn net(&self, param: RFParameter) -> &Points {
+    pub fn net(&self, param: RFParameter) -> &Points<Complex64> {
         match param {
             RFParameter::A => {
                 if self.nports != 2 {
@@ -927,8 +927,8 @@ impl Network {
         }
     }
 
-    pub fn net_at_freq_idx(&self, param: RFParameter, idx: usize) -> Point {
-        Point::new(self.net(param).slice(s![idx, .., ..]).to_owned())
+    pub fn net_at_freq_idx(&self, param: RFParameter, idx: usize) -> Point<Complex64> {
+        Point::<Complex64>::new(self.net(param).slice(s![idx, .., ..]).to_owned())
     }
 
     pub fn net_at_port(&self, param: RFParameter, port: PortVal) -> PortPoints {
@@ -949,29 +949,29 @@ impl Network {
         self.net_at_freq_idx(param, idx)[[j, k]]
     }
 
-    pub fn net_conj(&self, param: RFParameter) -> Points {
+    pub fn net_conj(&self, param: RFParameter) -> Points<Complex64> {
         Points::from_shape_fn(self.net(param).dim(), |(i, j, k)| {
             self.net(param)[[i, j, k]].conj()
         })
     }
 
-    pub fn net_db(&self, param: RFParameter) -> Pointsf64 {
+    pub fn net_db(&self, param: RFParameter) -> Points<f64> {
         self.net(param).db()
     }
 
-    pub fn net_deg(&self, param: RFParameter) -> Pointsf64 {
+    pub fn net_deg(&self, param: RFParameter) -> Points<f64> {
         self.net(param).deg()
     }
 
-    pub fn net_im(&self, param: RFParameter) -> Pointsf64 {
+    pub fn net_im(&self, param: RFParameter) -> Points<f64> {
         self.net(param).im()
     }
 
-    pub fn net_mag(&self, param: RFParameter) -> Pointsf64 {
+    pub fn net_mag(&self, param: RFParameter) -> Points<f64> {
         self.net(param).mag()
     }
 
-    pub fn net_rad(&self, param: RFParameter) -> Pointsf64 {
+    pub fn net_rad(&self, param: RFParameter) -> Points<f64> {
         self.net(param).rad()
     }
 
@@ -982,7 +982,7 @@ impl Network {
             .to_owned()
     }
 
-    pub fn net_re(&self, param: RFParameter) -> Pointsf64 {
+    pub fn net_re(&self, param: RFParameter) -> Points<f64> {
         self.net(param).re()
     }
 
@@ -1041,55 +1041,55 @@ impl Network {
         &self.ports
     }
 
-    pub fn reciprocity(&self) -> Pointsf64 {
+    pub fn reciprocity(&self) -> Points<f64> {
         self.s().reciprocity().unwrap()
     }
 
-    pub fn s(&self) -> &Points {
+    pub fn s(&self) -> &Points<Complex64> {
         self.s.as_ref().unwrap()
     }
 
-    pub fn s_power(&self) -> &Points {
+    pub fn s_power(&self) -> &Points<Complex64> {
         self.s_power.as_ref().unwrap()
     }
 
-    pub fn s_pseudo(&self) -> &Points {
+    pub fn s_pseudo(&self) -> &Points<Complex64> {
         self.s_pseudo.as_ref().unwrap()
     }
 
-    pub fn s_traveling(&self) -> &Points {
+    pub fn s_traveling(&self) -> &Points<Complex64> {
         self.s_traveling.as_ref().unwrap()
     }
 
-    pub fn s_conj(&self) -> Points {
+    pub fn s_conj(&self) -> Points<Complex64> {
         self.s.as_ref().unwrap().conj()
     }
 
-    pub fn s_db(&self) -> Pointsf64 {
+    pub fn s_db(&self) -> Points<f64> {
         self.net_db(RFParameter::S)
     }
 
-    pub fn s_deg(&self) -> Pointsf64 {
+    pub fn s_deg(&self) -> Points<f64> {
         self.net_deg(RFParameter::S)
     }
 
-    pub fn s_im(&self) -> Pointsf64 {
+    pub fn s_im(&self) -> Points<f64> {
         self.net_im(RFParameter::S)
     }
 
-    pub fn s_mag(&self) -> Pointsf64 {
+    pub fn s_mag(&self) -> Points<f64> {
         self.net_mag(RFParameter::S)
     }
 
-    pub fn s_rad(&self) -> Pointsf64 {
+    pub fn s_rad(&self) -> Points<f64> {
         self.net_rad(RFParameter::S)
     }
 
-    pub fn s_re(&self) -> Pointsf64 {
+    pub fn s_re(&self) -> Points<f64> {
         self.net_re(RFParameter::S)
     }
 
-    pub fn set_net(&mut self, net: &Points, param: RFParameter) {
+    pub fn set_net(&mut self, net: &Points<Complex64>, param: RFParameter) {
         if net.slice(s![0, .., ..]).nrows() == 2 {
             match param {
                 RFParameter::A => {
@@ -1208,108 +1208,108 @@ impl Network {
         self.port_names = names;
     }
 
-    pub fn t(&self) -> &Points {
+    pub fn t(&self) -> &Points<Complex64> {
         if self.nports != 2 {
             panic!("{}", network_err_msg(RFParameter::T, self.nports));
         }
         self.t.as_ref().unwrap()
     }
 
-    pub fn t_db(&self) -> Pointsf64 {
+    pub fn t_db(&self) -> Points<f64> {
         if self.nports != 2 {
             panic!("{}", network_err_msg(RFParameter::T, self.nports));
         }
         self.net_db(RFParameter::T)
     }
 
-    pub fn t_deg(&self) -> Pointsf64 {
+    pub fn t_deg(&self) -> Points<f64> {
         if self.nports != 2 {
             panic!("{}", network_err_msg(RFParameter::T, self.nports));
         }
         self.net_deg(RFParameter::T)
     }
 
-    pub fn t_im(&self) -> Pointsf64 {
+    pub fn t_im(&self) -> Points<f64> {
         if self.nports != 2 {
             panic!("{}", network_err_msg(RFParameter::T, self.nports));
         }
         self.net_im(RFParameter::T)
     }
 
-    pub fn t_mag(&self) -> Pointsf64 {
+    pub fn t_mag(&self) -> Points<f64> {
         if self.nports != 2 {
             panic!("{}", network_err_msg(RFParameter::T, self.nports));
         }
         self.net_mag(RFParameter::T)
     }
 
-    pub fn t_rad(&self) -> Pointsf64 {
+    pub fn t_rad(&self) -> Points<f64> {
         if self.nports != 2 {
             panic!("{}", network_err_msg(RFParameter::T, self.nports));
         }
         self.net_rad(RFParameter::T)
     }
 
-    pub fn t_re(&self) -> Pointsf64 {
+    pub fn t_re(&self) -> Points<f64> {
         if self.nports != 2 {
             panic!("{}", network_err_msg(RFParameter::T, self.nports));
         }
         self.net_re(RFParameter::T)
     }
 
-    pub fn y(&self) -> &Points {
+    pub fn y(&self) -> &Points<Complex64> {
         self.y.as_ref().unwrap()
     }
 
-    pub fn y_db(&self) -> Pointsf64 {
+    pub fn y_db(&self) -> Points<f64> {
         self.net_db(RFParameter::Y)
     }
 
-    pub fn y_deg(&self) -> Pointsf64 {
+    pub fn y_deg(&self) -> Points<f64> {
         self.net_deg(RFParameter::Y)
     }
 
-    pub fn y_im(&self) -> Pointsf64 {
+    pub fn y_im(&self) -> Points<f64> {
         self.net_im(RFParameter::Y)
     }
 
-    pub fn y_mag(&self) -> Pointsf64 {
+    pub fn y_mag(&self) -> Points<f64> {
         self.net_mag(RFParameter::Y)
     }
 
-    pub fn y_rad(&self) -> Pointsf64 {
+    pub fn y_rad(&self) -> Points<f64> {
         self.net_rad(RFParameter::Y)
     }
 
-    pub fn y_re(&self) -> Pointsf64 {
+    pub fn y_re(&self) -> Points<f64> {
         self.net_re(RFParameter::Y)
     }
 
-    pub fn z(&self) -> &Points {
+    pub fn z(&self) -> &Points<Complex64> {
         self.z.as_ref().unwrap()
     }
 
-    pub fn z_db(&self) -> Pointsf64 {
+    pub fn z_db(&self) -> Points<f64> {
         self.net_db(RFParameter::Z)
     }
 
-    pub fn z_deg(&self) -> Pointsf64 {
+    pub fn z_deg(&self) -> Points<f64> {
         self.net_deg(RFParameter::Z)
     }
 
-    pub fn z_im(&self) -> Pointsf64 {
+    pub fn z_im(&self) -> Points<f64> {
         self.net_im(RFParameter::Z)
     }
 
-    pub fn z_mag(&self) -> Pointsf64 {
+    pub fn z_mag(&self) -> Points<f64> {
         self.net_mag(RFParameter::Z)
     }
 
-    pub fn z_rad(&self) -> Pointsf64 {
+    pub fn z_rad(&self) -> Points<f64> {
         self.net_rad(RFParameter::Z)
     }
 
-    pub fn z_re(&self) -> Pointsf64 {
+    pub fn z_re(&self) -> Points<f64> {
         self.net_re(RFParameter::Z)
     }
 
@@ -1393,7 +1393,7 @@ impl fmt::Debug for Network {
 }
 
 #[cfg(test)]
-mod test {
+mod network_network_tests {
     use super::*;
     use crate::frequency::FrequencyBuilder;
     use crate::impedance::*;
@@ -1412,10 +1412,10 @@ mod test {
         ulps: 10,
     };
 
-    fn compare_2ports(calc: &Network, exemplars: HashMap<RFParameter, Points>) {
+    fn compare_2ports(calc: &Network, exemplars: HashMap<RFParameter, Points<Complex64>>) {
         let margin = MARGIN;
         let mut new_net = calc.clone();
-        let x = Points::new(array![
+        let x = Points::<Complex64>::new(array![
             [
                 [c64(1.0, 0.0), c64(2.0, 0.0)],
                 [c64(3.0, 0.0), c64(4.0, 0.0)]
@@ -1632,7 +1632,7 @@ mod test {
             Frequency::new_scaled(array![1.0], Scale::Giga),
             array![c64::from(50.0), c64::from(50.0),],
             RFParameter::S,
-            Points::new(array![[
+            Points::<Complex64>::new(array![[
                 [c64(0.958, -0.263), c64(-0.846, 0.158)],
                 [c64(-0.846, 0.158), c64(0.544, -0.129)],
             ]]),
@@ -1640,7 +1640,7 @@ mod test {
             String::from(""),
         );
 
-        let exemplar = Pointsf64::zeros((1, 2, 2));
+        let exemplar = Points::<f64>::zeros((1, 2, 2));
         comp_points_f64(
             &exemplar,
             &calc.reciprocity(),
@@ -1653,7 +1653,7 @@ mod test {
             Frequency::new_scaled(array![1.0], Scale::Giga),
             array![c64::from(50.0), c64::from(50.0),],
             RFParameter::S,
-            Points::new(array![[
+            Points::<Complex64>::new(array![[
                 [c64(0.958, -0.263), c64(-0.846, 0.158)],
                 [c64(0.004, 0.022), c64(0.544, -0.129)],
             ]]),
@@ -1661,9 +1661,10 @@ mod test {
             String::from(""),
         );
 
-        let exemplar = Pointsf64::new(array![
-            [[0.0, 0.860811245279707], [0.860811245279707, 0.0],]
-        ]);
+        let exemplar = Points::<f64>::new(array![[
+            [0.0, 0.860811245279707],
+            [0.860811245279707, 0.0],
+        ]]);
 
         comp_points_f64(
             &exemplar,
@@ -1681,6 +1682,7 @@ mod test {
         let fdata = array![1.0, 2.0, 3.0];
         let z0 = array![c64(50.0, 0.0), c64(50.0, 0.0),];
         let ndata = points![
+            Complex64,
             [
                 [c64(0.958, -0.263), c64(-0.846, 0.158)],
                 [c64(0.004, 0.022), c64(0.544, -0.129)]
@@ -1747,6 +1749,7 @@ mod test {
         let fdata = array![1.0, 2.0, 3.0];
         let z0 = array![c64(50.0, 0.0), c64(50.0, 0.0),];
         let ndata = points![
+            Complex64,
             [
                 [c64(0.958, -0.263), c64(-0.846, 0.158)],
                 [c64(0.004, 0.022), c64(0.544, -0.129)]
@@ -1832,10 +1835,13 @@ mod test {
                     .build(),
             )
             .z0(array![src.z(), load.z()])
-            .s(points![[
-                [c64(0.0, 0.0), c64(1.0, 0.0)],
-                [c64(1.0, 0.0), c64(0.0, 0.0)]
-            ]])
+            .s(points![
+                Complex64,
+                [
+                    [c64(0.0, 0.0), c64(1.0, 0.0)],
+                    [c64(1.0, 0.0), c64(0.0, 0.0)]
+                ]
+            ])
             .build();
         println!("net: {:?}", net);
         assert_eq!(1, net.npts());
@@ -1848,7 +1854,7 @@ mod test {
             Frequency::new_scaled(array![1.0], Scale::Giga),
             array![c64::from(50.0)],
             RFParameter::A,
-            Points::new(array![[[c64(0.958, -0.263)]]]),
+            Points::<Complex64>::new(array![[[c64(0.958, -0.263)]]]),
             String::from(""),
             String::from(""),
         );
@@ -1858,7 +1864,7 @@ mod test {
     fn network_a_to_2port() {
         let param = RFParameter::A;
         // 2 PortVal, 3 Frequncy
-        let exemplar = Points::new(array![
+        let exemplar = Points::<Complex64>::new(array![
             [
                 [c64(0.958, -0.263), c64(-0.846, 0.158)],
                 [c64(0.004, 0.022), c64(0.544, -0.129)],
@@ -1885,7 +1891,7 @@ mod test {
 
         let exemplar_a = exemplar;
 
-        let exemplar_g = Points::new(array![
+        let exemplar_g = Points::<Complex64>::new(array![
             [
                 [
                     c64(-0.001979870974017487, 0.0224209748787405),
@@ -1918,7 +1924,7 @@ mod test {
             ],
         ]);
 
-        let exemplar_h = Points::new(array![
+        let exemplar_h = Points::<Complex64>::new(array![
             [
                 [
                     c64(-1.5375603451309596, -0.07416412595936357),
@@ -1951,7 +1957,7 @@ mod test {
             ],
         ]);
 
-        let exemplar_s = Points::new(array![
+        let exemplar_s = Points::<Complex64>::new(array![
             [
                 [
                     c64(-0.16238837756090263, -0.6619008482765142),
@@ -1984,7 +1990,7 @@ mod test {
             ],
         ]);
 
-        let exemplar_t = Points::new(array![
+        let exemplar_t = Points::<Complex64>::new(array![
             [
                 [c64(0.65946, -0.74758), c64(0.09853999999999996, -0.61542)],
                 [
@@ -2011,7 +2017,7 @@ mod test {
             ],
         ]);
 
-        let exemplar_y = Points::new(array![
+        let exemplar_y = Points::<Complex64>::new(array![
             [
                 [
                     c64(-0.6488713074472108, 0.031298266457849534),
@@ -2044,7 +2050,7 @@ mod test {
             ],
         ]);
 
-        let exemplar_z = Points::new(array![
+        let exemplar_z = Points::<Complex64>::new(array![
             [
                 [
                     c64(-3.9080000000000004, -44.256),
@@ -2077,7 +2083,7 @@ mod test {
             ],
         ]);
 
-        let mut exemplars: HashMap<RFParameter, Points> = HashMap::new();
+        let mut exemplars: HashMap<RFParameter, Points<Complex64>> = HashMap::new();
         exemplars.insert(RFParameter::A, exemplar_a);
         exemplars.insert(RFParameter::G, exemplar_g);
         exemplars.insert(RFParameter::H, exemplar_h);
@@ -2098,7 +2104,7 @@ mod test {
             Frequency::new_scaled(array![1.0], Scale::Giga),
             array![c64::from(50.0), c64::from(50.0),],
             RFParameter::S,
-            Points::new(array![[
+            Points::<Complex64>::new(array![[
                 [c64(0.958, -0.263), c64(-0.846, 0.158)],
                 [c64(-0.846, 0.158), c64(0.544, -0.129)],
             ]]),
@@ -2106,7 +2112,7 @@ mod test {
             String::from(""),
         );
 
-        let exemplar = Points::new(array![[
+        let exemplar = Points::<Complex64>::new(array![[
             [
                 c64(2.1770336894001643, -3.941372226787181),
                 c64(1.2297289917865257, -2.9608419909240657)
@@ -2125,7 +2131,7 @@ mod test {
     #[test]
     fn network_connect() {
         let param = RFParameter::S;
-        let net_a = Points::new(array![
+        let net_a = Points::<Complex64>::new(array![
             [
                 [c64(0.958, -0.263), c64(-0.846, 0.158)],
                 [c64(0.004, 0.022), c64(0.544, -0.129)],
@@ -2139,7 +2145,7 @@ mod test {
                 [c64(0.138, 0.132), c64(0.329, -0.324)],
             ],
         ]);
-        let net_b = Points::new(array![
+        let net_b = Points::<Complex64>::new(array![
             [
                 [c64(0.958, -0.263), c64(-0.846, 0.158)],
                 [c64(0.004, 0.022), c64(0.544, -0.129)],
@@ -2153,7 +2159,7 @@ mod test {
                 [c64(0.138, 0.132), c64(0.329, -0.324)],
             ],
         ]);
-        let exemplar = Points::new(array![
+        let exemplar = Points::<Complex64>::new(array![
             [
                 [
                     c64(9.2834313172353100e-01, -2.7765074827479197e-01),
@@ -2276,7 +2282,7 @@ mod test {
             Frequency::new_scaled(array![1.0], Scale::Giga),
             array![c64::from(50.0)],
             RFParameter::G,
-            Points::new(array![[[c64(0.958, -0.263)]]]),
+            Points::<Complex64>::new(array![[[c64(0.958, -0.263)]]]),
             String::from(""),
             String::from(""),
         );
@@ -2286,7 +2292,7 @@ mod test {
     fn network_g_to_2port() {
         let param = RFParameter::G;
         // 2 PortVal, 3 Frequncy
-        let exemplar = Points::new(array![
+        let exemplar = Points::<Complex64>::new(array![
             [
                 [c64(0.958, -0.263), c64(-0.846, 0.158)],
                 [c64(0.004, 0.022), c64(0.544, -0.129)],
@@ -2311,7 +2317,7 @@ mod test {
         );
         let mut new_net = calc.clone();
 
-        let exemplar_a = Points::new(array![
+        let exemplar_a = Points::<Complex64>::new(array![
             [
                 [
                     c64(8.000000000000002, -44.0),
@@ -2346,7 +2352,7 @@ mod test {
 
         let exemplar_g = exemplar;
 
-        let exemplar_h = Points::new(array![
+        let exemplar_h = Points::<Complex64>::new(array![
             [
                 [
                     c64(0.9833390626156057, 0.2338279001727904),
@@ -2379,7 +2385,7 @@ mod test {
             ],
         ]);
 
-        let exemplar_s = Points::new(array![
+        let exemplar_s = Points::<Complex64>::new(array![
             [
                 [
                     c64(-0.9618560343904763, 0.010242229130219861),
@@ -2412,7 +2418,7 @@ mod test {
             ],
         ]);
 
-        let exemplar_t = Points::new(array![
+        let exemplar_t = Points::<Complex64>::new(array![
             [
                 [
                     c64(98.21875200000001, 1072.785114),
@@ -2445,7 +2451,7 @@ mod test {
             ],
         ]);
 
-        let exemplar_y = Points::new(array![
+        let exemplar_y = Points::<Complex64>::new(array![
             [
                 [
                     c64(0.9625186306094178, -0.22887701590328144),
@@ -2478,7 +2484,7 @@ mod test {
             ],
         ]);
 
-        let exemplar_z = Points::new(array![
+        let exemplar_z = Points::<Complex64>::new(array![
             [
                 [
                     c64(0.9706839268724422, 0.26648212188669346),
@@ -2511,7 +2517,7 @@ mod test {
             ],
         ]);
 
-        let mut exemplars: HashMap<RFParameter, Points> = HashMap::new();
+        let mut exemplars: HashMap<RFParameter, Points<Complex64>> = HashMap::new();
         exemplars.insert(RFParameter::A, exemplar_a);
         exemplars.insert(RFParameter::G, exemplar_g);
         exemplars.insert(RFParameter::H, exemplar_h);
@@ -2538,7 +2544,7 @@ mod test {
             Frequency::new_scaled(array![1.0, 2.0, 3.0], Scale::Giga),
             array![c64::from(50.0), c64::from(50.0),],
             RFParameter::S,
-            Points::new(array![
+            Points::<Complex64>::new(array![
                 [
                     [c64(0.958, -0.263), c64(-0.846, 0.158)],
                     [c64(0.004, 0.022), c64(0.544, -0.129)],
@@ -4169,7 +4175,7 @@ mod test {
             Frequency::new_scaled(array![0.5, 1.0, 1.5, 2.0], Scale::Giga),
             array![c64::from(50.0), c64::from(50.0),],
             RFParameter::S,
-            Points::new(array![
+            Points::<Complex64>::new(array![
                 [
                     [
                         c64(0.9881388526914863, -0.13442709904013195),
@@ -7450,7 +7456,7 @@ mod test {
             Frequency::new_scaled(array![1.0], Scale::Giga),
             array![c64::from(50.0)],
             RFParameter::H,
-            Points::new(array![[[c64(0.958, -0.263)]]]),
+            Points::<Complex64>::new(array![[[c64(0.958, -0.263)]]]),
             String::from(""),
             String::from(""),
         );
@@ -7460,7 +7466,7 @@ mod test {
     fn network_h_to_2port() {
         let param = RFParameter::H;
         // 2 PortVal, 3 Frequncy
-        let exemplar = Points::new(array![
+        let exemplar = Points::<Complex64>::new(array![
             [
                 [c64(0.958, -0.263), c64(-0.846, 0.158)],
                 [c64(0.004, 0.022), c64(0.544, -0.129)],
@@ -7485,7 +7491,7 @@ mod test {
         );
         let mut new_net = calc.clone();
 
-        let exemplar_a = Points::new(array![
+        let exemplar_a = Points::<Complex64>::new(array![
             [
                 [
                     c64(6.988976000000001, 23.729132000000003),
@@ -7518,7 +7524,7 @@ mod test {
             ],
         ]);
 
-        let exemplar_g = Points::new(array![
+        let exemplar_g = Points::<Complex64>::new(array![
             [
                 [
                     c64(0.9833390626156057, 0.2338279001727904),
@@ -7553,7 +7559,7 @@ mod test {
 
         let exemplar_h = exemplar;
 
-        let exemplar_s = Points::new(array![
+        let exemplar_s = Points::<Complex64>::new(array![
             [
                 [
                     c64(-0.9621821592738881, -0.00885792224980608),
@@ -7586,7 +7592,7 @@ mod test {
             ],
         ]);
 
-        let exemplar_t = Points::new(array![
+        let exemplar_t = Points::<Complex64>::new(array![
             [
                 [
                     c64(-33.64459199999999, -590.777994),
@@ -7619,7 +7625,7 @@ mod test {
             ],
         ]);
 
-        let exemplar_y = Points::new(array![
+        let exemplar_y = Points::<Complex64>::new(array![
             [
                 [
                     c64(0.9706839268724422, 0.26648212188669346),
@@ -7652,7 +7658,7 @@ mod test {
             ],
         ]);
 
-        let exemplar_z = Points::new(array![
+        let exemplar_z = Points::<Complex64>::new(array![
             [
                 [
                     c64(0.9625186306094178, -0.22887701590328144),
@@ -7685,7 +7691,7 @@ mod test {
             ],
         ]);
 
-        let mut exemplars: HashMap<RFParameter, Points> = HashMap::new();
+        let mut exemplars: HashMap<RFParameter, Points<Complex64>> = HashMap::new();
         exemplars.insert(RFParameter::A, exemplar_a);
         exemplars.insert(RFParameter::G, exemplar_g);
         exemplars.insert(RFParameter::H, exemplar_h);
@@ -7716,7 +7722,7 @@ mod test {
             Frequency::new_scaled(array![1.0, 2.0, 3.0], Scale::Giga),
             array![c64::from(50.0), c64::from(50.0),],
             RFParameter::S,
-            Points::new(array![
+            Points::<Complex64>::new(array![
                 [
                     [c64(0.958, -0.263), c64(-0.846, 0.158)],
                     [c64(0.004, 0.022), c64(0.544, -0.129)],
@@ -7746,7 +7752,7 @@ mod test {
             Frequency::new_scaled(array![0.5, 1.0, 1.5, 2.0], Scale::Giga),
             array![c64::from(50.0), c64::from(50.0),],
             RFParameter::S,
-            Points::new(array![
+            Points::<Complex64>::new(array![
                 [
                     [
                         c64(0.9881388526914863, -0.13442709904013195),
@@ -11028,7 +11034,7 @@ mod test {
             Frequency::new_scaled(array![1.0, 2.0, 3.0], Scale::Giga),
             array![c64::from(50.0), c64::from(50.0),],
             RFParameter::S,
-            Points::new(array![
+            Points::<Complex64>::new(array![
                 [
                     [c64(0.958, -0.263), c64(-0.846, 0.158)],
                     [c64(0.004, 0.022), c64(0.544, -0.129)],
@@ -12889,7 +12895,7 @@ mod test {
             Frequency::new_scaled(array![0.5, 1.0, 1.5, 2.0], Scale::Giga),
             array![c64::from(50.0), c64::from(50.0),],
             RFParameter::S,
-            Points::new(array![
+            Points::<Complex64>::new(array![
                 [
                     [
                         c64(0.9881388526914863, -0.13442709904013195),
@@ -14805,7 +14811,7 @@ mod test {
             Frequency::new_scaled(array![1.0, 2.0, 3.0], Scale::Giga),
             array![c64::from(50.0), c64::from(50.0),],
             RFParameter::S,
-            Points::new(array![
+            Points::<Complex64>::new(array![
                 [
                     [c64(0.958, -0.263), c64(-0.846, 0.158)],
                     [c64(0.004, 0.022), c64(0.544, -0.129)],
@@ -14842,7 +14848,7 @@ mod test {
             Frequency::new_scaled(array![0.5, 1.0, 1.5, 2.0], Scale::Giga),
             array![c64::from(50.0), c64::from(50.0),],
             RFParameter::S,
-            Points::new(array![
+            Points::<Complex64>::new(array![
                 [
                     [
                         c64(0.9881388526914863, -0.13442709904013195),
@@ -18561,7 +18567,7 @@ mod test {
             Frequency::new_scaled(array![1.0, 2.0, 3.0], Scale::Giga),
             array![c64::from(50.0), c64::from(50.0),],
             RFParameter::S,
-            Points::new(array![
+            Points::<Complex64>::new(array![
                 [
                     [c64(0.958, -0.263), c64(-0.846, 0.158)],
                     [c64(0.004, 0.022), c64(0.544, -0.129)],
@@ -18597,7 +18603,7 @@ mod test {
             Frequency::new_scaled(array![0.5, 1.0, 1.5, 2.0], Scale::Giga),
             array![c64::from(50.0), c64::from(50.0),],
             RFParameter::S,
-            Points::new(array![
+            Points::<Complex64>::new(array![
                 [
                     [
                         c64(0.9881388526914863, -0.13442709904013195),
@@ -23243,7 +23249,7 @@ mod test {
             Frequency::new_scaled(array![1.0], Scale::Giga),
             array![c64::from(50.0), c64::from(50.0), c64::from(50.0),],
             RFParameter::S,
-            Points::new(array![[
+            Points::<Complex64>::new(array![[
                 [c64(0.958, -0.263), c64(-0.846, 0.158), c64(1.473, 0.230)],
                 [c64(0.004, 0.022), c64(0.544, -0.129), c64(-30.321, 4.378)],
                 [c64(4.234, 84.212), c64(0.457, 0.287), c64(3.489, -2.893)],
@@ -23273,7 +23279,7 @@ mod test {
     fn network_s_db() {
         let param = RFParameter::S;
 
-        let exemplar = Points::new(array![
+        let exemplar = Points::<Complex64>::new(array![
             [
                 [c64(0.958, -0.263), c64(-0.846, 0.158)],
                 [c64(0.004, 0.022), c64(0.544, -0.129)],
@@ -23298,7 +23304,7 @@ mod test {
         );
 
         let exemplar_s = exemplar;
-        let exemplar_s_db = Pointsf64::new(array![
+        let exemplar_s_db = Points::<f64>::new(array![
             [
                 [
                     -0.0571232931409698157602471654702417,
@@ -23351,7 +23357,7 @@ mod test {
     fn network_s_deg() {
         let param = RFParameter::S;
 
-        let exemplar = Points::new(array![
+        let exemplar = Points::<Complex64>::new(array![
             [
                 [c64(0.958, -0.263), c64(-0.846, 0.158)],
                 [c64(0.004, 0.022), c64(0.544, -0.129)],
@@ -23376,7 +23382,7 @@ mod test {
         );
 
         let exemplar_s = exemplar;
-        let exemplar_s_deg = Pointsf64::new(array![
+        let exemplar_s_deg = Points::<f64>::new(array![
             [
                 [
                     -15.351227009735157493813896682283,
@@ -23434,7 +23440,7 @@ mod test {
     fn network_s_im() {
         let param = RFParameter::S;
 
-        let exemplar = Points::new(array![
+        let exemplar = Points::<Complex64>::new(array![
             [
                 [c64(0.958, -0.263), c64(-0.846, 0.158)],
                 [c64(0.004, 0.022), c64(0.544, -0.129)],
@@ -23459,7 +23465,7 @@ mod test {
         );
 
         let exemplar_s = exemplar;
-        let exemplar_s_im = Pointsf64::new(array![
+        let exemplar_s_im = Points::<f64>::new(array![
             [[-0.263, 0.158], [0.022, -0.129],],
             [[-0.982, 3.249], [3.492, -394.321],],
             [[-0.421, 24.282], [0.132, -0.324],],
@@ -23485,7 +23491,7 @@ mod test {
     fn network_s_mag() {
         let param = RFParameter::S;
 
-        let exemplar = Points::new(array![
+        let exemplar = Points::<Complex64>::new(array![
             [
                 [c64(0.958, -0.263), c64(-0.846, 0.158)],
                 [c64(0.004, 0.022), c64(0.544, -0.129)],
@@ -23510,7 +23516,7 @@ mod test {
         );
 
         let exemplar_s = exemplar;
-        let exemplar_s_mag = Pointsf64::new(array![
+        let exemplar_s_mag = Points::<f64>::new(array![
             [
                 [
                     0.993445016092989383214754191494358,
@@ -23568,7 +23574,7 @@ mod test {
     fn network_s_rad() {
         let param = RFParameter::S;
 
-        let exemplar = Points::new(array![
+        let exemplar = Points::<Complex64>::new(array![
             [
                 [c64(0.958, -0.263), c64(-0.846, 0.158)],
                 [c64(0.004, 0.022), c64(0.544, -0.129)],
@@ -23593,7 +23599,7 @@ mod test {
         );
 
         let exemplar_s = exemplar;
-        let exemplar_s_rad = Pointsf64::new(array![
+        let exemplar_s_rad = Points::<f64>::new(array![
             [
                 [
                     -0.267929455540962111948947391268623,
@@ -23651,7 +23657,7 @@ mod test {
     fn network_s_re() {
         let param = RFParameter::S;
 
-        let exemplar = Points::new(array![
+        let exemplar = Points::<Complex64>::new(array![
             [
                 [c64(0.958, -0.263), c64(-0.846, 0.158)],
                 [c64(0.004, 0.022), c64(0.544, -0.129)],
@@ -23676,7 +23682,7 @@ mod test {
         );
 
         let exemplar_s = exemplar;
-        let exemplar_s_re = Pointsf64::new(array![
+        let exemplar_s_re = Points::<f64>::new(array![
             [[0.958, -0.846], [0.004, 0.544],],
             [[2.043, -0.238], [-1.421, 0.123],],
             [[21.329, -0.942], [0.138, 0.329],],
@@ -23703,7 +23709,7 @@ mod test {
         let param = RFParameter::S;
 
         // 1 PortVal
-        let exemplar = points![[[c64(0.958, -0.263)]]];
+        let exemplar = points![Complex64, [[c64(0.958, -0.263)]]];
 
         let calc = Network::new(
             Frequency::new_scaled(array![1.0], Scale::Giga),
@@ -23717,9 +23723,12 @@ mod test {
 
         let exemplar_s = exemplar;
 
-        let exemplar_y = points![[[c64(6.695989913226831e-5, 0.0026954088117833435)]]];
+        let exemplar_y = points![
+            Complex64,
+            [[c64(6.695989913226831e-5, 0.0026954088117833435)]]
+        ];
 
-        let exemplar_z = points![[[c64(9.210804562051559, -370.77241904332254)]]];
+        let exemplar_z = points![Complex64, [[c64(9.210804562051559, -370.77241904332254)]]];
 
         let margin = MARGIN;
         comp_points_c64(&exemplar_s, &calc.net(RFParameter::S), margin, "net(S)");
@@ -23741,7 +23750,7 @@ mod test {
     #[test]
     fn network_s_to_2port() {
         let param = RFParameter::S;
-        let x = Points::new(array![
+        let x = Points::<Complex64>::new(array![
             [
                 [c64(1.0, 0.0), c64(2.0, 0.0)],
                 [c64(3.0, 0.0), c64(4.0, 0.0)]
@@ -23757,7 +23766,7 @@ mod test {
         ]);
 
         // 2 PortVal, 3 Frequncy
-        let exemplar = Points::new(array![
+        let exemplar = Points::<Complex64>::new(array![
             [
                 [c64(0.958, -0.263), c64(-0.846, 0.158)],
                 [c64(0.004, 0.022), c64(0.544, -0.129)],
@@ -23782,7 +23791,7 @@ mod test {
         );
         let mut new_net = calc.clone();
 
-        let exemplar_a = Points::new(array![
+        let exemplar_a = Points::<Complex64>::new(array![
             [
                 [
                     c64(6.202488000000001, -19.779434),
@@ -23815,7 +23824,7 @@ mod test {
             ],
         ]);
 
-        let exemplar_g = Points::new(array![
+        let exemplar_g = Points::<Complex64>::new(array![
             [
                 [
                     c64(2.130487608213253e-4, 0.003089512451043385),
@@ -23848,7 +23857,7 @@ mod test {
             ],
         ]);
 
-        let exemplar_h = Points::new(array![
+        let exemplar_h = Points::<Complex64>::new(array![
             [
                 [
                     c64(9.754118397254564, -389.12416366807344),
@@ -23883,7 +23892,7 @@ mod test {
 
         let exemplar_s = exemplar;
 
-        let exemplar_t = Points::new(array![
+        let exemplar_t = Points::<Complex64>::new(array![
             [
                 [
                     c64(6.988976000000001, 23.729132000000003),
@@ -23916,7 +23925,7 @@ mod test {
             ],
         ]);
 
-        let exemplar_y = Points::new(array![
+        let exemplar_y = Points::<Complex64>::new(array![
             [
                 [
                     c64(6.437819859727872e-5, 0.0025682600587126577),
@@ -23949,7 +23958,7 @@ mod test {
             ],
         ]);
 
-        let exemplar_z = Points::new(array![
+        let exemplar_z = Points::<Complex64>::new(array![
             [
                 [
                     c64(22.214615781667156, -322.14377491810205),
@@ -23982,7 +23991,7 @@ mod test {
             ],
         ]);
 
-        let mut exemplars: HashMap<RFParameter, Points> = HashMap::new();
+        let mut exemplars: HashMap<RFParameter, Points<Complex64>> = HashMap::new();
         exemplars.insert(RFParameter::A, exemplar_a);
         exemplars.insert(RFParameter::G, exemplar_g);
         exemplars.insert(RFParameter::H, exemplar_h);
@@ -24001,7 +24010,7 @@ mod test {
     fn network_s_to_3port() {
         let param = RFParameter::S;
 
-        let exemplar = Points::new(array![[
+        let exemplar = Points::<Complex64>::new(array![[
             [c64(0.958, -0.263), c64(-0.846, 0.158), c64(1.473, 0.230)],
             [c64(0.004, 0.022), c64(0.544, -0.129), c64(-30.321, 4.378)],
             [c64(4.234, 84.212), c64(0.457, 0.287), c64(3.489, -2.893)],
@@ -24019,7 +24028,7 @@ mod test {
 
         let exemplar_s = exemplar;
 
-        let exemplar_y = Points::new(array![[
+        let exemplar_y = Points::<Complex64>::new(array![[
             [
                 c64(-0.01979363538912805, -3.679768738843324e-4),
                 c64(-1.3997430248235537e-5, -9.099790614032492e-5),
@@ -24037,7 +24046,7 @@ mod test {
             ],
         ]]);
 
-        let exemplar_z = Points::new(array![[
+        let exemplar_z = Points::<Complex64>::new(array![[
             [
                 c64(-50.53068434585749, 0.4419235157446797),
                 c64(0.06033794406037343, 0.12934254686112553),
@@ -24079,7 +24088,7 @@ mod test {
             Frequency::new_scaled(array![1.0], Scale::Giga),
             array![c64::from(50.0)],
             RFParameter::S,
-            Points::new(array![[[c64(0.958, -0.263)]]]),
+            Points::<Complex64>::new(array![[[c64(0.958, -0.263)]]]),
             String::from(""),
             String::from(""),
         );
@@ -24094,7 +24103,7 @@ mod test {
             Frequency::new_scaled(array![1.0], Scale::Giga),
             array![c64::from(50.0)],
             RFParameter::S,
-            Points::new(array![[[c64(0.958, -0.263)]]]),
+            Points::<Complex64>::new(array![[[c64(0.958, -0.263)]]]),
             String::from(""),
             String::from(""),
         );
@@ -24109,7 +24118,7 @@ mod test {
             Frequency::new_scaled(array![1.0], Scale::Giga),
             array![c64::from(50.0)],
             RFParameter::S,
-            Points::new(array![[[c64(0.958, -0.263)]]]),
+            Points::<Complex64>::new(array![[[c64(0.958, -0.263)]]]),
             String::from(""),
             String::from(""),
         );
@@ -24124,7 +24133,7 @@ mod test {
             Frequency::new_scaled(array![1.0], Scale::Giga),
             array![c64::from(50.0)],
             RFParameter::S,
-            Points::new(array![[[c64(0.958, -0.263)]]]),
+            Points::<Complex64>::new(array![[[c64(0.958, -0.263)]]]),
             String::from(""),
             String::from(""),
         );
@@ -24135,7 +24144,7 @@ mod test {
     #[test]
     fn network_t_to_2port() {
         let param = RFParameter::T;
-        let exemplar = Points::new(array![
+        let exemplar = Points::<Complex64>::new(array![
             [
                 [c64(0.958, -0.263), c64(-0.846, 0.158)],
                 [c64(0.004, 0.022), c64(0.544, -0.129)],
@@ -24160,7 +24169,7 @@ mod test {
         );
         let mut new_net = calc.clone();
 
-        let exemplar_a = Points::new(array![
+        let exemplar_a = Points::<Complex64>::new(array![
             [
                 [
                     c64(0.33, -0.10600000000000001),
@@ -24187,7 +24196,7 @@ mod test {
             ],
         ]);
 
-        let exemplar_g = Points::new(array![
+        let exemplar_g = Points::<Complex64>::new(array![
             [
                 [
                     c64(0.011994073383498702, 0.0037920356928814016),
@@ -24220,7 +24229,7 @@ mod test {
             ],
         ]);
 
-        let exemplar_h = Points::new(array![
+        let exemplar_h = Points::<Complex64>::new(array![
             [
                 [
                     c64(-26.77355742142945, -0.7740933639324433),
@@ -24253,7 +24262,7 @@ mod test {
             ],
         ]);
 
-        let exemplar_s = Points::new(array![
+        let exemplar_s = Points::<Complex64>::new(array![
             [
                 [
                     c64(-1.5375603451309596, -0.07416412595936357),
@@ -24288,7 +24297,7 @@ mod test {
 
         let exemplar_t = exemplar;
 
-        let exemplar_y = Points::new(array![
+        let exemplar_y = Points::<Complex64>::new(array![
             [
                 [
                     c64(-0.03731908851691253, 0.0010789921680645705),
@@ -24321,7 +24330,7 @@ mod test {
             ],
         ]);
 
-        let exemplar_z = Points::new(array![
+        let exemplar_z = Points::<Complex64>::new(array![
             [
                 [
                     c64(75.79800105207785, -23.96422935297212),
@@ -24354,7 +24363,7 @@ mod test {
             ],
         ]);
 
-        let mut exemplars: HashMap<RFParameter, Points> = HashMap::new();
+        let mut exemplars: HashMap<RFParameter, Points<Complex64>> = HashMap::new();
         exemplars.insert(RFParameter::A, exemplar_a);
         exemplars.insert(RFParameter::G, exemplar_g);
         exemplars.insert(RFParameter::H, exemplar_h);
@@ -24373,7 +24382,7 @@ mod test {
     fn network_y_to_1port() {
         let param = RFParameter::Y;
 
-        let exemplar = Points::new(array![[[c64(0.958, -0.263)]]]);
+        let exemplar = Points::<Complex64>::new(array![[[c64(0.958, -0.263)]]]);
 
         let calc = Network::new(
             Frequency::new_scaled(array![1.0], Scale::Giga),
@@ -24385,11 +24394,13 @@ mod test {
         );
         let mut new_net = calc.clone();
 
-        let exemplar_s = Points::new(array![[[c64(-0.9618584453026511, 0.010256880250923072)]]]);
+        let exemplar_s =
+            Points::<Complex64>::new(array![[[c64(-0.9618584453026511, 0.010256880250923072)]]]);
 
         let exemplar_y = exemplar;
 
-        let exemplar_z = Points::new(array![[[c64(0.9706839268724422, 0.26648212188669346)]]]);
+        let exemplar_z =
+            Points::<Complex64>::new(array![[[c64(0.9706839268724422, 0.26648212188669346)]]]);
 
         let margin = MARGIN;
         comp_points_c64(&exemplar_s, &calc.net(RFParameter::S), margin, "net(S)");
@@ -24412,7 +24423,7 @@ mod test {
     fn network_y_to_2port() {
         let param = RFParameter::Y;
         // 2 PortVal, 3 Frequncy
-        let exemplar = Points::new(array![
+        let exemplar = Points::<Complex64>::new(array![
             [
                 [c64(0.958, -0.263), c64(-0.846, 0.158)],
                 [c64(0.004, 0.022), c64(0.544, -0.129)],
@@ -24437,7 +24448,7 @@ mod test {
         );
         let mut new_net = calc.clone();
 
-        let exemplar_a = Points::new(array![
+        let exemplar_a = Points::<Complex64>::new(array![
             [
                 [
                     c64(1.3239999999999996, 24.968000000000004),
@@ -24470,7 +24481,7 @@ mod test {
             ],
         ]);
 
-        let exemplar_g = Points::new(array![
+        let exemplar_g = Points::<Complex64>::new(array![
             [
                 [
                     c64(0.9625186306094178, -0.22887701590328144),
@@ -24503,7 +24514,7 @@ mod test {
             ],
         ]);
 
-        let exemplar_h = Points::new(array![
+        let exemplar_h = Points::<Complex64>::new(array![
             [
                 [
                     c64(0.9706839268724422, 0.26648212188669346),
@@ -24536,7 +24547,7 @@ mod test {
             ],
         ]);
 
-        let exemplar_s = Points::new(array![
+        let exemplar_s = Points::<Complex64>::new(array![
             [
                 [
                     c64(-0.9614083414074007, 0.009035414350549562),
@@ -24569,7 +24580,7 @@ mod test {
             ],
         ]);
 
-        let exemplar_t = Points::new(array![
+        let exemplar_t = Points::<Complex64>::new(array![
             [
                 [
                     c64(-172.0284, -559.0563000000001),
@@ -24601,7 +24612,7 @@ mod test {
 
         let exemplar_y = exemplar;
 
-        let exemplar_z = Points::new(array![
+        let exemplar_z = Points::<Complex64>::new(array![
             [
                 [
                     c64(0.9833390626156057, 0.2338279001727904),
@@ -24634,7 +24645,7 @@ mod test {
             ],
         ]);
 
-        let mut exemplars: HashMap<RFParameter, Points> = HashMap::new();
+        let mut exemplars: HashMap<RFParameter, Points<Complex64>> = HashMap::new();
         exemplars.insert(RFParameter::A, exemplar_a);
         exemplars.insert(RFParameter::G, exemplar_g);
         exemplars.insert(RFParameter::H, exemplar_h);
@@ -24654,7 +24665,7 @@ mod test {
         let param = RFParameter::Y;
 
         // 3 PortVal
-        let exemplar = Points::new(array![[
+        let exemplar = Points::<Complex64>::new(array![[
             [c64(0.958, -0.263), c64(-0.846, 0.158), c64(1.473, 0.230)],
             [c64(0.004, 0.022), c64(0.544, -0.129), c64(-30.321, 4.378)],
             [c64(4.234, 84.212), c64(0.457, 0.287), c64(3.489, -2.893)],
@@ -24670,7 +24681,7 @@ mod test {
         );
         let mut new_net = calc.clone();
 
-        let exemplar_s = Points::new(array![[
+        let exemplar_s = Points::<Complex64>::new(array![[
             [
                 c64(-0.9998020654843073, -2.530137423705384e-4),
                 c64(-2.010724204231428e-5, -7.093267722797153e-5),
@@ -24690,7 +24701,7 @@ mod test {
 
         let exemplar_y = exemplar;
 
-        let exemplar_z = Points::new(array![[
+        let exemplar_z = Points::<Complex64>::new(array![[
             [
                 c64(0.0049505482271746445, -0.006277586868079991),
                 c64(-5.05139977548531e-4, -0.0017634882308923848),
@@ -24732,7 +24743,7 @@ mod test {
             Frequency::new_scaled(array![1.0], Scale::Giga),
             array![c64::from(50.0)],
             RFParameter::Y,
-            Points::new(array![[[c64(0.958, -0.263)]]]),
+            Points::<Complex64>::new(array![[[c64(0.958, -0.263)]]]),
             String::from(""),
             String::from(""),
         );
@@ -24747,7 +24758,7 @@ mod test {
             Frequency::new_scaled(array![1.0], Scale::Giga),
             array![c64::from(50.0)],
             RFParameter::Y,
-            Points::new(array![[[c64(0.958, -0.263)]]]),
+            Points::<Complex64>::new(array![[[c64(0.958, -0.263)]]]),
             String::from(""),
             String::from(""),
         );
@@ -24762,7 +24773,7 @@ mod test {
             Frequency::new_scaled(array![1.0], Scale::Giga),
             array![c64::from(50.0)],
             RFParameter::Y,
-            Points::new(array![[[c64(0.958, -0.263)]]]),
+            Points::<Complex64>::new(array![[[c64(0.958, -0.263)]]]),
             String::from(""),
             String::from(""),
         );
@@ -24777,7 +24788,7 @@ mod test {
             Frequency::new_scaled(array![1.0], Scale::Giga),
             array![c64::from(50.0)],
             RFParameter::Y,
-            Points::new(array![[[c64(0.958, -0.263)]]]),
+            Points::<Complex64>::new(array![[[c64(0.958, -0.263)]]]),
             String::from(""),
             String::from(""),
         );
@@ -24790,7 +24801,7 @@ mod test {
         let param = RFParameter::Z;
 
         // 1 PortVal
-        let exemplar = Points::new(array![[[c64(0.958, -0.263)]]]);
+        let exemplar = Points::<Complex64>::new(array![[[c64(0.958, -0.263)]]]);
 
         let calc = Network::new(
             Frequency::new_scaled(array![1.0], Scale::Giga),
@@ -24802,9 +24813,11 @@ mod test {
         );
         let mut new_net = calc.clone();
 
-        let exemplar_s = Points::new(array![[[c64(-0.9623481369389654, -0.010127900624336668)]]]);
+        let exemplar_s =
+            Points::<Complex64>::new(array![[[c64(-0.9623481369389654, -0.010127900624336668)]]]);
 
-        let exemplar_y = Points::new(array![[[c64(0.9706839268724422, 0.26648212188669346)]]]);
+        let exemplar_y =
+            Points::<Complex64>::new(array![[[c64(0.9706839268724422, 0.26648212188669346)]]]);
 
         let exemplar_z = exemplar;
 
@@ -24829,7 +24842,7 @@ mod test {
     fn network_z_to_2port() {
         let param = RFParameter::Z;
         // 2 PortVal, 3 Frequncy
-        let exemplar = Points::new(array![
+        let exemplar = Points::<Complex64>::new(array![
             [
                 [c64(0.958, -0.263), c64(-0.846, 0.158)],
                 [c64(0.004, 0.022), c64(0.544, -0.129)],
@@ -24854,7 +24867,7 @@ mod test {
         );
         let mut new_net = calc.clone();
 
-        let exemplar_a = Points::new(array![
+        let exemplar_a = Points::<Complex64>::new(array![
             [
                 [
                     c64(-3.9080000000000004, -44.256),
@@ -24887,7 +24900,7 @@ mod test {
             ],
         ]);
 
-        let exemplar_g = Points::new(array![
+        let exemplar_g = Points::<Complex64>::new(array![
             [
                 [
                     c64(0.9706839268724422, 0.26648212188669346),
@@ -24920,7 +24933,7 @@ mod test {
             ],
         ]);
 
-        let exemplar_h = Points::new(array![
+        let exemplar_h = Points::<Complex64>::new(array![
             [
                 [
                     c64(0.9625186306094178, -0.22887701590328144),
@@ -24953,7 +24966,7 @@ mod test {
             ],
         ]);
 
-        let exemplar_s = Points::new(array![
+        let exemplar_s = Points::<Complex64>::new(array![
             [
                 [
                     c64(-0.9623430870772148, -0.010114135749597068),
@@ -24986,7 +24999,7 @@ mod test {
             ],
         ]);
 
-        let exemplar_t = Points::new(array![
+        let exemplar_t = Points::<Complex64>::new(array![
             [
                 [
                     c64(-202.54611024000002, 1065.62529132),
@@ -25019,7 +25032,7 @@ mod test {
             ],
         ]);
 
-        let exemplar_y = Points::new(array![
+        let exemplar_y = Points::<Complex64>::new(array![
             [
                 [
                     c64(0.9833390626156057, 0.2338279001727904),
@@ -25096,7 +25109,7 @@ mod test {
         let param = RFParameter::Z;
 
         // 3 PortVal
-        let exemplar = Points::new(array![[
+        let exemplar = Points::<Complex64>::new(array![[
             [c64(0.958, -0.263), c64(-0.846, 0.158), c64(1.473, 0.230)],
             [c64(0.004, 0.022), c64(0.544, -0.129), c64(-30.321, 4.378)],
             [c64(4.234, 84.212), c64(0.457, 0.287), c64(3.489, -2.893)],
@@ -25112,7 +25125,7 @@ mod test {
         );
         let mut new_net = calc.clone();
 
-        let exemplar_s = Points::new(array![[
+        let exemplar_s = Points::<Complex64>::new(array![[
             [
                 c64(-0.9363584033146554, -0.06735806039174684),
                 c64(-0.03284074046511246, 0.004493615742204726),
@@ -25130,7 +25143,7 @@ mod test {
             ],
         ]]);
 
-        let exemplar_y = Points::new(array![[
+        let exemplar_y = Points::<Complex64>::new(array![[
             [
                 c64(0.0049505482271746445, -0.006277586868079991),
                 c64(-5.05139977548531e-4, -0.0017634882308923848),
@@ -25174,7 +25187,7 @@ mod test {
             Frequency::new_scaled(array![1.0], Scale::Giga),
             array![c64::from(50.0)],
             RFParameter::Z,
-            Points::new(array![[[c64(0.958, -0.263)]]]),
+            Points::<Complex64>::new(array![[[c64(0.958, -0.263)]]]),
             String::from(""),
             String::from(""),
         );
@@ -25189,7 +25202,7 @@ mod test {
             Frequency::new_scaled(array![1.0], Scale::Giga),
             array![c64::from(50.0)],
             RFParameter::Z,
-            Points::new(array![[[c64(0.958, -0.263)]]]),
+            Points::<Complex64>::new(array![[[c64(0.958, -0.263)]]]),
             String::from(""),
             String::from(""),
         );
@@ -25204,7 +25217,7 @@ mod test {
             Frequency::new_scaled(array![1.0], Scale::Giga),
             array![c64::from(50.0)],
             RFParameter::Z,
-            Points::new(array![[[c64(0.958, -0.263)]]]),
+            Points::<Complex64>::new(array![[[c64(0.958, -0.263)]]]),
             String::from(""),
             String::from(""),
         );
@@ -25219,7 +25232,7 @@ mod test {
             Frequency::new_scaled(array![1.0], Scale::Giga),
             array![c64::from(50.0)],
             RFParameter::Z,
-            Points::new(array![[[c64(0.958, -0.263)]]]),
+            Points::<Complex64>::new(array![[[c64(0.958, -0.263)]]]),
             String::from(""),
             String::from(""),
         );

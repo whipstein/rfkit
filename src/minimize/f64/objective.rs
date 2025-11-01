@@ -1,37 +1,10 @@
 #![allow(dead_code)]
-use crate::minimize::{MinimizerError, f64::Constraint};
+use crate::error::MinimizerError;
+use crate::minimize::{ObjDerFn, ObjFn, ObjGradFn, ObjHessFn, f64::Constraint};
 use dyn_clone::DynClone;
 use ndarray::prelude::*;
 
-// Define a trait for the objective function
-pub trait ObjFn: DynClone {
-    fn call(&self, x: &Array1<f64>) -> f64;
-    fn call_scalar(&self, x: f64) -> f64;
-}
-dyn_clone::clone_trait_object!(ObjFn);
-
-// Define a trait for the derivative function
-pub trait ObjDerFn: ObjFn + DynClone {
-    fn df(&self, x: &Array1<f64>) -> f64;
-    fn df_scalar(&self, x: f64) -> f64;
-}
-dyn_clone::clone_trait_object!(ObjDerFn);
-
-// Define a trait for the gradient function
-pub trait ObjGradFn: ObjFn + DynClone {
-    fn grad(&self, x: &Array1<f64>) -> Array1<f64>;
-    fn grad_scalar(&self, x: f64) -> Array1<f64>;
-}
-dyn_clone::clone_trait_object!(ObjGradFn);
-
-// Define a trait for the hessian function
-pub trait ObjHessFn: ObjGradFn + DynClone {
-    fn hessian(&self, x: &Array1<f64>) -> Array2<f64>;
-    fn hessian_scalar(&self, x: f64) -> Array2<f64>;
-}
-dyn_clone::clone_trait_object!(ObjHessFn);
-
-impl<F> ObjFn for F
+impl<F> ObjFn<f64> for F
 where
     F: Fn(&Array1<f64>) -> f64 + DynClone,
 {
@@ -39,12 +12,12 @@ where
         self(x)
     }
 
-    fn call_scalar(&self, x: f64) -> f64 {
-        self(&array![x])
+    fn call_scalar(&self, x: &f64) -> f64 {
+        self(&array![*x])
     }
 }
 
-impl<F, DF> ObjFn for (F, DF)
+impl<F, DF> ObjFn<f64> for (F, DF)
 where
     F: Fn(&Array1<f64>) -> f64 + DynClone + Clone,
     DF: Fn(&Array1<f64>) -> f64 + DynClone + Clone,
@@ -53,12 +26,12 @@ where
         self.0(x)
     }
 
-    fn call_scalar(&self, x: f64) -> f64 {
-        self.0(&array![x])
+    fn call_scalar(&self, x: &f64) -> f64 {
+        self.0(&array![*x])
     }
 }
 
-impl<F, DF, GF> ObjFn for (F, DF, GF)
+impl<F, DF, GF> ObjFn<f64> for (F, DF, GF)
 where
     F: Fn(&Array1<f64>) -> f64 + DynClone + Clone,
     DF: Fn(&Array1<f64>) -> f64 + DynClone + Clone,
@@ -68,12 +41,28 @@ where
         self.0(x)
     }
 
-    fn call_scalar(&self, x: f64) -> f64 {
-        self.0(&array![x])
+    fn call_scalar(&self, x: &f64) -> f64 {
+        self.0(&array![*x])
     }
 }
 
-impl<F, DF> ObjDerFn for (F, DF)
+impl<F, DF, GF, HF> ObjFn<f64> for (F, DF, GF, HF)
+where
+    F: Fn(&Array1<f64>) -> f64 + DynClone + Clone,
+    DF: Fn(&Array1<f64>) -> f64 + DynClone + Clone,
+    GF: Fn(&Array1<f64>) -> Array1<f64> + DynClone + Clone,
+    HF: Fn(&Array1<f64>) -> Array2<f64> + DynClone + Clone,
+{
+    fn call(&self, x: &Array1<f64>) -> f64 {
+        self.0(x)
+    }
+
+    fn call_scalar(&self, x: &f64) -> f64 {
+        self.0(&array![*x])
+    }
+}
+
+impl<F, DF> ObjDerFn<f64> for (F, DF)
 where
     F: Fn(&Array1<f64>) -> f64 + DynClone + Clone,
     DF: Fn(&Array1<f64>) -> f64 + DynClone + Clone,
@@ -82,25 +71,57 @@ where
         self.1(x)
     }
 
-    fn df_scalar(&self, x: f64) -> f64 {
-        self.1(&array![x])
+    fn df_scalar(&self, x: &f64) -> f64 {
+        self.1(&array![*x])
     }
 }
 
-// impl<F, DF, GF> ObjGradFn for (F, DF, GF)
-// where
-//     F: Fn(&Array1<f64>) -> f64 + DynClone + Clone,
-//     DF: Fn(&Array1<f64>) -> f64 + DynClone + Clone,
-//     GF: Fn(&Array1<f64>) -> Array1<f64> + DynClone + Clone,
-// {
-//     fn grad(&self, x: &Array1<f64>) -> Array1<f64> {
-//         self.2(x)
-//     }
+impl<F, DF, GF> ObjGradFn<f64> for (F, DF, GF)
+where
+    F: Fn(&Array1<f64>) -> f64 + DynClone + Clone,
+    DF: Fn(&Array1<f64>) -> f64 + DynClone + Clone,
+    GF: Fn(&Array1<f64>) -> Array1<f64> + DynClone + Clone,
+{
+    fn grad(&self, x: &Array1<f64>) -> Array1<f64> {
+        self.2(x)
+    }
 
-//     fn grad_scalar(&self, x: f64) -> Array1<f64> {
-//         self.2(&array![x])
-//     }
-// }
+    fn grad_scalar(&self, x: &f64) -> Array1<f64> {
+        self.2(&array![*x])
+    }
+}
+
+impl<F, DF, GF, HF> ObjGradFn<f64> for (F, DF, GF, HF)
+where
+    F: Fn(&Array1<f64>) -> f64 + DynClone + Clone,
+    DF: Fn(&Array1<f64>) -> f64 + DynClone + Clone,
+    GF: Fn(&Array1<f64>) -> Array1<f64> + DynClone + Clone,
+    HF: Fn(&Array1<f64>) -> Array2<f64> + DynClone + Clone,
+{
+    fn grad(&self, x: &Array1<f64>) -> Array1<f64> {
+        self.2(x)
+    }
+
+    fn grad_scalar(&self, x: &f64) -> Array1<f64> {
+        self.2(&array![*x])
+    }
+}
+
+impl<F, DF, GF, HF> ObjHessFn<f64> for (F, DF, GF, HF)
+where
+    F: Fn(&Array1<f64>) -> f64 + DynClone + Clone,
+    DF: Fn(&Array1<f64>) -> f64 + DynClone + Clone,
+    GF: Fn(&Array1<f64>) -> Array1<f64> + DynClone + Clone,
+    HF: Fn(&Array1<f64>) -> Array2<f64> + DynClone + Clone,
+{
+    fn hess(&self, x: &Array1<f64>) -> Array2<f64> {
+        self.3(x)
+    }
+
+    fn hess_scalar(&self, x: &f64) -> Array2<f64> {
+        self.3(&array![*x])
+    }
+}
 
 // Wrapper for single-dimensional functions
 #[derive(Clone)]
@@ -119,7 +140,7 @@ where
 }
 
 // Implementation for single-dimensional functions
-impl<F> ObjFn for SingleDimFn<F>
+impl<F> ObjFn<f64> for SingleDimFn<F>
 where
     F: Fn(f64) -> f64 + Clone,
 {
@@ -128,8 +149,8 @@ where
         (self.0)(x[0])
     }
 
-    fn call_scalar(&self, x: f64) -> f64 {
-        (self.0)(x)
+    fn call_scalar(&self, x: &f64) -> f64 {
+        (self.0)(*x)
     }
 }
 
@@ -152,7 +173,7 @@ where
 }
 
 // Implementation for single-dimensional function w/derivative
-impl<F, DF> ObjFn for SingleDimDerFn<F, DF>
+impl<F, DF> ObjFn<f64> for SingleDimDerFn<F, DF>
 where
     F: Fn(f64) -> f64 + Clone,
     DF: Fn(f64) -> f64 + Clone,
@@ -162,12 +183,12 @@ where
         (self.0)(x[0])
     }
 
-    fn call_scalar(&self, x: f64) -> f64 {
-        (self.0)(x)
+    fn call_scalar(&self, x: &f64) -> f64 {
+        (self.0)(*x)
     }
 }
 
-impl<F, DF> ObjDerFn for SingleDimDerFn<F, DF>
+impl<F, DF> ObjDerFn<f64> for SingleDimDerFn<F, DF>
 where
     F: Fn(f64) -> f64 + Clone,
     DF: Fn(f64) -> f64 + Clone,
@@ -177,8 +198,8 @@ where
         (self.1)(x[0])
     }
 
-    fn df_scalar(&self, x: f64) -> f64 {
-        (self.1)(x)
+    fn df_scalar(&self, x: &f64) -> f64 {
+        (self.1)(*x)
     }
 }
 
@@ -199,7 +220,7 @@ where
 }
 
 // Implementation for multi-dimensional functions
-impl<F> ObjFn for MultiDimFn<F>
+impl<F> ObjFn<f64> for MultiDimFn<F>
 where
     F: Fn(&Array1<f64>) -> f64 + Clone,
 {
@@ -207,12 +228,12 @@ where
         (self.0)(x)
     }
 
-    fn call_scalar(&self, x: f64) -> f64 {
-        (self.0)(&array![x])
+    fn call_scalar(&self, x: &f64) -> f64 {
+        (self.0)(&array![*x])
     }
 }
 
-impl<F> ObjDerFn for MultiDimFn<F>
+impl<F> ObjDerFn<f64> for MultiDimFn<F>
 where
     F: Fn(&Array1<f64>) -> f64 + Clone,
 {
@@ -220,8 +241,8 @@ where
         (self.0)(x)
     }
 
-    fn df_scalar(&self, x: f64) -> f64 {
-        (self.0)(&array![x])
+    fn df_scalar(&self, x: &f64) -> f64 {
+        (self.0)(&array![*x])
     }
 }
 
@@ -244,7 +265,7 @@ where
 }
 
 // Implementation for multi-dimensional function w/gradient
-impl<F, GF> ObjFn for MultiDimGradFn<F, GF>
+impl<F, GF> ObjFn<f64> for MultiDimGradFn<F, GF>
 where
     F: Fn(&Array1<f64>) -> f64 + Clone,
     GF: Fn(&Array1<f64>) -> Array1<f64> + Clone,
@@ -253,12 +274,12 @@ where
         (self.0)(x)
     }
 
-    fn call_scalar(&self, x: f64) -> f64 {
-        (self.0)(&array![x])
+    fn call_scalar(&self, x: &f64) -> f64 {
+        (self.0)(&array![*x])
     }
 }
 
-impl<F, GF> ObjGradFn for MultiDimGradFn<F, GF>
+impl<F, GF> ObjGradFn<f64> for MultiDimGradFn<F, GF>
 where
     F: Fn(&Array1<f64>) -> f64 + Clone,
     GF: Fn(&Array1<f64>) -> Array1<f64> + Clone,
@@ -267,8 +288,8 @@ where
         (self.1)(x)
     }
 
-    fn grad_scalar(&self, x: f64) -> Array1<f64> {
-        (self.1)(&array![x])
+    fn grad_scalar(&self, x: &f64) -> Array1<f64> {
+        (self.1)(&array![*x])
     }
 }
 
@@ -316,7 +337,7 @@ where
 }
 
 // Implementation for multi-dimensional function w/gradient
-impl<F> ObjFn for MultiDimNumGradFn<F>
+impl<F> ObjFn<f64> for MultiDimNumGradFn<F>
 where
     F: Fn(&Array1<f64>) -> f64 + Clone,
 {
@@ -324,12 +345,12 @@ where
         (self.f)(x)
     }
 
-    fn call_scalar(&self, x: f64) -> f64 {
-        (self.f)(&array![x])
+    fn call_scalar(&self, x: &f64) -> f64 {
+        (self.f)(&array![*x])
     }
 }
 
-impl<F> ObjGradFn for MultiDimNumGradFn<F>
+impl<F> ObjGradFn<f64> for MultiDimNumGradFn<F>
 where
     F: Fn(&Array1<f64>) -> f64 + Clone,
 {
@@ -337,8 +358,8 @@ where
         self.numerical_gradient(x)
     }
 
-    fn grad_scalar(&self, x: f64) -> Array1<f64> {
-        self.numerical_gradient(&array![x])
+    fn grad_scalar(&self, x: &f64) -> Array1<f64> {
+        self.numerical_gradient(&array![*x])
     }
 }
 
@@ -363,7 +384,7 @@ where
 }
 
 // Implementation for multi-dimensional function w/hessian
-impl<F, GF, HF> ObjFn for MultiDimHessFn<F, GF, HF>
+impl<F, GF, HF> ObjFn<f64> for MultiDimHessFn<F, GF, HF>
 where
     F: Fn(&Array1<f64>) -> f64 + Clone,
     GF: Fn(&Array1<f64>) -> Array1<f64> + Clone,
@@ -373,12 +394,12 @@ where
         (self.0)(x)
     }
 
-    fn call_scalar(&self, x: f64) -> f64 {
-        (self.0)(&array![x])
+    fn call_scalar(&self, x: &f64) -> f64 {
+        (self.0)(&array![*x])
     }
 }
 
-impl<F, GF, HF> ObjGradFn for MultiDimHessFn<F, GF, HF>
+impl<F, GF, HF> ObjGradFn<f64> for MultiDimHessFn<F, GF, HF>
 where
     F: Fn(&Array1<f64>) -> f64 + Clone,
     GF: Fn(&Array1<f64>) -> Array1<f64> + Clone,
@@ -388,46 +409,47 @@ where
         (self.1)(x)
     }
 
-    fn grad_scalar(&self, x: f64) -> Array1<f64> {
-        (self.1)(&array![x])
+    fn grad_scalar(&self, x: &f64) -> Array1<f64> {
+        (self.1)(&array![*x])
     }
 }
 
-impl<F, GF, HF> ObjHessFn for MultiDimHessFn<F, GF, HF>
+impl<F, GF, HF> ObjHessFn<f64> for MultiDimHessFn<F, GF, HF>
 where
     F: Fn(&Array1<f64>) -> f64 + Clone,
     GF: Fn(&Array1<f64>) -> Array1<f64> + Clone,
     HF: Fn(&Array1<f64>) -> Array2<f64> + Clone,
 {
-    fn hessian(&self, x: &Array1<f64>) -> Array2<f64> {
+    fn hess(&self, x: &Array1<f64>) -> Array2<f64> {
         match self.2.clone() {
             Some(hf) => (hf)(x),
             _ => Array2::eye(x.len()),
         }
     }
 
-    fn hessian_scalar(&self, x: f64) -> Array2<f64> {
+    fn hess_scalar(&self, x: &f64) -> Array2<f64> {
         match self.2.clone() {
-            Some(hf) => (hf)(&array![x]),
+            Some(hf) => (hf)(&array![*x]),
             _ => Array2::eye(1),
         }
     }
 }
 
+// Multi-dimensional function along a direction
 #[derive(Clone)]
 pub struct F1dim {
-    f: Box<dyn ObjFn>,
+    f: Box<dyn ObjFn<f64>>,
 }
 
 impl F1dim {
     pub fn new<F>(f: F) -> Self
     where
-        F: ObjFn + 'static,
+        F: ObjFn<f64> + 'static,
     {
         F1dim { f: Box::new(f) }
     }
 
-    pub fn new_boxed(f: Box<dyn ObjFn>) -> Self {
+    pub fn new_boxed(f: Box<dyn ObjFn<f64>>) -> Self {
         F1dim { f }
     }
 
@@ -450,57 +472,59 @@ impl F1dim {
     }
 }
 
-impl ObjFn for F1dim {
+impl ObjFn<f64> for F1dim {
     fn call(&self, x: &Array1<f64>) -> f64 {
         self.f.call(x)
     }
 
-    fn call_scalar(&self, x: f64) -> f64 {
+    fn call_scalar(&self, x: &f64) -> f64 {
         self.f.call_scalar(x)
     }
 }
 
+// Multi-dimensional function along a direction with gradient
 #[derive(Clone)]
 pub struct GF1dim {
-    f: Box<dyn ObjGradFn>,
+    f: Box<dyn ObjGradFn<f64>>,
 }
 
 impl GF1dim {
     pub fn new<F>(f: F) -> Self
     where
-        F: ObjGradFn + 'static,
+        F: ObjGradFn<f64> + 'static,
     {
         GF1dim { f: Box::new(f) }
     }
 
-    pub fn new_boxed(f: Box<dyn ObjGradFn>) -> Self {
+    pub fn new_boxed(f: Box<dyn ObjGradFn<f64>>) -> Self {
         GF1dim { f }
     }
 }
 
-impl ObjFn for GF1dim {
+impl ObjFn<f64> for GF1dim {
     fn call(&self, x: &Array1<f64>) -> f64 {
         self.f.call(x)
     }
 
-    fn call_scalar(&self, x: f64) -> f64 {
+    fn call_scalar(&self, x: &f64) -> f64 {
         self.f.call_scalar(x)
     }
 }
 
-impl ObjGradFn for GF1dim {
+impl ObjGradFn<f64> for GF1dim {
     fn grad(&self, x: &Array1<f64>) -> Array1<f64> {
         self.f.grad(x)
     }
 
-    fn grad_scalar(&self, x: f64) -> Array1<f64> {
-        self.f.grad(&array![x])
+    fn grad_scalar(&self, x: &f64) -> Array1<f64> {
+        self.f.grad(&array![*x])
     }
 }
 
+// Multi-dimensional function along a direction with gradient and hessian
 #[derive(Clone)]
 pub struct HF1dim {
-    f: Box<dyn ObjHessFn>,
+    f: Box<dyn ObjHessFn<f64>>,
     ieq: Vec<Box<dyn Constraint>>,
     eq: Vec<Box<dyn Constraint>>,
     mu: f64,
@@ -514,7 +538,7 @@ impl HF1dim {
         mu: Option<f64>,
     ) -> Self
     where
-        F: ObjHessFn + 'static,
+        F: ObjHessFn<f64> + 'static,
     {
         HF1dim {
             f: Box::new(f),
@@ -528,7 +552,7 @@ impl HF1dim {
     }
 
     pub fn new_boxed(
-        f: Box<dyn ObjHessFn>,
+        f: Box<dyn ObjHessFn<f64>>,
         ieq: &Vec<Box<dyn Constraint>>,
         eq: &Vec<Box<dyn Constraint>>,
         mu: Option<f64>,
@@ -581,7 +605,7 @@ impl HF1dim {
     }
 
     pub fn hess(&self, x: &Array1<f64>) -> Array2<f64> {
-        let mut hess = self.f.hessian(x);
+        let mut hess = self.f.hess(x);
         let n = x.len();
 
         // Add barrier Hessian terms
@@ -613,40 +637,40 @@ impl HF1dim {
     }
 }
 
-impl ObjFn for HF1dim {
+impl ObjFn<f64> for HF1dim {
     fn call(&self, x: &Array1<f64>) -> f64 {
         self.objective(x)
     }
 
-    fn call_scalar(&self, x: f64) -> f64 {
-        self.objective(&array![x])
+    fn call_scalar(&self, x: &f64) -> f64 {
+        self.objective(&array![*x])
     }
 }
 
-impl ObjGradFn for HF1dim {
+impl ObjGradFn<f64> for HF1dim {
     fn grad(&self, x: &Array1<f64>) -> Array1<f64> {
         self.gradient(x)
     }
 
-    fn grad_scalar(&self, x: f64) -> Array1<f64> {
-        self.gradient(&array![x])
+    fn grad_scalar(&self, x: &f64) -> Array1<f64> {
+        self.gradient(&array![*x])
     }
 }
 
-impl ObjHessFn for HF1dim {
-    fn hessian(&self, x: &Array1<f64>) -> Array2<f64> {
+impl ObjHessFn<f64> for HF1dim {
+    fn hess(&self, x: &Array1<f64>) -> Array2<f64> {
         self.hess(x)
     }
 
-    fn hessian_scalar(&self, x: f64) -> Array2<f64> {
-        self.hess(&array![x])
+    fn hess_scalar(&self, x: &f64) -> Array2<f64> {
+        self.hess(&array![*x])
     }
 }
 
 #[cfg(test)]
 mod minimize_f64_objective_tests {
     use super::*;
-    use crate::minimize::{MinimizerError, f64::Constraint};
+    use crate::minimize::f64::Constraint;
     use std::f64::consts::PI;
 
     // Mock constraint for testing HF1dim
@@ -684,7 +708,7 @@ mod minimize_f64_objective_tests {
 
         let x = array![3.0, 4.0];
         assert_eq!((f)(&x), 25.0);
-        assert_eq!(f.call_scalar(5.0), 25.0);
+        assert_eq!(f.call_scalar(&5.0), 25.0);
     }
 
     #[test]
@@ -695,9 +719,9 @@ mod minimize_f64_objective_tests {
 
         let x = array![3.0, 4.0];
         assert_eq!(obj_fn.call(&x), 25.0);
-        assert_eq!(obj_fn.call_scalar(5.0), 25.0);
+        assert_eq!(obj_fn.call_scalar(&5.0), 25.0);
         assert_eq!(obj_fn.df(&x), 6.0);
-        assert_eq!(obj_fn.df_scalar(3.0), 6.0);
+        assert_eq!(obj_fn.df_scalar(&3.0), 6.0);
     }
 
     #[test]
@@ -715,7 +739,7 @@ mod minimize_f64_objective_tests {
 
         let x = array![3.0, 4.0];
         assert_eq!(obj_fn.call(&x), 25.0);
-        assert_eq!(obj_fn.call_scalar(5.0), 25.0);
+        assert_eq!(obj_fn.call_scalar(&5.0), 25.0);
     }
 
     #[test]
@@ -724,7 +748,7 @@ mod minimize_f64_objective_tests {
 
         let x = array![3.0];
         assert_eq!(f.call(&x), 16.0); // 9 + 6 + 1
-        assert_eq!(f.call_scalar(3.0), 16.0);
+        assert_eq!(f.call_scalar(&3.0), 16.0);
 
         // Test with vector input (should use first element)
         let x_multi = array![3.0, 999.0];
@@ -739,9 +763,9 @@ mod minimize_f64_objective_tests {
 
         let x = array![3.0];
         assert_eq!(obj_fn.call(&x), 16.0);
-        assert_eq!(obj_fn.call_scalar(3.0), 16.0);
+        assert_eq!(obj_fn.call_scalar(&3.0), 16.0);
         assert_eq!(obj_fn.df(&x), 8.0); // 2*3 + 2
-        assert_eq!(obj_fn.df_scalar(3.0), 8.0);
+        assert_eq!(obj_fn.df_scalar(&3.0), 8.0);
     }
 
     #[test]
@@ -750,11 +774,11 @@ mod minimize_f64_objective_tests {
 
         let x = array![1.0, 2.0, 3.0];
         assert_eq!(f.call(&x), 14.0); // 1 + 4 + 9
-        assert_eq!(f.call_scalar(3.0), 9.0);
+        assert_eq!(f.call_scalar(&3.0), 9.0);
 
-        // Test df method (inherits from ObjDerFn but calls same function)
+        // Test df method (inherits from ObjDerFn<f64> but calls same function)
         assert_eq!(f.df(&x), 14.0);
-        assert_eq!(f.df_scalar(3.0), 9.0);
+        assert_eq!(f.df_scalar(&3.0), 9.0);
     }
 
     #[test]
@@ -765,12 +789,12 @@ mod minimize_f64_objective_tests {
 
         let x = array![1.0, 2.0, 3.0];
         assert_eq!(obj_fn.call(&x), 14.0);
-        assert_eq!(obj_fn.call_scalar(3.0), 9.0);
+        assert_eq!(obj_fn.call_scalar(&3.0), 9.0);
 
         let grad = obj_fn.grad(&x);
         assert_eq!(grad, array![2.0, 4.0, 6.0]);
 
-        let grad_scalar = obj_fn.grad_scalar(3.0);
+        let grad_scalar = obj_fn.grad_scalar(&3.0);
         assert_eq!(grad_scalar, array![6.0]);
     }
 
@@ -781,7 +805,7 @@ mod minimize_f64_objective_tests {
 
         let x = array![1.0, 2.0, 3.0];
         assert_eq!(obj_fn.call(&x), 14.0);
-        assert_eq!(obj_fn.call_scalar(3.0), 9.0);
+        assert_eq!(obj_fn.call_scalar(&3.0), 9.0);
 
         let grad = obj_fn.grad(&x);
         // Numerical gradient should be close to analytical [2.0, 4.0, 6.0]
@@ -791,7 +815,7 @@ mod minimize_f64_objective_tests {
 
         // Test with single dimension numerical gradient
         let obj_fn_1d = MultiDimNumGradFn::new(f, Some(1e-6), 1);
-        let grad_scalar = obj_fn_1d.grad_scalar(3.0);
+        let grad_scalar = obj_fn_1d.grad_scalar(&3.0);
         assert!((grad_scalar[0] - 6.0).abs() < 1e-5);
     }
 
@@ -819,7 +843,7 @@ mod minimize_f64_objective_tests {
         assert_eq!(obj_fn.call(&x), 13.0);
         assert_eq!(obj_fn.grad(&x), array![4.0, 6.0]);
 
-        let hess = obj_fn.hessian(&x);
+        let hess = obj_fn.hess(&x);
         assert_eq!(hess, array![[2.0, 0.0], [0.0, 2.0]]);
     }
 
@@ -831,11 +855,11 @@ mod minimize_f64_objective_tests {
             MultiDimHessFn::new(f, gf, None);
 
         let x = array![2.0, 3.0];
-        let hess = obj_fn.hessian(&x);
+        let hess = obj_fn.hess(&x);
         // Should return identity matrix
         assert_eq!(hess, array![[1.0, 0.0], [0.0, 1.0]]);
 
-        let hess_scalar = obj_fn.hessian_scalar(2.0);
+        let hess_scalar = obj_fn.hess_scalar(&2.0);
         assert_eq!(hess_scalar, array![[1.0]]);
     }
 
@@ -855,12 +879,12 @@ mod minimize_f64_objective_tests {
         // Test direct function calls
         let x = array![3.0];
         assert_eq!(f1dim.call(&x), 9.0);
-        assert_eq!(f1dim.call_scalar(3.0), 9.0);
+        assert_eq!(f1dim.call_scalar(&3.0), 9.0);
     }
 
     #[test]
     fn test_f1dim_with_boxed() {
-        let f = Box::new(SingleDimFn::new(|x| x * x + 1.0)) as Box<dyn ObjFn>;
+        let f = Box::new(SingleDimFn::new(|x| x * x + 1.0)) as Box<dyn ObjFn<f64>>;
         let mut f1dim = F1dim::new_boxed(f);
 
         let point = array![0.0, 0.0];
@@ -902,7 +926,7 @@ mod minimize_f64_objective_tests {
         let x = array![1.0, 2.0];
         assert_eq!(hf1dim.call(&x), 5.0);
         assert_eq!(hf1dim.grad(&x), array![2.0, 4.0]);
-        assert_eq!(hf1dim.hessian(&x), array![[2.0, 0.0], [0.0, 2.0]]);
+        assert_eq!(hf1dim.hess(&x), array![[2.0, 0.0], [0.0, 2.0]]);
     }
 
     #[test]
@@ -955,7 +979,7 @@ mod minimize_f64_objective_tests {
         let x = array![3.0];
         assert_eq!(hf1dim.objective(&x), 9.0); // Should be just x^2
         assert_eq!(hf1dim.gradient(&x), array![6.0]); // Should be 2x
-        assert_eq!(hf1dim.hessian(&x), array![[2.0]]); // Should be 2
+        assert_eq!(hf1dim.hess(&x), array![[2.0]]); // Should be 2
     }
 
     #[test]
@@ -963,7 +987,7 @@ mod minimize_f64_objective_tests {
         let f = |x: &Array1<f64>| x[0] * x[0];
         let gf = |x: &Array1<f64>| array![2.0 * x[0]];
         let hf = |_x: &Array1<f64>| array![[2.0]];
-        let obj_fn = Box::new(MultiDimHessFn::new(f, gf, Some(hf))) as Box<dyn ObjHessFn>;
+        let obj_fn = Box::new(MultiDimHessFn::new(f, gf, Some(hf))) as Box<dyn ObjHessFn<f64>>;
 
         let ieq = vec![];
         let eq = vec![];
@@ -971,7 +995,7 @@ mod minimize_f64_objective_tests {
 
         let x = array![3.0];
         assert_eq!(hf1dim.call(&x), 9.0);
-        assert_eq!(hf1dim.call_scalar(3.0), 9.0);
+        assert_eq!(hf1dim.call_scalar(&3.0), 9.0);
     }
 
     #[test]
@@ -980,7 +1004,7 @@ mod minimize_f64_objective_tests {
         let trig_f = SingleDimFn::new(|x| (x * PI).sin() + (x * PI / 2.0).cos());
         // At x = 0.5: sin(0.5π) + cos(0.25π) = 1 + cos(π/4) = 1 + √2/2 ≈ 1.707
         let expected = 1.0 + (PI / 4.0).cos();
-        assert!((trig_f.call_scalar(0.5) - expected).abs() < 1e-10);
+        assert!((trig_f.call_scalar(&0.5) - expected).abs() < 1e-10);
 
         // Test with exponential function
         let exp_f =

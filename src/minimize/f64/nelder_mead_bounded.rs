@@ -1,8 +1,41 @@
 #![allow(unused_assignments)]
 #![allow(unused_variables)]
-use crate::minimize::{Minimizer, ObjectiveFn};
-use crate::myfloat::MyFloat;
+use crate::minimize::{Minimizer, MinimizerResult, f64::ObjFn};
 use ndarray::prelude::*;
+
+/// Result of Nelder-Mead optimization
+#[derive(Debug, Clone)]
+pub struct NelderMeadBoundedResult {
+    pub xmin: Array1<f64>,
+    pub fmin: f64,
+    pub iters: usize,
+    pub fn_evals: usize,
+    pub converged: bool,
+    pub final_simplex_size: f64,
+    pub history: Array1<f64>,
+}
+
+impl MinimizerResult<Array1<f64>> for NelderMeadBoundedResult {
+    fn converged(&self) -> bool {
+        self.converged
+    }
+
+    fn fmin(&self) -> f64 {
+        self.fmin
+    }
+
+    fn fn_evals(&self) -> usize {
+        self.fn_evals
+    }
+
+    fn iters(&self) -> usize {
+        self.iters
+    }
+
+    fn xmin(&self) -> Array1<f64> {
+        self.xmin.clone()
+    }
+}
 
 pub struct NelderMeadBounded {
     scale: Array1<f64>,
@@ -14,7 +47,7 @@ pub struct NelderMeadBounded {
     ub_vec: Vec<f64>,
     res: Option<Array1<f64>>,
     simplex: Option<Array2<f64>>,
-    f: Box<dyn ObjectiveFn>,
+    f: Box<dyn ObjFn<f64>>,
     n: usize,
     iters: usize,
     max_iters: usize, // Maximum iterations
@@ -37,7 +70,7 @@ impl NelderMeadBounded {
         f: F,
     ) -> Self
     where
-        F: ObjectiveFn + 'static,
+        F: ObjFn<f64> + 'static,
     {
         let mut lb_vec: Vec<f64> = vec![];
         let mut ub_vec: Vec<f64> = vec![];
@@ -70,11 +103,11 @@ impl NelderMeadBounded {
         }
     }
 
-    fn check_bounds(&self, x: MyFloat, lb: f64, ub: f64, scale: f64) -> MyFloat {
-        if x.to_f64() < (lb * scale) {
-            return MyFloat::new((1.0 + 0.05 / self.iters as f64) * lb * scale);
-        } else if x.to_f64() > (ub * scale) {
-            return MyFloat::new((1.0 - 0.05 / self.iters as f64) * ub * scale);
+    fn check_bounds(&self, x: f64, lb: f64, ub: f64, scale: f64) -> f64 {
+        if x < (lb * scale) {
+            return (1.0 + 0.05 / self.iters as f64) * lb * scale;
+        } else if x > (ub * scale) {
+            return (1.0 - 0.05 / self.iters as f64) * ub * scale;
         }
         x
     }
@@ -114,20 +147,43 @@ impl NelderMeadBounded {
     pub fn set_verbosity(&mut self, verbose: u32) {
         self.verbosity = verbose;
     }
-}
 
-impl Minimizer for NelderMeadBounded {
-    fn calc_obj(&mut self, x: &Array1<MyFloat>) -> MyFloat {
-        let mut sum = MyFloat::new(0.0);
+    fn calc_obj(&mut self, x: &Array1<f64>) -> f64 {
+        let mut sum = 0.0;
         for i in 0..x.len() {
             sum += (self.ub[i] - x[i].clone()).ln() + (x[i].clone() - self.lb[i]).ln();
         }
         self.f.call(x) - self.mu * sum
     }
 
+    fn x(&self) -> &Array1<f64> {
+        &self.x
+    }
+
+    fn final_value(&self) -> Option<f64> {
+        self.res.as_ref().map(|x| x[0])
+    }
+
+    fn tolerance(&self) -> Option<f64> {
+        self.tol
+    }
+
+    fn iterations(&self) -> usize {
+        self.iters
+    }
+
+    fn name(&self) -> &str {
+        "NelderMeadBounded"
+    }
+}
+
+impl Minimizer<Array1<f64>> for NelderMeadBounded {
     /// Solve using Nelder-Mead algorithm
-    fn solve(&mut self, max_iters: usize) {
-        self.max_iters = max_iters;
+    fn minimize(&mut self, max_iters: Option<usize>) -> Box<dyn MinimizerResult<Array1<f64>>> {
+        self.max_iters = match max_iters {
+            Some(x) => x,
+            _ => 1000,
+        };
         self.iters = 0;
 
         // Generate initial simplex veritces
@@ -139,30 +195,25 @@ impl Minimizer for NelderMeadBounded {
         let mut simplex = Array2::from_shape_fn((self.n + 1, self.n), |(i, j)| {
             if i == j && i < self.n {
                 self.check_bounds(
-                    MyFloat::new(self.x_scaled[j] + a + b),
+                    self.x_scaled[j] + a + b,
                     self.lb[j],
                     self.ub[j],
                     self.scale[j],
                 )
             } else if i < self.n {
-                self.check_bounds(
-                    MyFloat::new(self.x_scaled[j] + b),
-                    self.lb[j],
-                    self.ub[j],
-                    self.scale[j],
-                )
+                self.check_bounds(self.x_scaled[j] + b, self.lb[j], self.ub[j], self.scale[j])
             } else {
-                MyFloat::new(self.x_scaled[j])
+                self.x_scaled[j]
             }
         });
 
         // Evaluate function at simplex vertices
-        let mut res: Array1<MyFloat> = simplex
+        let mut res: Array1<f64> = simplex
             .rows()
             .into_iter()
             .map(|x| self.calc_obj(&Array1::from_shape_fn(self.n, |i| &x[i] / self.scale[i])))
             .collect();
-        let mut prev_tol = MyFloat::new(1.0);
+        let mut prev_tol = 1.0;
 
         while self.iters < self.max_iters {
             if self.verbosity > 1 {
@@ -194,17 +245,15 @@ impl Minimizer for NelderMeadBounded {
                 [a, b] => (*a, *b),
                 _ => panic!("Shape must be 2-dimensional"),
             };
-            self.simplex = Some(Array2::from_shape_fn(shape, |(i, j)| {
-                simplex[(i, j)].clone().to_f64()
-            }));
+            self.simplex = Some(Array2::from_shape_fn(shape, |(i, j)| simplex[(i, j)]));
 
             // Determine if convergence criteria met
-            let tol: MyFloat = 2.0 * (res[res.len() - 1].clone() - res[0].clone()).abs()
+            let tol = 2.0 * (res[res.len() - 1].clone() - res[0].clone()).abs()
                 / (res[res.len() - 1].clone().abs() + res[0].clone().abs() + 1e-10);
             // if tol.to_f64() < self.target_tol || (&prev_tol - &tol).abs().to_f64() < 1e-15 {
             //     break;
             // }
-            if tol.to_f64() < self.target_tol {
+            if tol < self.target_tol {
                 break;
             }
             prev_tol = tol.clone();
@@ -214,9 +263,9 @@ impl Minimizer for NelderMeadBounded {
             let x_w = Array1::from_shape_fn(self.n, |i| simplex[(nrows - 1, i)].clone()); // Worst point
 
             // Calculate the average of the n best points
-            let mut x_avg = Array1::from_shape_fn(self.n, |_| MyFloat::new(0.0));
+            let mut x_avg = Array1::zeros(self.n);
             for i in 0..self.n {
-                let mut sum = MyFloat::new(0.0);
+                let mut sum = 0.0;
                 for j in 0..self.n {
                     sum += &simplex[(j, i)];
                 }
@@ -349,23 +398,18 @@ impl Minimizer for NelderMeadBounded {
                 res[nrows - 1] = f_r;
             }
 
-            self.tol = Some(tol.to_f64());
+            self.tol = Some(tol);
         }
 
         let shape = match simplex.shape() {
             [a, b] => (*a, *b),
             _ => panic!("Shape must be 2-dimensional"),
         };
-        self.simplex = Some(Array2::from_shape_fn(shape, |(i, j)| {
-            simplex[(i, j)].clone().to_f64()
-        }));
-        self.x_scaled =
-            Array1::from_shape_fn(simplex.ncols(), |i| simplex[(0, i)].clone().to_f64());
+        self.simplex = Some(Array2::from_shape_fn(shape, |(i, j)| simplex[(i, j)]));
+        self.x_scaled = Array1::from_shape_fn(simplex.ncols(), |i| simplex[(0, i)]);
         self.x = Array1::from_shape_fn(self.n, |i| self.x_scaled[i] / self.scale[i]);
         // self.res = Some(res);
-        self.res = Some(Array1::from_shape_fn(res.len(), |i| {
-            res[i].clone().to_f64()
-        }));
+        self.res = Some(Array1::from_shape_fn(res.len(), |i| res[i]));
 
         if self.verbosity > 0 {
             println!("x: {:?}", self.x());
@@ -373,71 +417,56 @@ impl Minimizer for NelderMeadBounded {
             println!("iters: {}", self.iterations());
             println!("tol: {:?}", self.tolerance().unwrap());
         }
-    }
 
-    fn x(&self) -> &Array1<f64> {
-        &self.x
-    }
-
-    fn final_value(&self) -> Option<f64> {
-        self.res.as_ref().map(|x| x[0])
-    }
-
-    fn tolerance(&self) -> Option<f64> {
-        self.tol
-    }
-
-    fn iterations(&self) -> usize {
-        self.iters
-    }
-
-    fn name(&self) -> &str {
-        "NelderMeadBounded"
+        Box::new(NelderMeadBoundedResult {
+            xmin: self.x.clone(),
+            fmin: self.calc_obj(&self.x.clone()),
+            iters: 0,
+            fn_evals: 0,
+            converged: true,
+            final_simplex_size: 0.0,
+            history: array![],
+        })
     }
 }
 
 #[cfg(test)]
-mod tests {
+mod minimize_f64_neldermeadbounded_tests {
     use super::*;
     use crate::file::read_touchstone;
     use crate::frequency::*;
-    // use crate::impedance::*;
-    use crate::mycomplex::MyComplex;
     use crate::network::{Network, NetworkBuilder};
-    // use crate::points;
     use crate::points::{Points, Pts};
-    // use crate::scale::Scale;
     use crate::util::*;
     use float_cmp::F64Margin;
-    // use num::complex::c64;
+    use num::complex::*;
 
-    fn calc_feed_y(freq: Frequency, x: &Array1<MyFloat>) -> Array3<MyComplex> {
-        let mut yfeed = Array3::<MyComplex>::zeros((freq.npts(), 2, 2));
+    fn calc_feed_y(freq: Frequency, x: &Array1<f64>) -> Array3<Complex64> {
+        let mut yfeed = Array3::<Complex64>::zeros((freq.npts(), 2, 2));
 
         let w = freq.w();
-        let mut zs = Array1::<MyComplex>::zeros(freq.npts());
-        let mut zm = Array1::<MyComplex>::zeros(freq.npts());
-        let mut zp = Array1::<MyComplex>::zeros(freq.npts());
-        let mut zall = Array1::<MyComplex>::zeros(freq.npts());
+        let mut zs = Array1::<Complex64>::zeros(freq.npts());
+        let mut zm = Array1::<Complex64>::zeros(freq.npts());
+        let mut zp = Array1::<Complex64>::zeros(freq.npts());
+        let mut zall = Array1::<Complex64>::zeros(freq.npts());
         for i in 0..freq.npts() {
-            zs[i] = &x[3] * MyComplex::from_f64(0.0, 1.0) * w[i] * &x[2]
-                / (&x[3] + MyComplex::from_f64(0.0, 1.0) * w[i] * &x[2]);
-            zm[i] = &x[1] + MyComplex::from_f64(0.0, 1.0) * w[i] * &x[0] + &zs[i];
-            zp[i] = &x[5] - MyComplex::from_f64(0.0, 1.0) / (w[i] * &x[4]);
-            zall[i] = &zm[i] * &zp[i] / (&zm[i] + &zp[i]);
+            zs[i] = x[3] * Complex::I * w[i] * x[2] / (x[3] + Complex::I * w[i] * x[2]);
+            zm[i] = x[1] + Complex::I * w[i] * x[0] + zs[i];
+            zp[i] = x[5] - Complex::I / (w[i] * x[4]);
+            zall[i] = zm[i] * zp[i] / (zm[i] + zp[i]);
         }
 
         for i in 0..freq.npts() {
-            yfeed[[i, 0, 1]] = -1.0 / &zall[i];
-            yfeed[[i, 1, 0]] = -1.0 / &zall[i];
-            yfeed[[i, 0, 0]] = MyComplex::from_f64(0.0, 1.0) * w[i] * &x[6] + 1.0 / &zall[i];
-            yfeed[[i, 1, 1]] = MyComplex::from_f64(0.0, 1.0) * w[i] * &x[7] + 1.0 / &zall[i];
+            yfeed[[i, 0, 1]] = -1.0 / zall[i];
+            yfeed[[i, 1, 0]] = -1.0 / zall[i];
+            yfeed[[i, 0, 0]] = Complex::I * w[i] * x[6] + 1.0 / zall[i];
+            yfeed[[i, 1, 1]] = Complex::I * w[i] * x[7] + 1.0 / zall[i];
         }
 
         yfeed
     }
 
-    fn calc_err(model: &Network, meas: &Network) -> MyFloat {
+    fn calc_err(model: &Network, meas: &Network) -> f64 {
         let mut err: f64 = 0.0;
         let meas_h = meas.h();
         let model_h = model.h();
@@ -468,10 +497,10 @@ mod tests {
             }
         }
 
-        MyFloat::new(err)
+        err
     }
 
-    fn eval_f_simplex(x: &Array1<MyFloat>, meas: &Network) -> MyFloat {
+    fn eval_f_simplex(x: &Array1<f64>, meas: &Network) -> f64 {
         let model_y = calc_feed_y(meas.freq().clone(), x);
         let model_y_c64 =
             Points::from_shape_fn(model_y.dim(), |(i, j, k)| model_y[[i, j, k]].clone().into());
@@ -490,32 +519,32 @@ mod tests {
         rs: f64,
         km: f64,
         qp: f64,
-        x: Array1<MyFloat>,
-    ) -> Array3<MyComplex> {
-        let mut z = Array3::<MyComplex>::zeros((freq.npts(), 2, 2));
+        x: Array1<f64>,
+    ) -> Array3<Complex64> {
+        let mut z = Array3::<Complex64>::zeros((freq.npts(), 2, 2));
 
         let w = freq.w();
-        let mut m = Array1::<MyFloat>::zeros(freq.npts());
-        let mut n = Array1::<MyFloat>::zeros(freq.npts());
-        let mut rp = Array1::<MyFloat>::zeros(freq.npts());
+        let mut m = Array1::<f64>::zeros(freq.npts());
+        let mut n = Array1::<f64>::zeros(freq.npts());
+        let mut rp = Array1::<f64>::zeros(freq.npts());
         for i in 0..freq.npts() {
-            m[i] = km * (&x[0] * ls).sqrt();
-            n[i] = (ls / &x[0]).sqrt();
-            rp[i] = w[i] * &x[0] / qp;
+            m[i] = km * (x[0] * ls).sqrt();
+            n[i] = (ls / x[0]).sqrt();
+            rp[i] = w[i] * x[0] / qp;
         }
 
         for i in 0..freq.npts() {
-            z[[i, 0, 1]] = MyComplex::from_f64(0.0, -1.0) * freq.w_pt(i) * &m[i];
-            z[[i, 1, 0]] = MyComplex::from_f64(0.0, -1.0) * freq.w_pt(i) * &m[i];
-            z[[i, 0, 0]] = MyComplex::from_f64(rp[i].to_f64(), (w[i] * &x[0]).to_f64());
-            z[[i, 1, 1]] = MyComplex::from_f64(rs, -w[i] * ls);
+            z[[i, 0, 1]] = -Complex::I * freq.w_pt(i) * m[i];
+            z[[i, 1, 0]] = -Complex::I * freq.w_pt(i) * m[i];
+            z[[i, 0, 0]] = c64(rp[i], w[i] * x[0]);
+            z[[i, 1, 1]] = c64(rs, -w[i] * ls);
         }
 
         z
     }
 
-    fn calc_err_xfmr(meas: &Network, model: &Network) -> MyFloat {
-        let mut err: f64 = 0.0;
+    fn calc_err_xfmr(meas: &Network, model: &Network) -> f64 {
+        let mut err = 0.0;
         let meas_s = meas.s();
         let model_s = model.s();
         for i in 0..meas.freq().npts() {
@@ -529,17 +558,10 @@ mod tests {
             }
         }
 
-        MyFloat::new(err)
+        err
     }
 
-    fn eval_f_xfmr(
-        x: Array1<MyFloat>,
-        ls: f64,
-        rs: f64,
-        km: f64,
-        qp: f64,
-        meas: &Network,
-    ) -> MyFloat {
+    fn eval_f_xfmr(x: Array1<f64>, ls: f64, rs: f64, km: f64, qp: f64, meas: &Network) -> f64 {
         let model_z = calc_xfmr_z(meas.freq().clone(), ls, rs, km, qp, x);
         let model_z_c64 =
             Points::from_shape_fn(model_z.dim(), |(i, j, k)| model_z[[i, j, k]].clone().into());
@@ -588,25 +610,24 @@ mod tests {
 
         let filename = "./data/1010_6x60um/feeds/drain_short.s2p".to_string();
         let net = read_touchstone(&filename).unwrap();
-        let mut test =
-            NelderMeadBounded::new(x.clone(), scale, lb, ub, move |x: &Array1<MyFloat>| {
-                eval_f_simplex(x, &net)
-            });
-        test.solve(1);
+        let mut test = NelderMeadBounded::new(x.clone(), scale, lb, ub, move |x: &Array1<f64>| {
+            eval_f_simplex(x, &net)
+        });
+        test.minimize(Some(1));
 
         let margin = MARGIN;
-        comp_row_f64(&exemplar_x, &test.x(), margin, "solve(x)");
+        comp_row_f64(&exemplar_x, &test.x(), margin, "minimize(x)");
         comp_row_f64(
             &exemplar_res,
             &test.res_all().unwrap(),
             margin,
-            "solve(res)",
+            "minimize(res)",
         );
         comp_f64(
             &exemplar_tol,
             &test.tolerance().unwrap(),
             margin,
-            "solve(tol)",
+            "minimize(tol)",
             "",
         );
     }
@@ -642,25 +663,24 @@ mod tests {
 
         let filename = "./data/1010_6x60um/feeds/drain_short.s2p".to_string();
         let net = read_touchstone(&filename).unwrap();
-        let mut test =
-            NelderMeadBounded::new(x.clone(), scale, lb, ub, move |x: &Array1<MyFloat>| {
-                eval_f_simplex(x, &net)
-            });
-        test.solve(2);
+        let mut test = NelderMeadBounded::new(x.clone(), scale, lb, ub, move |x: &Array1<f64>| {
+            eval_f_simplex(x, &net)
+        });
+        test.minimize(Some(2));
 
         let margin = MARGIN;
-        comp_row_f64(&exemplar_x, &test.x(), margin, "solve(x)");
+        comp_row_f64(&exemplar_x, &test.x(), margin, "minimize(x)");
         comp_row_f64(
             &exemplar_res,
             &test.res_all().unwrap(),
             margin,
-            "solve(res)",
+            "minimize(res)",
         );
         comp_f64(
             &exemplar_tol,
             &test.tolerance().unwrap(),
             margin,
-            "solve(tol)",
+            "minimize(tol)",
             "",
         );
     }
@@ -698,25 +718,24 @@ mod tests {
         let net = read_touchstone(&filename).unwrap();
         // let mut test =
         //     NelderMeadBounded::new(x.clone(), scale, lb, ub, net.clone(), eval_f_simplex);
-        let mut test =
-            NelderMeadBounded::new(x.clone(), scale, lb, ub, move |x: &Array1<MyFloat>| {
-                eval_f_simplex(x, &net)
-            });
-        test.solve(10);
+        let mut test = NelderMeadBounded::new(x.clone(), scale, lb, ub, move |x: &Array1<f64>| {
+            eval_f_simplex(x, &net)
+        });
+        test.minimize(Some(10));
 
         let margin = MARGIN;
-        comp_row_f64(&exemplar_x, &test.x(), margin, "solve(x)");
+        comp_row_f64(&exemplar_x, &test.x(), margin, "minimize(x)");
         comp_row_f64(
             &exemplar_res,
             &test.res_all().unwrap(),
             margin,
-            "solve(res)",
+            "minimize(res)",
         );
         comp_f64(
             &exemplar_tol,
             &test.tolerance().unwrap(),
             margin,
-            "solve(tol)",
+            "minimize(tol)",
             "",
         );
     }
@@ -752,25 +771,24 @@ mod tests {
 
         let filename = "./data/1010_6x60um/feeds/drain_short.s2p".to_string();
         let net = read_touchstone(&filename).unwrap();
-        let mut test =
-            NelderMeadBounded::new(x.clone(), scale, lb, ub, move |x: &Array1<MyFloat>| {
-                eval_f_simplex(x, &net)
-            });
-        test.solve(100);
+        let mut test = NelderMeadBounded::new(x.clone(), scale, lb, ub, move |x: &Array1<f64>| {
+            eval_f_simplex(x, &net)
+        });
+        test.minimize(Some(100));
 
         let margin = MARGIN;
-        comp_row_f64(&exemplar_x, &test.x(), margin, "solve(x)");
+        comp_row_f64(&exemplar_x, &test.x(), margin, "minimize(x)");
         comp_row_f64(
             &exemplar_res,
             &test.res_all().unwrap(),
             margin,
-            "solve(res)",
+            "minimize(res)",
         );
         comp_f64(
             &exemplar_tol,
             &test.tolerance().unwrap(),
             margin,
-            "solve(tol)",
+            "minimize(tol)",
             "",
         );
     }
@@ -832,21 +850,21 @@ mod tests {
     //     let mut test = NelderMeadBounded::new(x, scale, lb, ub, move |x| {
     //         eval_f_xfmr(x, ls, exemplar_km, exemplar_qp, exemplar_qs, &net)
     //     });
-    //     test.solve(50);
+    //     test.minimize(Some(50));
 
     //     let margin = MARGIN;
-    //     comp_row_f64(&exemplar_x, &test.x(), margin, "solve(x)");
+    //     comp_row_f64(&exemplar_x, &test.x(), margin, "minimize(x)");
     //     comp_row_f64(
     //         &exemplar_res,
     //         &test.res_all().unwrap(),
     //         margin,
-    //         "solve(res)",
+    //         "minimize(res)",
     //     );
     //     comp_f64(
     //         &exemplar_tol,
     //         &test.tolerance().unwrap(),
     //         margin,
-    //         "solve(tol)",
+    //         "minimize(tol)",
     //         "",
     //     );
     // }
@@ -888,19 +906,19 @@ mod tests {
     //     let mu = 1.0;
     //     test.set_mu(mu);
     //     assert_eq!(mu, test.get_mu());
-    //     test.solve(200);
-    //     comp_row_f64(&exemplar_x, &test.x(), margin, "solve(x, mu=1.0)");
+    //     test.minimize(Some(200));
+    //     comp_row_f64(&exemplar_x, &test.x(), margin, "minimize(x, mu=1.0)");
     //     comp_row_f64(
     //         &exemplar_res,
     //         &test.res_all().unwrap(),
     //         margin,
-    //         "solve(res, mu=1.0)",
+    //         "minimize(res, mu=1.0)",
     //     );
     //     comp_f64(
     //         &exemplar_tol,
     //         &test.tolerance().unwrap(),
     //         margin,
-    //         "solve(tol, mu=1.0)",
+    //         "minimize(tol, mu=1.0)",
     //         "",
     //     );
 
@@ -930,19 +948,19 @@ mod tests {
     //     let mu = 0.1;
     //     test.set_mu(mu);
     //     assert_eq!(mu, test.get_mu());
-    //     test.solve(200);
-    //     comp_row_f64(&exemplar_x, &test.x(), margin, "solve(x, mu=0.1)");
+    //     test.minimize(Some(200));
+    //     comp_row_f64(&exemplar_x, &test.x(), margin, "minimize(x, mu=0.1)");
     //     comp_row_f64(
     //         &exemplar_res,
     //         &test.res_all().unwrap(),
     //         margin,
-    //         "solve(res, mu=0.1)",
+    //         "minimize(res, mu=0.1)",
     //     );
     //     comp_f64(
     //         &exemplar_tol,
     //         &test.tolerance().unwrap(),
     //         margin,
-    //         "solve(tol, mu=0.1)",
+    //         "minimize(tol, mu=0.1)",
     //         "",
     //     );
 
@@ -972,19 +990,19 @@ mod tests {
     //     let mu = 0.01;
     //     test.set_mu(mu);
     //     assert_eq!(mu, test.get_mu());
-    //     test.solve(200);
-    //     comp_row_f64(&exemplar_x, &test.x(), margin, "solve(x, mu=0.01)");
+    //     test.minimize(Some(200));
+    //     comp_row_f64(&exemplar_x, &test.x(), margin, "minimize(x, mu=0.01)");
     //     comp_row_f64(
     //         &exemplar_res,
     //         &test.res_all().unwrap(),
     //         margin,
-    //         "solve(res, mu=0.01)",
+    //         "minimize(res, mu=0.01)",
     //     );
     //     comp_f64(
     //         &exemplar_tol,
     //         &test.tolerance().unwrap(),
     //         margin,
-    //         "solve(tol, mu=0.01)",
+    //         "minimize(tol, mu=0.01)",
     //         "",
     //     );
     // }
@@ -1022,21 +1040,21 @@ mod tests {
     //     let net = read_touchstone(&filename).unwrap();
     //     let mut test =
     //         NelderMeadBounded::new(x.clone(), scale, lb, ub, net.clone(), eval_f_simplex);
-    //     test.solve(500);
+    //     test.minimize(Some(500));
 
     //     let margin = MARGIN;
-    //     comp_row_f64(&exemplar_x, &test.x(), margin, "solve(x)");
+    //     comp_row_f64(&exemplar_x, &test.x(), margin, "minimize(x)");
     //     comp_row_f64(
     //         &exemplar_res,
     //         &test.res_all().unwrap(),
     //         margin,
-    //         "solve(res)",
+    //         "minimize(res)",
     //     );
     //     comp_f64(
     //         &exemplar_tol,
     //         &test.tolerance().unwrap(),
     //         margin,
-    //         "solve(tol)",
+    //         "minimize(tol)",
     //         "",
     //     );
     // }
@@ -1074,21 +1092,21 @@ mod tests {
     //     let net = read_touchstone(&filename).unwrap();
     //     let mut test =
     //         NelderMeadBounded::new(x.clone(), scale, lb, ub, net.clone(), eval_f_simplex);
-    //     test.solve(1000);
+    //     test.minimize(Some(1000));
 
     //     let margin = MARGIN;
-    //     comp_row_f64(&exemplar_x, &test.x(), margin, "solve(x)");
+    //     comp_row_f64(&exemplar_x, &test.x(), margin, "minimize(x)");
     //     comp_row_f64(
     //         &exemplar_res,
     //         &test.res_all().unwrap(),
     //         margin,
-    //         "solve(res)",
+    //         "minimize(res)",
     //     );
     //     comp_f64(
     //         &exemplar_tol,
     //         &test.tolerance().unwrap(),
     //         margin,
-    //         "solve(tol)",
+    //         "minimize(tol)",
     //         "",
     //     );
     // }

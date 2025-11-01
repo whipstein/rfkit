@@ -5,7 +5,7 @@ use crate::math::*;
 use crate::mycomplex::MyComplex;
 use crate::myfloat::MyFloat;
 use crate::parameter::RFParameter;
-use crate::point::{Point, PointComplex};
+use crate::point::{Point, Pt};
 use crate::points::Points;
 use crate::unit::Unit;
 use ndarray::OwnedRepr;
@@ -30,7 +30,6 @@ use std::{fmt, fs, mem, process};
 pub mod builder;
 pub mod network;
 pub mod point;
-pub mod point_complex;
 pub mod points;
 pub mod port_points;
 

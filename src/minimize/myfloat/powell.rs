@@ -1,29 +1,29 @@
 #![allow(dead_code)]
 #![allow(unused_assignments)]
 use crate::error::MinimizerError;
-use crate::minimize::f64::F1dim;
-use crate::minimize::f64::{Brent, ObjFn};
+use crate::minimize::myfloat::{Brent, F1dim, ObjFn};
+use crate::myfloat::MyFloat;
 use ndarray::prelude::*;
 use std::fmt;
 
 /// Result of Powell's method optimization
 #[derive(Debug, Clone)]
 pub struct PowellResult {
-    pub xmin: Array1<f64>,
-    pub fmin: f64,
+    pub xmin: Array1<MyFloat>,
+    pub fmin: MyFloat,
     pub iters: usize,
     pub fn_evals: usize,
     pub converged: bool,
-    pub final_directions: Array2<f64>,
-    pub history: Array1<f64>,
-    pub improvement: Array1<f64>,
+    pub final_directions: Array2<MyFloat>,
+    pub history: Array1<MyFloat>,
+    pub improvement: Array1<MyFloat>,
 }
 
 #[derive(Clone)]
 pub struct Powell {
-    xmin: Array1<f64>,
-    fmin: f64,
-    f: Box<dyn ObjFn<f64>>,
+    xmin: Array1<MyFloat>,
+    fmin: MyFloat,
+    f: Box<dyn ObjFn<MyFloat>>,
     iters: usize,
     converged: bool,
 }
@@ -31,34 +31,34 @@ pub struct Powell {
 impl Powell {
     pub fn new<F>(f: F) -> Self
     where
-        F: ObjFn<f64> + Clone + 'static,
+        F: ObjFn<MyFloat> + Clone + 'static,
     {
         let boxed = Box::new(f);
         Powell {
             xmin: array![],
-            fmin: 0.0,
+            fmin: 0.0.into(),
             f: boxed,
             iters: 0,
             converged: false,
         }
     }
 
-    pub fn new_boxed(f: Box<dyn ObjFn<f64>>) -> Self {
+    pub fn new_boxed(f: Box<dyn ObjFn<MyFloat>>) -> Self {
         Powell {
             xmin: array![],
-            fmin: 0.0,
+            fmin: 0.0.into(),
             f: f,
             iters: 0,
             converged: false,
         }
     }
 
-    pub fn xmin(&self) -> Array1<f64> {
+    pub fn xmin(&self) -> Array1<MyFloat> {
         self.xmin.clone()
     }
 
-    pub fn fmin(&self) -> f64 {
-        self.fmin
+    pub fn fmin(&self) -> MyFloat {
+        self.fmin.clone()
     }
 
     pub fn iters(&self) -> usize {
@@ -82,10 +82,10 @@ impl Powell {
     /// * `PowellResult` containing the minimum and convergence information
     pub fn powell_method(
         &mut self,
-        initial_point: Array1<f64>,
-        tol: Option<f64>,
+        initial_point: &Array1<MyFloat>,
+        tol: Option<MyFloat>,
         max_iters: Option<usize>,
-        line_search_tolerance: Option<f64>,
+        line_search_tolerance: Option<MyFloat>,
     ) -> Result<PowellResult, MinimizerError> {
         self.converged = false;
         let n = initial_point.len();
@@ -93,17 +93,17 @@ impl Powell {
             return Err(MinimizerError::InvalidDimension);
         }
 
-        let tol = tol.unwrap_or(1e-8);
+        let tol = tol.unwrap_or(1e-8.into());
         let max_iter = max_iters.unwrap_or(200);
-        let line_tol = line_search_tolerance.unwrap_or(1e-12);
+        let line_tol = line_search_tolerance.unwrap_or(1e-12.into());
 
         if tol <= 0.0 {
             return Err(MinimizerError::InvalidTolerance);
         }
 
         // Initialize direction set as coordinate axes
-        let mut directions = Array2::<f64>::eye(n);
-        // let mut directions: Array2<f64> = (0..n)
+        let mut directions = Array2::<MyFloat>::eye(n);
+        // let mut directions: Array2<MyFloat> = (0..n)
         //     .map(|i| {
         //         let mut dir = vec![0.0; n];
         //         dir[i] = 1.0;
@@ -111,7 +111,7 @@ impl Powell {
         //     })
         //     .collect();
 
-        let mut x = initial_point;
+        let mut x = initial_point.clone();
         let mut f_current = self.f.call(&x);
         if !f_current.is_finite() {
             return Err(MinimizerError::FunctionEvaluationError);
@@ -119,22 +119,22 @@ impl Powell {
 
         let mut fn_evals = 1;
         self.iters = 0;
-        let mut history = vec![f_current];
+        let mut history = vec![f_current.clone()];
         let mut improvement = Vec::new();
 
         while self.iters < max_iter {
             self.iters += 1;
             let x_old = x.clone();
-            let f_old = f_current;
+            let f_old = f_current.clone();
 
-            let mut delta_f_max = 0.0;
+            let mut delta_f_max = MyFloat::new(0.0);
             let mut max_decrease_index = 0;
 
             // Perform line searches along each direction
             for (i, direction) in directions.outer_iter().enumerate() {
                 let mut brent = Brent::new(F1dim::new_boxed(self.f.clone()));
                 let line_result =
-                    brent.line_search(&x, &direction.to_owned(), 1.0, line_tol, 1000)?;
+                    brent.line_search(&x, &direction.to_owned(), &1.0.into(), &line_tol, 1000)?;
 
                 if !line_result.converged {
                     return Err(MinimizerError::LinearSearchFailed);
@@ -144,7 +144,7 @@ impl Powell {
 
                 // Update position
                 for j in 0..n {
-                    x[j] += line_result.xmin * direction[j];
+                    x[j] += &line_result.xmin * &direction[j];
                 }
 
                 let f_new = self.f.call(&x);
@@ -153,39 +153,39 @@ impl Powell {
                 }
                 fn_evals += 1;
 
-                let delta_f = f_current - f_new;
+                let delta_f = &f_current - &f_new;
                 if delta_f > delta_f_max {
-                    delta_f_max = delta_f;
+                    delta_f_max = delta_f.clone();
                     max_decrease_index = i;
                 }
 
-                f_current = f_new;
+                f_current = f_new.clone();
             }
 
-            let improve = f_old - f_current;
-            improvement.push(improve);
-            history.push(f_current);
+            let improve = &f_old - &f_current;
+            improvement.push(improve.clone());
+            history.push(f_current.clone());
 
             // Check for convergence
-            let relative_improvement = improve / (f_old.abs() + 1e-14);
+            let relative_improvement = &improve / (f_old.abs() + 1e-14);
             if relative_improvement < tol {
                 self.xmin = x.clone();
-                self.fmin = f_current;
+                self.fmin = f_current.clone();
                 self.converged = true;
                 return Ok(PowellResult {
                     xmin: self.xmin.clone(),
-                    fmin: self.fmin,
+                    fmin: self.fmin.clone(),
                     iters: self.iters,
                     fn_evals,
                     converged: self.converged,
-                    final_directions: directions,
+                    final_directions: directions.clone(),
                     history: Array1::from_vec(history),
                     improvement: Array1::from_vec(improvement),
                 });
             }
 
             // Compute extrapolated point
-            let x_extrapolated = Array1::from_shape_fn(n, |i| 2.0 * x[i] - x_old[i]);
+            let x_extrapolated = Array1::from_shape_fn(n, |i| 2.0 * &x[i] - &x_old[i]);
             // let mut x_extrapolated = vec![0.0; n];
             // for i in 0..n {
             //     x_extrapolated[i] = 2.0 * x[i] - x_old[i];
@@ -199,35 +199,36 @@ impl Powell {
 
             // Test whether to keep new direction
             let condition1 = f_extrapolated < f_old;
-            let temp = 2.0 * (f_old - 2.0 * f_current + f_extrapolated);
-            let condition2 = temp * (f_old - f_current - delta_f_max).powi(2);
-            let condition3 = delta_f_max * (f_old - f_extrapolated).powi(2);
+            let temp = 2.0 * (&f_old - 2.0 * &f_current + &f_extrapolated);
+            let condition2 = &temp * (&f_old - &f_current - &delta_f_max).powi(2);
+            let condition3 = &delta_f_max * (&f_old - &f_extrapolated).powi(2);
 
             if condition1 && condition2 < condition3 {
                 // Move to extrapolated point and update direction set
-                let new_direction: Vec<f64> = x
+                let new_direction: Vec<MyFloat> = x
                     .iter()
                     .zip(x_old.iter())
-                    .map(|(&xi, &xi_old)| xi - xi_old)
+                    .map(|(xi, xi_old)| xi - xi_old)
                     .collect();
 
                 // Check if new direction is linearly independent
-                let direction_norm: f64 = new_direction.iter().map(|&d| d * d).sum::<f64>().sqrt();
+                let direction_norm: MyFloat =
+                    new_direction.iter().map(|d| d * d).sum::<MyFloat>().sqrt();
                 if direction_norm < 1e-12 {
                     continue; // Skip if direction is too small
                 }
 
                 // Normalize new direction
-                let new_direction: Vec<f64> =
-                    new_direction.iter().map(|&d| d / direction_norm).collect();
+                let new_direction: Vec<MyFloat> =
+                    new_direction.iter().map(|d| d / &direction_norm).collect();
 
                 // Perform line search along new direction
                 let mut brent = Brent::new(F1dim::new_boxed(self.f.clone()));
                 let line_result = brent.line_search(
                     &x,
                     &Array1::from_vec(new_direction.clone()),
-                    1.0,
-                    line_tol,
+                    &1.0.into(),
+                    &line_tol,
                     1000,
                 )?;
 
@@ -236,7 +237,7 @@ impl Powell {
 
                     // Update position
                     for j in 0..n {
-                        x[j] += line_result.xmin * new_direction[j];
+                        x[j] += &line_result.xmin * &new_direction[j];
                     }
 
                     f_current = self.f.call(&x);
@@ -246,8 +247,8 @@ impl Powell {
                     fn_evals += 1;
 
                     // Replace the direction that gave maximum decrease
-                    for (j, &dir) in new_direction.iter().enumerate() {
-                        directions[[max_decrease_index, j]] = dir;
+                    for (j, dir) in new_direction.iter().enumerate() {
+                        directions[[max_decrease_index, j]] = dir.clone();
                     }
                 }
             }
@@ -257,11 +258,11 @@ impl Powell {
         self.fmin = f_current;
         Ok(PowellResult {
             xmin: self.xmin.clone(),
-            fmin: self.fmin,
+            fmin: self.fmin.clone(),
             iters: self.iters,
             fn_evals,
             converged: self.converged,
-            final_directions: directions,
+            final_directions: directions.clone(),
             history: Array1::from_vec(history),
             improvement: Array1::from_vec(improvement),
         })
@@ -273,11 +274,11 @@ impl Powell {
     /// coordinate axes. Useful when you have knowledge about the problem structure.
     pub fn powell_method_with_directions(
         &mut self,
-        initial_point: Array1<f64>,
-        initial_directions: Array2<f64>,
-        tol: Option<f64>,
+        initial_point: &Array1<MyFloat>,
+        initial_directions: &Array2<MyFloat>,
+        tol: Option<MyFloat>,
         max_iters: Option<usize>,
-        line_search_tolerance: Option<f64>,
+        line_search_tolerance: Option<MyFloat>,
     ) -> Result<PowellResult, MinimizerError> {
         self.converged = false;
         let n = initial_point.len();
@@ -289,25 +290,25 @@ impl Powell {
             if direction.len() != n {
                 return Err(MinimizerError::InvalidDirectionSet);
             }
-            let norm: f64 = direction.iter().map(|&d| d * d).sum::<f64>().sqrt();
+            let norm: MyFloat = direction.iter().map(|d| d * d).sum::<MyFloat>().sqrt();
             if norm < 1e-12 {
                 return Err(MinimizerError::InvalidDirectionSet);
             }
         }
 
-        let tol = tol.unwrap_or(1e-8);
+        let tol = tol.unwrap_or(1e-8.into());
         let max_iter = max_iters.unwrap_or(200);
-        let line_tol = line_search_tolerance.unwrap_or(1e-12);
+        let line_tol = line_search_tolerance.unwrap_or(1e-12.into());
 
         if tol <= 0.0 {
             return Err(MinimizerError::InvalidTolerance);
         }
 
         // Normalize initial directions
-        // let mut directions: Vec<Vec<f64>> = initial_directions
+        // let mut directions: Vec<Vec<MyFloat>> = initial_directions
         //     .into_iter()
         //     .map(|dir| {
-        //         let norm: f64 = dir.iter().map(|&d| d * d).sum::<f64>().sqrt();
+        //         let norm: MyFloat = dir.iter().map(|&d| d * d).sum::<MyFloat>().sqrt();
         //         dir.into_iter().map(|d| d / norm).collect()
         //     })
         //     .collect();
@@ -315,13 +316,13 @@ impl Powell {
             let norm = initial_directions
                 .row(i)
                 .iter()
-                .map(|&d| d * d)
-                .sum::<f64>()
+                .map(|d| d * d)
+                .sum::<MyFloat>()
                 .sqrt();
-            initial_directions[[i, j]] / norm
+            &initial_directions[[i, j]] / &norm
         });
 
-        let mut x = initial_point;
+        let mut x = initial_point.clone();
         let mut f_current = self.f.call(&x);
         if !f_current.is_finite() {
             return Err(MinimizerError::FunctionEvaluationError);
@@ -329,22 +330,22 @@ impl Powell {
 
         let mut fn_evals = 1;
         self.iters = 0;
-        let mut history = vec![f_current];
+        let mut history = vec![f_current.clone()];
         let mut improvement = Vec::new();
 
         while self.iters < max_iter {
             self.iters += 1;
             let x_old = x.clone();
-            let f_old = f_current;
+            let f_old = f_current.clone();
 
-            let mut delta_f_max = 0.0;
+            let mut delta_f_max = MyFloat::new(0.0);
             let mut max_decrease_index = 0;
 
             // Line searches along each direction
             for (i, direction) in directions.outer_iter().enumerate() {
                 let mut brent = Brent::new(F1dim::new_boxed(self.f.clone()));
                 let line_result =
-                    brent.line_search(&x, &direction.to_owned(), 1.0, line_tol, 1000)?;
+                    brent.line_search(&x, &direction.to_owned(), &1.0.into(), &line_tol, 1000)?;
 
                 if !line_result.converged {
                     return Err(MinimizerError::LinearSearchFailed);
@@ -354,7 +355,7 @@ impl Powell {
 
                 // Update position
                 for j in 0..n {
-                    x[j] += line_result.xmin * direction[j];
+                    x[j] += &line_result.xmin * &direction[j];
                 }
 
                 let f_new = self.f.call(&x);
@@ -363,32 +364,32 @@ impl Powell {
                 }
                 fn_evals += 1;
 
-                let delta_f = f_current - f_new;
+                let delta_f = &f_current - &f_new;
                 if delta_f > delta_f_max {
-                    delta_f_max = delta_f;
+                    delta_f_max = delta_f.clone();
                     max_decrease_index = i;
                 }
 
-                f_current = f_new;
+                f_current = f_new.clone();
             }
 
-            let improve = f_old - f_current;
-            improvement.push(improve);
-            history.push(f_current);
+            let improve = &f_old - &f_current;
+            improvement.push(improve.clone());
+            history.push(f_current.clone());
 
             // Check for convergence
-            let relative_improvement = improve / (f_old.abs() + 1e-14);
+            let relative_improvement = &improve / (f_old.abs() + 1e-14);
             if relative_improvement < tol {
-                self.xmin = x;
-                self.fmin = f_current;
+                self.xmin = x.clone();
+                self.fmin = f_current.clone();
                 self.converged = true;
                 return Ok(PowellResult {
                     xmin: self.xmin.clone(),
-                    fmin: self.fmin,
+                    fmin: self.fmin.clone(),
                     iters: self.iters,
                     fn_evals,
                     converged: self.converged,
-                    final_directions: directions,
+                    final_directions: directions.clone(),
                     history: Array1::from_vec(history),
                     improvement: Array1::from_vec(improvement),
                 });
@@ -399,7 +400,7 @@ impl Powell {
             // for i in 0..n {
             //     x_extrapolated[i] = 2.0 * x[i] - x_old[i];
             // }
-            let x_extrapolated = Array1::from_shape_fn(n, |i| 2.0 * x[i] - x_old[i]);
+            let x_extrapolated = Array1::from_shape_fn(n, |i| 2.0 * &x[i] - &x_old[i]);
 
             let f_extrapolated = self.f.call(&x_extrapolated);
             if !f_extrapolated.is_finite() {
@@ -408,34 +409,40 @@ impl Powell {
             fn_evals += 1;
 
             let condition1 = f_extrapolated < f_old;
-            let temp = 2.0 * (f_old - 2.0 * f_current + f_extrapolated);
-            let condition2 = temp * (f_old - f_current - delta_f_max).powi(2);
-            let condition3 = delta_f_max * (f_old - f_extrapolated).powi(2);
+            let temp = 2.0 * (&f_old - 2.0 * &f_current + &f_extrapolated);
+            let condition2 = &temp * (&f_old - &f_current - &delta_f_max).powi(2);
+            let condition3 = &delta_f_max * (&f_old - &f_extrapolated).powi(2);
 
             if condition1 && condition2 < condition3 {
-                let new_direction: Vec<f64> = x
+                let new_direction: Vec<MyFloat> = x
                     .iter()
                     .zip(x_old.iter())
-                    .map(|(&xi, &xi_old)| xi - xi_old)
+                    .map(|(xi, xi_old)| xi - xi_old)
                     .collect();
 
-                let direction_norm: f64 = new_direction.iter().map(|&d| d * d).sum::<f64>().sqrt();
+                let direction_norm: MyFloat =
+                    new_direction.iter().map(|d| d * d).sum::<MyFloat>().sqrt();
                 if direction_norm > 1e-12 {
-                    // let normalized_direction: Vec<f64> =
+                    // let normalized_direction: Vec<MyFloat> =
                     //     new_direction.iter().map(|&d| d / direction_norm).collect();
                     let normalized_direction = Array1::from_shape_fn(new_direction.len(), |i| {
-                        new_direction[i] / direction_norm
+                        &new_direction[i] / &direction_norm
                     });
 
                     let mut brent = Brent::new(F1dim::new_boxed(self.f.clone()));
-                    let line_result =
-                        brent.line_search(&x, &normalized_direction, 1.0, line_tol, 1000)?;
+                    let line_result = brent.line_search(
+                        &x,
+                        &normalized_direction,
+                        &1.0.into(),
+                        &line_tol,
+                        1000,
+                    )?;
 
                     if line_result.converged {
                         fn_evals += line_result.fn_evals;
 
                         for j in 0..n {
-                            x[j] += line_result.xmin * normalized_direction[j];
+                            x[j] += &line_result.xmin * &normalized_direction[j];
                         }
 
                         f_current = self.f.call(&x);
@@ -444,8 +451,8 @@ impl Powell {
                         }
                         fn_evals += 1;
 
-                        for (j, &dir) in normalized_direction.iter().enumerate() {
-                            directions[[max_decrease_index, j]] = dir;
+                        for (j, dir) in normalized_direction.iter().enumerate() {
+                            directions[[max_decrease_index, j]] = dir.clone();
                         }
                     }
                 }
@@ -456,11 +463,11 @@ impl Powell {
         self.fmin = f_current;
         Ok(PowellResult {
             xmin: self.xmin.clone(),
-            fmin: self.fmin,
+            fmin: self.fmin.clone(),
             iters: self.iters,
             fn_evals,
             converged: self.converged,
-            final_directions: directions,
+            final_directions: directions.clone(),
             history: Array1::from_vec(history),
             improvement: Array1::from_vec(improvement),
         })
@@ -469,21 +476,25 @@ impl Powell {
     /// Convenience function with default parameters
     pub fn minimize(
         &mut self,
-        initial_point: Array1<f64>,
-        tol: Option<f64>,
+        initial_point: &Array1<MyFloat>,
+        tol: Option<MyFloat>,
         max_iters: Option<usize>,
-        line_search_tolerance: Option<f64>,
+        line_search_tolerance: Option<MyFloat>,
     ) -> Result<PowellResult, MinimizerError> {
         self.powell_method(initial_point, tol, max_iters, line_search_tolerance)
     }
 
     /// Create orthogonal initial directions for better performance
-    pub fn create_orthogonal_directions(&self, n: usize) -> Array2<f64> {
+    pub fn create_orthogonal_directions(&self, n: usize) -> Array2<MyFloat> {
         Array2::eye(n)
     }
 
     /// Create random orthogonal directions using Gram-Schmidt
-    pub fn create_random_orthogonal_directions(&self, n: usize, seed: Option<u64>) -> Array2<f64> {
+    pub fn create_random_orthogonal_directions(
+        &self,
+        n: usize,
+        seed: Option<u64>,
+    ) -> Array2<MyFloat> {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
 
@@ -494,46 +505,46 @@ impl Powell {
             hasher.finish()
         });
 
-        let mut random = || -> f64 {
+        let mut random = || -> MyFloat {
             rng_state = rng_state.wrapping_mul(1103515245).wrapping_add(12345);
-            ((rng_state / 65536) % 32768) as f64 / 32768.0 - 0.5
+            (((rng_state / 65536) % 32768) as f64 / 32768.0 - 0.5).into()
         };
 
-        // let mut directions: Array2<f64> = Vec::with_capacity(n);
-        let mut directions: Array2<f64> = Array2::zeros((n, n));
+        // let mut directions: Array2<MyFloat> = Vec::with_capacity(n);
+        let mut directions: Array2<MyFloat> = Array2::zeros((n, n));
 
         for i in 0..n {
             // Generate random vector
-            let mut new_dir = (0..n).map(|_| random()).collect::<Vec<f64>>();
+            let mut new_dir = (0..n).map(|_| random()).collect::<Vec<MyFloat>>();
 
             // Gram-Schmidt orthogonalization
             for j in 0..i {
-                let dot_product: f64 = new_dir
+                let dot_product: MyFloat = new_dir
                     .iter()
                     .zip(directions.row(j).iter())
-                    .map(|(&a, &b)| a * b)
+                    .map(|(a, b)| a * b)
                     .sum();
 
                 for k in 0..n {
-                    new_dir[k] -= dot_product * directions[[j, k]];
+                    new_dir[k] -= &dot_product * &directions[[j, k]];
                 }
             }
 
             // Normalize
-            let norm: f64 = new_dir.iter().map(|&d| d * d).sum::<f64>().sqrt();
+            let norm: MyFloat = new_dir.iter().map(|d| d * d).sum::<MyFloat>().sqrt();
             if norm > 1e-12 {
                 for d in &mut new_dir {
-                    *d /= norm;
+                    *d /= &norm;
                 }
             } else {
                 // Fallback to coordinate vector if normalization fails
-                new_dir = vec![0.0; n];
-                new_dir[i] = 1.0;
+                new_dir = vec![0.0.into(); n];
+                new_dir[i] = 1.0.into();
             }
 
             // directions.push(new_dir);
-            for (j, &dir) in new_dir.iter().enumerate() {
-                directions[[i, j]] = dir;
+            for (j, dir) in new_dir.iter().enumerate() {
+                directions[[i, j]] = dir.clone();
             }
         }
 
@@ -552,9 +563,9 @@ impl fmt::Debug for Powell {
 }
 
 #[cfg(test)]
-mod minimize_f64_powell_tests {
+mod minimize_myfloat_powell_tests {
     use super::*;
-    use crate::minimize::f64::{F1dim, MultiDimFn};
+    use crate::minimize::myfloat::{F1dim, MultiDimFn};
     use float_cmp::F64Margin;
     use std::f64::consts::{E, PI};
     use std::vec;
@@ -565,68 +576,70 @@ mod minimize_f64_powell_tests {
     };
 
     // Helper function to create Ackley
-    fn ackley(bias: f64) -> F1dim {
-        F1dim::new(MultiDimFn::new(move |x: &Array1<f64>| {
+    fn ackley(bias: MyFloat) -> F1dim {
+        F1dim::new(MultiDimFn::new(move |x: &Array1<MyFloat>| {
             let n = x.len() as f64;
-            let t1 = x.iter().map(|val| val.powi(2)).sum::<f64>();
-            let t2 = x.iter().map(|val| (2.0 * PI * val).cos()).sum::<f64>();
-            -20.0 * (-0.2 * (t1 / n).sqrt()).exp() - (t2 / n).exp() + 20.0 + E + bias
+            let t1 = x.iter().map(|val| val.powi(2)).sum::<MyFloat>();
+            let t2 = x.iter().map(|val| (2.0 * PI * val).cos()).sum::<MyFloat>();
+            -20.0 * (-0.2 * (&t1 / n).sqrt()).exp() - (&t2 / n).exp() + 20.0 + E + &bias
         }))
     }
 
     // Helper function to create Elliptic
-    fn elliptic(bias: f64) -> F1dim {
-        F1dim::new(MultiDimFn::new(move |x: &Array1<f64>| {
-            let sum: f64 = x
+    fn elliptic(bias: MyFloat) -> F1dim {
+        F1dim::new(MultiDimFn::new(move |x: &Array1<MyFloat>| {
+            let sum: MyFloat = x
                 .iter()
                 .enumerate()
                 .map(|(i, val)| 1e6_f64.powf((i / (x.len() - 1)) as f64) * val.powi(2))
                 .sum();
-            sum + bias
+            &sum + &bias
         }))
     }
 
     // Helper function to create Griewank
-    fn griewank(bias: f64) -> F1dim {
-        F1dim::new(MultiDimFn::new(move |x: &Array1<f64>| {
-            let t1 = x.iter().map(|val| val.powi(2)).sum::<f64>() / 4000.0;
+    fn griewank(bias: MyFloat) -> F1dim {
+        F1dim::new(MultiDimFn::new(move |x: &Array1<MyFloat>| {
+            let t1 = x.iter().map(|val| val.powi(2)).sum::<MyFloat>() / 4000.0;
             let t2 = x
                 .iter()
                 .enumerate()
                 .map(|(i, val)| (val / (i as f64 + 1.0).sqrt()).cos())
-                .product::<f64>();
-            t1 - t2 + 1.0 + bias
+                .product::<MyFloat>();
+            &t1 - &t2 + 1.0 + &bias
         }))
     }
 
     // Helper function to create Rosenbrock
-    fn rosenbrock(shift: Array1<f64>, bias: f64) -> F1dim {
-        F1dim::new(MultiDimFn::new(move |x: &Array1<f64>| {
+    fn rosenbrock(shift: Array1<MyFloat>, bias: MyFloat) -> F1dim {
+        F1dim::new(MultiDimFn::new(move |x: &Array1<MyFloat>| {
             let x_new = x - &shift + 1.0;
-            let sum: f64 = x_new
+            let sum: MyFloat = x_new
                 .windows(2)
                 .into_iter()
-                .map(|pair| 100.0 * (pair[0].powi(2) - pair[1]).powi(2) + (pair[0] - 1.0).powi(2))
+                .map(|pair| 100.0 * (pair[0].powi(2) - &pair[1]).powi(2) + (&pair[0] - 1.0).powi(2))
                 .sum();
-            sum + bias
+            &sum + &bias
         }))
     }
 
     #[test]
     fn test_2d_quadratic() {
         // f(x,y) = (x-2)² + (y+1)²
-        let func = |x: &Array1<f64>| (x[0] - 2.0).powi(2) + (x[1] + 1.0).powi(2);
+        let func = |x: &Array1<MyFloat>| (&x[0] - 2.0).powi(2) + (&x[1] + 1.0).powi(2);
         let objective = MultiDimFn::new(func);
         let mut powell = Powell::new(objective);
 
-        let result = powell.minimize(array![0.0, 0.0], None, None, None).unwrap();
+        let result = powell
+            .minimize(&array![0.0.into(), 0.0.into()], None, None, None)
+            .unwrap();
 
-        assert!((result.xmin[0] - 2.0).abs() < 1e-8);
-        assert!((result.xmin[1] + 1.0).abs() < 1e-8);
+        assert!((&result.xmin[0] - 2.0).abs() < 1e-8);
+        assert!((&result.xmin[1] + 1.0).abs() < 1e-8);
         assert!(result.fmin < 1e-14);
         assert!(result.converged);
-        assert!((powell.xmin[0] - 2.0).abs() < 1e-8);
-        assert!((powell.xmin[1] + 1.0).abs() < 1e-8);
+        assert!((&powell.xmin[0] - 2.0).abs() < 1e-8);
+        assert!((&powell.xmin[1] + 1.0).abs() < 1e-8);
         assert!(powell.fmin < 1e-14);
         assert!(powell.converged);
     }
@@ -634,39 +647,49 @@ mod minimize_f64_powell_tests {
     #[test]
     fn test_rosenbrock() {
         let rosenbrock =
-            |x: &Array1<f64>| (1.0 - x[0]).powi(2) + 100.0 * (x[1] - x[0].powi(2)).powi(2);
+            |x: &Array1<MyFloat>| (1.0 - &x[0]).powi(2) + 100.0 * (&x[1] - x[0].powi(2)).powi(2);
         let objective = MultiDimFn::new(rosenbrock);
         let mut powell = Powell::new(objective);
 
         let result = powell
-            .powell_method(array![-1.2, 1.0], Some(1e-6), Some(1000), None)
+            .powell_method(
+                &array![MyFloat::new(-1.2), 1.0.into()],
+                Some(1e-6.into()),
+                Some(1000),
+                None,
+            )
             .unwrap();
 
-        assert!((result.xmin[0] - 1.0).abs() < 1e-4);
-        assert!((result.xmin[1] - 1.0).abs() < 1e-4);
+        assert!((&result.xmin[0] - 1.0).abs() < 1e-4);
+        assert!((&result.xmin[1] - 1.0).abs() < 1e-4);
         assert!(result.fmin < 1e-8);
-        assert!((powell.xmin[0] - 1.0).abs() < 1e-4);
-        assert!((powell.xmin[1] - 1.0).abs() < 1e-4);
+        assert!((&powell.xmin[0] - 1.0).abs() < 1e-4);
+        assert!((&powell.xmin[1] - 1.0).abs() < 1e-4);
         assert!(powell.fmin < 1e-8);
     }
 
     #[test]
     fn test_3d_sphere() {
         // f(x,y,z) = x² + y² + z²
-        let sphere = |x: &Array1<f64>| x.iter().map(|&xi| xi * xi).sum();
+        let sphere = |x: &Array1<MyFloat>| x.iter().map(|xi| xi * xi).sum();
         let objective = MultiDimFn::new(sphere);
         let mut powell = Powell::new(objective);
 
         let result = powell
-            .minimize(array![1.0, 2.0, -1.0], None, None, None)
+            .minimize(
+                &array![1.0.into(), 2.0.into(), MyFloat::new(-1.0)],
+                None,
+                None,
+                None,
+            )
             .unwrap();
 
-        for &coord in &result.xmin {
+        for coord in result.xmin {
             assert!(coord.abs() < 1e-10);
         }
         assert!(result.fmin < 1e-18);
         assert!(result.converged);
-        for &coord in &powell.xmin {
+        for coord in powell.xmin {
             assert!(coord.abs() < 1e-10);
         }
         assert!(powell.fmin < 1e-18);
@@ -675,32 +698,44 @@ mod minimize_f64_powell_tests {
 
     #[test]
     fn test_custom_directions() {
-        let func = |x: &Array1<f64>| (x[0] - 1.0).powi(2) + (x[1] - 2.0).powi(2);
+        let func = |x: &Array1<MyFloat>| (&x[0] - 1.0).powi(2) + (&x[1] - 2.0).powi(2);
         let objective = MultiDimFn::new(func);
         let mut powell = Powell::new(objective);
 
         // Use diagonal directions instead of coordinate axes
         let directions = array![
-            [1.0 / 2.0_f64.sqrt(), 1.0 / 2.0_f64.sqrt()],
-            [1.0 / 2.0_f64.sqrt(), -1.0 / 2.0_f64.sqrt()],
+            [
+                MyFloat::new(1.0) / 2.0_f64.sqrt(),
+                MyFloat::new(1.0) / 2.0_f64.sqrt()
+            ],
+            [
+                MyFloat::new(1.0) / 2.0_f64.sqrt(),
+                MyFloat::new(-1.0) / 2.0_f64.sqrt()
+            ],
         ];
 
         let result = powell
-            .powell_method_with_directions(array![0.0, 0.0], directions, None, None, None)
+            .powell_method_with_directions(
+                &array![0.0.into(), 0.0.into()],
+                &directions,
+                None,
+                None,
+                None,
+            )
             .unwrap();
 
-        assert!((result.xmin[0] - 1.0).abs() < 1e-8);
-        assert!((result.xmin[1] - 2.0).abs() < 1e-8);
+        assert!((&result.xmin[0] - 1.0).abs() < 1e-8);
+        assert!((&result.xmin[1] - 2.0).abs() < 1e-8);
         assert!(result.converged);
-        assert!((powell.xmin[0] - 1.0).abs() < 1e-8);
-        assert!((powell.xmin[1] - 2.0).abs() < 1e-8);
+        assert!((&powell.xmin[0] - 1.0).abs() < 1e-8);
+        assert!((&powell.xmin[1] - 2.0).abs() < 1e-8);
         assert!(powell.converged);
     }
 
     #[test]
     fn test_direction_creation() {
         let n = 4;
-        let func = |_: &Array1<f64>| 0.0;
+        let func = |_: &Array1<MyFloat>| 0.0.into();
         let objective = MultiDimFn::new(func);
         let powell = Powell::new(objective);
         let ortho_dirs = powell.create_orthogonal_directions(n);
@@ -709,7 +744,7 @@ mod minimize_f64_powell_tests {
         for (i, dir) in ortho_dirs.outer_iter().enumerate() {
             assert_eq!(dir.len(), n);
             // Check that it's a unit coordinate vector
-            for (j, &val) in dir.iter().enumerate() {
+            for (j, val) in dir.iter().enumerate() {
                 if i == j {
                     assert!((val - 1.0).abs() < 1e-15);
                 } else {
@@ -722,7 +757,7 @@ mod minimize_f64_powell_tests {
     #[test]
     fn test_random_directions() {
         let n = 3;
-        let func = |_: &Array1<f64>| 0.0;
+        let func = |_: &Array1<MyFloat>| 0.0.into();
         let objective = MultiDimFn::new(func);
         let powell = Powell::new(objective);
         let random_dirs = powell.create_random_orthogonal_directions(n, Some(12345));
@@ -732,11 +767,11 @@ mod minimize_f64_powell_tests {
         // Check orthogonality
         for i in 0..n {
             for j in i + 1..n {
-                let dot_product: f64 = random_dirs
+                let dot_product: MyFloat = random_dirs
                     .row(i)
                     .iter()
                     .zip(random_dirs.row(j).iter())
-                    .map(|(&a, &b)| a * b)
+                    .map(|(a, b)| a * b)
                     .sum();
                 assert!(dot_product.abs() < 1e-12);
             }
@@ -744,7 +779,7 @@ mod minimize_f64_powell_tests {
 
         // Check normalization
         for dir in random_dirs.outer_iter() {
-            let norm: f64 = dir.iter().map(|&d| d * d).sum::<f64>().sqrt();
+            let norm: MyFloat = dir.iter().map(|d| d * d).sum::<MyFloat>().sqrt();
             assert!((norm - 1.0).abs() < 1e-12);
         }
     }
@@ -752,21 +787,26 @@ mod minimize_f64_powell_tests {
     #[test]
     fn test_powell_quadratic_exact_convergence() {
         // Test exact convergence on quadratic function
-        let quadratic_3d = |x: &Array1<f64>| {
-            x[0].powi(2) + 2.0 * x[1].powi(2) + 3.0 * x[2].powi(2) + x[0] * x[1] + x[1] * x[2]
+        let quadratic_3d = |x: &Array1<MyFloat>| {
+            x[0].powi(2) + 2.0 * x[1].powi(2) + 3.0 * x[2].powi(2) + &x[0] * &x[1] + &x[1] * &x[2]
         };
         let objective = MultiDimFn::new(quadratic_3d);
         let mut powell = Powell::new(objective);
 
         let result = powell
-            .minimize(array![1.0, 1.0, 1.0], None, None, None)
+            .minimize(
+                &array![1.0.into(), 1.0.into(), 1.0.into()],
+                None,
+                None,
+                None,
+            )
             .unwrap();
 
         // Should converge in <= 3 iterations for 3D quadratic
         assert!(result.iters <= 6); // Allow some margin
         assert!(result.converged);
 
-        for &coord in &result.xmin {
+        for coord in result.xmin {
             assert!(coord.abs() < 1e-6);
         }
     }
@@ -774,21 +814,29 @@ mod minimize_f64_powell_tests {
     #[test]
     fn test_powell_with_custom_directions() {
         // Test with problem-specific initial directions
-        let elliptic = |x: &Array1<f64>| 100.0 * x[0].powi(2) + x[1].powi(2);
+        let elliptic = |x: &Array1<MyFloat>| 100.0 * x[0].powi(2) + x[1].powi(2);
         let objective = MultiDimFn::new(elliptic);
         let mut powell = Powell::new(objective);
 
         // Standard coordinate directions
-        let std_result = powell.minimize(array![1.0, 1.0], None, None, None).unwrap();
+        let std_result = powell
+            .minimize(&array![1.0.into(), 1.0.into()], None, None, None)
+            .unwrap();
 
         // Custom directions aligned with ellipse
         let custom_dirs = array![
-            [0.1, 0.0], // Small step in x direction
-            [0.0, 1.0], // Normal step in y direction
+            [MyFloat::new(0.1), 0.0.into()], // Small step in x direction
+            [0.0.into(), 1.0.into()],        // Normal step in y direction
         ];
 
         let custom_result = powell
-            .powell_method_with_directions(array![1.0, 1.0], custom_dirs, None, None, None)
+            .powell_method_with_directions(
+                &array![1.0.into(), 1.0.into()],
+                &custom_dirs,
+                None,
+                None,
+                None,
+            )
             .unwrap();
 
         // Custom directions should perform better on ill-conditioned problem
@@ -800,14 +848,16 @@ mod minimize_f64_powell_tests {
     #[test]
     fn test_powell_direction_evolution() {
         // Test that directions evolve to become conjugate
-        let quadratic_matrix = |x: &Array1<f64>| {
+        let quadratic_matrix = |x: &Array1<MyFloat>| {
             // f(x) = x^T A x where A = [[4,1],[1,2]]
-            4.0 * x[0].powi(2) + 2.0 * x[1].powi(2) + 2.0 * x[0] * x[1]
+            4.0 * x[0].powi(2) + 2.0 * x[1].powi(2) + 2.0 * &x[0] * &x[1]
         };
         let objective = MultiDimFn::new(quadratic_matrix);
         let mut powell = Powell::new(objective);
 
-        let result = powell.minimize(array![1.0, 1.0], None, None, None).unwrap();
+        let result = powell
+            .minimize(&array![1.0.into(), 1.0.into()], None, None, None)
+            .unwrap();
 
         assert!(result.converged);
         assert!(result.xmin[0].abs() < 1e-6);
@@ -820,21 +870,21 @@ mod minimize_f64_powell_tests {
 
     // Helper function to create a simple quadratic function
     fn simple_quadratic() -> F1dim {
-        F1dim::new(MultiDimFn::new(|x: &Array1<f64>| {
-            (x[0] - 2.0).powi(2) + (x[1] + 1.0).powi(2)
+        F1dim::new(MultiDimFn::new(|x: &Array1<MyFloat>| {
+            (&x[0] - 2.0).powi(2) + (&x[1] + 1.0).powi(2)
         }))
     }
 
     // Helper function to create Rosenbrock function
     fn rosenbrock_2d() -> F1dim {
-        F1dim::new(MultiDimFn::new(|x: &Array1<f64>| {
-            (1.0 - x[0]).powi(2) + 100.0 * (x[1] - x[0].powi(2)).powi(2)
+        F1dim::new(MultiDimFn::new(|x: &Array1<MyFloat>| {
+            (1.0 - &x[0]).powi(2) + 100.0 * (&x[1] - x[0].powi(2)).powi(2)
         }))
     }
 
     // Helper function for ill-conditioned quadratic
     fn ill_conditioned_quadratic() -> F1dim {
-        F1dim::new(MultiDimFn::new(|x: &Array1<f64>| {
+        F1dim::new(MultiDimFn::new(|x: &Array1<MyFloat>| {
             1000.0 * x[0].powi(2) + x[1].powi(2)
         }))
     }
@@ -844,7 +894,7 @@ mod minimize_f64_powell_tests {
         let objective = simple_quadratic();
         let mut powell = Powell::new(objective);
 
-        let result = powell.minimize(array![], None, None, None);
+        let result = powell.minimize(&array![], None, None, None);
         assert!(matches!(result, Err(MinimizerError::InvalidDimension)));
     }
 
@@ -853,22 +903,34 @@ mod minimize_f64_powell_tests {
         let objective = simple_quadratic();
         let mut powell = Powell::new(objective);
 
-        let result = powell.powell_method(array![0.0, 0.0], Some(-1e-8), None, None);
+        let result = powell.powell_method(
+            &array![0.0.into(), 0.0.into()],
+            Some(MyFloat::new(-1e-8)),
+            None,
+            None,
+        );
         assert!(matches!(result, Err(MinimizerError::InvalidTolerance)));
 
-        let result = powell.powell_method(array![0.0, 0.0], Some(0.0), None, None);
+        let result = powell.powell_method(
+            &array![0.0.into(), 0.0.into()],
+            Some(0.0.into()),
+            None,
+            None,
+        );
         assert!(matches!(result, Err(MinimizerError::InvalidTolerance)));
     }
 
     #[test]
     fn test_single_dimension() {
-        let func = |x: &Array1<f64>| (x[0] - 3.0).powi(2);
+        let func = |x: &Array1<MyFloat>| (&x[0] - 3.0).powi(2);
         let objective = MultiDimFn::new(func);
         let mut powell = Powell::new(objective);
 
-        let result = powell.minimize(array![0.0], None, None, None).unwrap();
+        let result = powell
+            .minimize(&array![0.0.into()], None, None, None)
+            .unwrap();
 
-        assert!((result.xmin[0] - 3.0).abs() < 1e-8);
+        assert!((&result.xmin[0] - 3.0).abs() < 1e-8);
         assert!(result.fmin < 1e-14);
         assert!(result.converged);
         assert_eq!(result.final_directions.len(), 1);
@@ -881,12 +943,17 @@ mod minimize_f64_powell_tests {
         let mut powell = Powell::new(objective);
 
         let result = powell
-            .powell_method(array![0.0, 0.0], Some(1e-15), Some(1000), None)
+            .powell_method(
+                &array![0.0.into(), 0.0.into()],
+                Some(1e-15.into()),
+                Some(1000),
+                None,
+            )
             .unwrap();
 
         // With very tight tolerance, should still achieve good accuracy
-        assert!((result.xmin[0] - 2.0).abs() < 1e-6);
-        assert!((result.xmin[1] + 1.0).abs() < 1e-6);
+        assert!((&result.xmin[0] - 2.0).abs() < 1e-6);
+        assert!((&result.xmin[1] + 1.0).abs() < 1e-6);
         assert!(result.converged);
     }
 
@@ -896,11 +963,16 @@ mod minimize_f64_powell_tests {
         let mut powell = Powell::new(objective);
 
         let result = powell
-            .powell_method(array![0.0, 0.0], Some(1e-1), None, None)
+            .powell_method(
+                &array![0.0.into(), 0.0.into()],
+                Some(1e-1.into()),
+                None,
+                None,
+            )
             .unwrap();
 
-        assert!((result.xmin[0] - 2.0).abs() < 0.5);
-        assert!((result.xmin[1] + 1.0).abs() < 0.5);
+        assert!((&result.xmin[0] - 2.0).abs() < 0.5);
+        assert!((&result.xmin[1] + 1.0).abs() < 0.5);
         assert!(result.converged);
         assert!(result.iters <= 10); // Should converge quickly with loose tolerance
     }
@@ -911,7 +983,12 @@ mod minimize_f64_powell_tests {
         let mut powell = Powell::new(objective);
 
         let result = powell
-            .powell_method(array![-1.2, 1.0], Some(1e-12), Some(5), None)
+            .powell_method(
+                &array![MyFloat::new(-1.2), 1.0.into()],
+                Some(1e-12.into()),
+                Some(5),
+                None,
+            )
             .unwrap();
 
         assert!(!result.converged);
@@ -926,7 +1003,7 @@ mod minimize_f64_powell_tests {
         let mut powell = Powell::new(objective);
 
         let result = powell
-            .minimize(array![2.0, -1.0], None, None, None)
+            .minimize(&array![2.0.into(), MyFloat::new(-1.0)], None, None, None)
             .unwrap();
 
         assert!(result.converged);
@@ -938,15 +1015,15 @@ mod minimize_f64_powell_tests {
     #[test]
     fn test_high_dimensional_sphere() {
         let n = 10;
-        let sphere = |x: &Array1<f64>| x.iter().map(|&xi| xi * xi).sum();
+        let sphere = |x: &Array1<MyFloat>| x.iter().map(|xi| xi * xi).sum();
         let objective = MultiDimFn::new(sphere);
         let mut powell = Powell::new(objective);
 
-        let initial = Array1::from_shape_fn(n, |i| i as f64);
-        let result = powell.minimize(initial, None, None, None).unwrap();
+        let initial = Array1::from_shape_fn(n, |i| MyFloat::new(i as f64));
+        let result = powell.minimize(&initial, None, None, None).unwrap();
 
         assert!(result.converged);
-        for &coord in &result.xmin {
+        for coord in result.xmin {
             assert!(coord.abs() < 1e-6);
         }
         assert!(result.fmin < 1e-12);
@@ -960,26 +1037,36 @@ mod minimize_f64_powell_tests {
         let mut powell = Powell::new(objective);
 
         // Wrong number of directions
-        let directions = array![[1.0, 0.0]]; // Only 1 direction for 2D problem
-        let result =
-            powell.powell_method_with_directions(array![0.0, 0.0], directions, None, None, None);
+        let directions = array![[1.0.into(), 0.0.into()]]; // Only 1 direction for 2D problem
+        let result = powell.powell_method_with_directions(
+            &array![0.0.into(), 0.0.into()],
+            &directions,
+            None,
+            None,
+            None,
+        );
         assert!(matches!(result, Err(MinimizerError::InvalidDirectionSet)));
 
         // Zero-norm direction
         let directions = array![
-            [1.0, 0.0],
-            [0.0, 0.0], // Zero vector
+            [1.0.into(), 0.0.into()],
+            [0.0.into(), 0.0.into()], // Zero vector
         ];
-        let result =
-            powell.powell_method_with_directions(array![0.0, 0.0], directions, None, None, None);
+        let result = powell.powell_method_with_directions(
+            &array![0.0.into(), 0.0.into()],
+            &directions,
+            None,
+            None,
+            None,
+        );
         assert!(matches!(result, Err(MinimizerError::InvalidDirectionSet)));
     }
 
     #[test]
     fn test_function_returning_nan() {
-        let bad_func = |x: &Array1<f64>| {
+        let bad_func = |x: &Array1<MyFloat>| {
             if x[0] > 10.0 {
-                f64::NAN
+                f64::NAN.into()
             } else {
                 x[0].powi(2) + x[1].powi(2)
             }
@@ -987,7 +1074,7 @@ mod minimize_f64_powell_tests {
         let objective = MultiDimFn::new(bad_func);
         let mut powell = Powell::new(objective);
 
-        let result = powell.minimize(array![15.0, 0.0], None, None, None);
+        let result = powell.minimize(&array![15.0.into(), 0.0.into()], None, None, None);
         assert!(matches!(
             result,
             Err(MinimizerError::FunctionEvaluationError)
@@ -996,9 +1083,9 @@ mod minimize_f64_powell_tests {
 
     #[test]
     fn test_function_returning_infinity() {
-        let bad_func = |x: &Array1<f64>| {
+        let bad_func = |x: &Array1<MyFloat>| {
             if x[0] < -10.0 {
-                f64::INFINITY
+                f64::INFINITY.into()
             } else {
                 x[0].powi(2) + x[1].powi(2)
             }
@@ -1006,7 +1093,7 @@ mod minimize_f64_powell_tests {
         let objective = MultiDimFn::new(bad_func);
         let mut powell = Powell::new(objective);
 
-        let result = powell.minimize(array![-15.0, 0.0], None, None, None);
+        let result = powell.minimize(&array![MyFloat::new(-15.0), 0.0.into()], None, None, None);
         assert!(matches!(
             result,
             Err(MinimizerError::FunctionEvaluationError)
@@ -1016,11 +1103,16 @@ mod minimize_f64_powell_tests {
     #[test]
     fn test_linear_function() {
         // Linear function has no minimum, but should handle gracefully
-        let linear = |x: &Array1<f64>| x[0] + 2.0 * x[1];
+        let linear = |x: &Array1<MyFloat>| &x[0] + 2.0 * &x[1];
         let objective = MultiDimFn::new(linear);
         let mut powell = Powell::new(objective);
 
-        let result = powell.powell_method(array![0.0, 0.0], Some(1e-6), Some(20), None);
+        let result = powell.powell_method(
+            &array![0.0.into(), 0.0.into()],
+            Some(1e-6.into()),
+            Some(20),
+            None,
+        );
         // Depending on implementation, this might not converge or might find a direction
         // where the function decreases indefinitely
         match result {
@@ -1036,11 +1128,13 @@ mod minimize_f64_powell_tests {
 
     #[test]
     fn test_constant_function() {
-        let constant = |_x: &Array1<f64>| 42.0;
+        let constant = |_x: &Array1<MyFloat>| 42.0.into();
         let objective = MultiDimFn::new(constant);
         let mut powell = Powell::new(objective);
 
-        let result = powell.minimize(array![1.0, 2.0], None, None, None).unwrap();
+        let result = powell
+            .minimize(&array![1.0.into(), 2.0.into()], None, None, None)
+            .unwrap();
 
         assert!(result.converged);
         assert!((result.fmin - 42.0).abs() < 1e-12);
@@ -1050,16 +1144,21 @@ mod minimize_f64_powell_tests {
     #[test]
     fn test_steep_valley_function() {
         // Function with a steep valley (challenging for optimization)
-        let valley = |x: &Array1<f64>| {
-            let u = x[0] + x[1];
-            let v = x[0] - x[1];
+        let valley = |x: &Array1<MyFloat>| {
+            let u = &x[0] + &x[1];
+            let v = &x[0] - &x[1];
             u.powi(2) + 100.0 * v.powi(2)
         };
         let objective = MultiDimFn::new(valley);
         let mut powell = Powell::new(objective);
 
         let result = powell
-            .powell_method(array![1.0, 1.0], Some(1e-6), Some(100), None)
+            .powell_method(
+                &array![1.0.into(), 1.0.into()],
+                Some(1e-6.into()),
+                Some(100),
+                None,
+            )
             .unwrap();
 
         assert!(result.converged);
@@ -1071,7 +1170,7 @@ mod minimize_f64_powell_tests {
     #[test]
     fn test_discontinuous_function() {
         // Function with a discontinuity
-        let discontinuous = |x: &Array1<f64>| {
+        let discontinuous = |x: &Array1<MyFloat>| {
             if x[0] > 0.0 {
                 x[0].powi(2) + x[1].powi(2) + 1.0
             } else {
@@ -1082,7 +1181,7 @@ mod minimize_f64_powell_tests {
         let mut powell = Powell::new(objective);
 
         let result = powell
-            .minimize(array![-1.0, 1.0], None, None, None)
+            .minimize(&array![MyFloat::new(-1.0), 1.0.into()], None, None, None)
             .unwrap();
 
         // Should find minimum in the negative x region
@@ -1096,7 +1195,9 @@ mod minimize_f64_powell_tests {
         let objective = simple_quadratic();
         let mut powell = Powell::new(objective);
 
-        let result = powell.minimize(array![0.0, 0.0], None, None, None).unwrap();
+        let result = powell
+            .minimize(&array![0.0.into(), 0.0.into()], None, None, None)
+            .unwrap();
 
         // Check all fields are properly populated
         assert_eq!(result.xmin.len(), 2);
@@ -1122,7 +1223,9 @@ mod minimize_f64_powell_tests {
         assert_eq!(powell.fmin(), 0.0);
         assert_eq!(powell.iters(), 0);
 
-        let result = powell.minimize(array![0.0, 0.0], None, None, None).unwrap();
+        let result = powell
+            .minimize(&array![0.0.into(), 0.0.into()], None, None, None)
+            .unwrap();
 
         // State should be updated
         assert_eq!(powell.xmin(), &result.xmin);
@@ -1153,7 +1256,7 @@ mod minimize_f64_powell_tests {
                 direction.len()
             );
 
-            for (j, &val) in direction.iter().enumerate() {
+            for (j, val) in direction.iter().enumerate() {
                 if i == j {
                     assert!(
                         (val - 1.0).abs() < 1e-15,
@@ -1177,11 +1280,11 @@ mod minimize_f64_powell_tests {
         // Test orthogonality
         for i in 0..n {
             for j in i + 1..n {
-                let dot_product: f64 = directions
+                let dot_product: MyFloat = directions
                     .row(i)
                     .iter()
                     .zip(directions.row(j).iter())
-                    .map(|(&a, &b)| a * b)
+                    .map(|(a, b)| a * b)
                     .sum();
                 assert!(
                     dot_product.abs() < 1e-12,
@@ -1204,7 +1307,7 @@ mod minimize_f64_powell_tests {
 
         // Should be identical with same seed
         for (d1, d2) in dirs1.outer_iter().zip(dirs2.outer_iter()) {
-            for (&v1, &v2) in d1.iter().zip(d2.iter()) {
+            for (v1, v2) in d1.iter().zip(d2.iter()) {
                 assert!((v1 - v2).abs() < 1e-15);
             }
         }
@@ -1221,7 +1324,7 @@ mod minimize_f64_powell_tests {
         // Should be different with different seeds
         let mut different = false;
         for (d1, d2) in dirs1.outer_iter().zip(dirs2.outer_iter()) {
-            for (&v1, &v2) in d1.iter().zip(d2.iter()) {
+            for (v1, v2) in d1.iter().zip(d2.iter()) {
                 if (v1 - v2).abs() > 1e-10 {
                     different = true;
                     break;
@@ -1238,10 +1341,10 @@ mod minimize_f64_powell_tests {
     fn test_large_scale_problem() {
         let n = 50;
         // Sum of squares function
-        let sum_of_squares = |x: &Array1<f64>| {
+        let sum_of_squares = |x: &Array1<MyFloat>| {
             x.iter()
                 .enumerate()
-                .map(|(i, &xi)| (i as f64 + 1.0) * xi * xi)
+                .map(|(i, xi)| (i as f64 + 1.0) * xi * xi)
                 .sum()
         };
         let objective = MultiDimFn::new(sum_of_squares);
@@ -1249,11 +1352,11 @@ mod minimize_f64_powell_tests {
 
         let initial = Array1::ones(n);
         let result = powell
-            .powell_method(initial, Some(1e-4), Some(500), None)
+            .powell_method(&initial, Some(1e-4.into()), Some(500), None)
             .unwrap();
 
         assert!(result.converged || result.fmin < 1e-6);
-        for &coord in &result.xmin {
+        for coord in result.xmin {
             assert!(coord.abs() < 1e-2);
         }
     }
@@ -1263,7 +1366,9 @@ mod minimize_f64_powell_tests {
         let objective = ill_conditioned_quadratic();
         let mut powell = Powell::new(objective);
 
-        let result = powell.minimize(array![1.0, 1.0], None, None, None).unwrap();
+        let result = powell
+            .minimize(&array![1.0.into(), 1.0.into()], None, None, None)
+            .unwrap();
 
         assert!(result.converged);
         assert!(result.xmin[0].abs() < 1e-4);
@@ -1278,7 +1383,7 @@ mod minimize_f64_powell_tests {
         let mut powell = Powell::new(objective);
 
         let result = powell
-            .minimize(array![-1.2, 1.0], None, None, None)
+            .minimize(&array![MyFloat::new(-1.2), 1.0.into()], None, None, None)
             .unwrap();
 
         // History should show monotonic decrease (mostly)
@@ -1286,7 +1391,7 @@ mod minimize_f64_powell_tests {
         assert!(result.history[0] > *result.history.last().unwrap());
 
         // Improvement should be non-negative (allowing for numerical precision)
-        for &improvement in &result.improvement {
+        for improvement in result.improvement {
             assert!(improvement >= -1e-12); // Allow tiny negative due to numerical precision
         }
     }
@@ -1294,12 +1399,17 @@ mod minimize_f64_powell_tests {
     #[test]
     fn test_very_small_step_function() {
         // Function where optimal step sizes are very small
-        let small_step = |x: &Array1<f64>| 1e6 * x[0].powi(2) + x[1].powi(2);
+        let small_step = |x: &Array1<MyFloat>| 1e6 * x[0].powi(2) + x[1].powi(2);
         let objective = MultiDimFn::new(small_step);
         let mut powell = Powell::new(objective);
 
         let result = powell
-            .powell_method(array![1e-3, 1e-3], Some(1e-10), Some(100), Some(1e-15))
+            .powell_method(
+                &array![1e-3.into(), 1e-3.into()],
+                Some(1e-10.into()),
+                Some(100),
+                Some(1e-15.into()),
+            )
             .unwrap();
 
         assert!(result.converged);
@@ -1321,7 +1431,9 @@ mod minimize_f64_powell_tests {
         assert!(debug_str.contains("converged"));
 
         // Test after optimization
-        let _result = powell.minimize(array![0.0, 0.0], None, None, None).unwrap();
+        let _result = powell
+            .minimize(&array![0.0.into(), 0.0.into()], None, None, None)
+            .unwrap();
         let debug_str_after = format!("{:?}", powell);
         assert!(debug_str_after.contains("Powell"));
         assert!(debug_str_after.contains(&format!("{:?}", powell.xmin())));
@@ -1329,15 +1441,17 @@ mod minimize_f64_powell_tests {
 
     #[test]
     fn test_boxed_function() {
-        let func = |x: &Array1<f64>| (x[0] - 1.0).powi(2) + (x[1] - 2.0).powi(2);
-        let boxed_func: Box<dyn ObjFn<f64>> = Box::new(MultiDimFn::new(func));
+        let func = |x: &Array1<MyFloat>| (&x[0] - 1.0).powi(2) + (&x[1] - 2.0).powi(2);
+        let boxed_func: Box<dyn ObjFn<MyFloat>> = Box::new(MultiDimFn::new(func));
         let mut powell = Powell::new_boxed(boxed_func);
 
-        let result = powell.minimize(array![0.0, 0.0], None, None, None).unwrap();
+        let result = powell
+            .minimize(&array![0.0.into(), 0.0.into()], None, None, None)
+            .unwrap();
 
         assert!(result.converged);
-        assert!((result.xmin[0] - 1.0).abs() < 1e-8);
-        assert!((result.xmin[1] - 2.0).abs() < 1e-8);
+        assert!((&result.xmin[0] - 1.0).abs() < 1e-8);
+        assert!((&result.xmin[1] - 2.0).abs() < 1e-8);
     }
 
     #[test]
@@ -1348,20 +1462,18 @@ mod minimize_f64_powell_tests {
         let mut powell1 = Powell::new(objective1);
         let mut powell2 = Powell::new(objective2);
 
-        let start_point = array![10.0, 10.0];
+        let start_point = array![10.0.into(), 10.0.into()];
 
         // Standard coordinate directions
-        let result1 = powell1
-            .minimize(start_point.clone(), None, None, None)
-            .unwrap();
+        let result1 = powell1.minimize(&start_point, None, None, None).unwrap();
 
         // Custom directions better suited for the problem
         let custom_dirs = array![
-            [0.001, 0.0], // Small step for highly scaled dimension
-            [0.0, 1.0],   // Normal step for other dimension
+            [0.001.into(), 0.0.into()], // Small step for highly scaled dimension
+            [0.0.into(), 1.0.into()],   // Normal step for other dimension
         ];
         let result2 = powell2
-            .powell_method_with_directions(start_point, custom_dirs, None, None, None)
+            .powell_method_with_directions(&start_point, &custom_dirs, None, None, None)
             .unwrap();
 
         // Both should converge, custom might be more efficient
@@ -1491,9 +1603,9 @@ mod minimize_f64_powell_tests {
 
     //         // 10d
     //         let n = 10;
-    //         let x = Array1::from_shape_fn(n, |_| rng.random::<f64>() * 200.0 - 100.0);
+    //         let x = Array1::from_shape_fn(n, |_| rng.random::<MyFloat>() * 200.0 - 100.0);
     //         let shift_func = shift.clone();
-    //         let func = move |x: &Array1<f64>| {
+    //         let func = move |x: &Array1<MyFloat>| {
     //             x.iter()
     //                 .enumerate()
     //                 .map(|(i, val)| (val - shift_func[i]).powi(2) + bias)
@@ -1515,9 +1627,9 @@ mod minimize_f64_powell_tests {
     //         // 30d
     //         if TEST_30D {
     //             let n = 30;
-    //             let x = Array1::from_shape_fn(n, |_| rng.random::<f64>() * 200.0 - 100.0);
+    //             let x = Array1::from_shape_fn(n, |_| rng.random::<MyFloat>() * 200.0 - 100.0);
     //             let shift_func = shift.clone();
-    //             let func = move |x: &Array1<f64>| {
+    //             let func = move |x: &Array1<MyFloat>| {
     //                 x.iter()
     //                     .enumerate()
     //                     .map(|(i, val)| (val - shift_func[i]).powi(2) + bias)
@@ -1540,9 +1652,9 @@ mod minimize_f64_powell_tests {
     //         // 50d
     //         if TEST_50D {
     //             let n = 50;
-    //             let x = Array1::from_shape_fn(n, |_| rng.random::<f64>() * 200.0 - 100.0);
+    //             let x = Array1::from_shape_fn(n, |_| rng.random::<MyFloat>() * 200.0 - 100.0);
     //             let shift_func = shift.clone();
-    //             let func = move |x: &Array1<f64>| {
+    //             let func = move |x: &Array1<MyFloat>| {
     //                 x.iter()
     //                     .enumerate()
     //                     .map(|(i, val)| (val - shift_func[i]).powi(2) + bias)
@@ -1672,9 +1784,9 @@ mod minimize_f64_powell_tests {
 
     //         // 10d
     //         let n = 10;
-    //         let x = Array1::from_shape_fn(n, |_| rng.random::<f64>() * 200.0 - 100.0);
+    //         let x = Array1::from_shape_fn(n, |_| rng.random::<MyFloat>() * 200.0 - 100.0);
     //         let shift_func = shift.clone();
-    //         let func = move |x: &Array1<f64>| {
+    //         let func = move |x: &Array1<MyFloat>| {
     //             x.iter()
     //                 .enumerate()
     //                 .map(|(i, _)| {
@@ -1702,9 +1814,9 @@ mod minimize_f64_powell_tests {
     //         // 30d
     //         if TEST_30D {
     //             let n = 30;
-    //             let x = Array1::from_shape_fn(n, |_| rng.random::<f64>() * 200.0 - 100.0);
+    //             let x = Array1::from_shape_fn(n, |_| rng.random::<MyFloat>() * 200.0 - 100.0);
     //             let shift_func = shift.clone();
-    //             let func = move |x: &Array1<f64>| {
+    //             let func = move |x: &Array1<MyFloat>| {
     //                 x.iter()
     //                     .enumerate()
     //                     .map(|(i, _)| {
@@ -1733,9 +1845,9 @@ mod minimize_f64_powell_tests {
     //         // 50d
     //         if TEST_50D {
     //             let n = 50;
-    //             let x = Array1::from_shape_fn(n, |_| rng.random::<f64>() * 200.0 - 100.0);
+    //             let x = Array1::from_shape_fn(n, |_| rng.random::<MyFloat>() * 200.0 - 100.0);
     //             let shift_func = shift.clone();
-    //             let func = move |x: &Array1<f64>| {
+    //             let func = move |x: &Array1<MyFloat>| {
     //                 x.iter()
     //                     .enumerate()
     //                     .map(|(i, _)| {
@@ -1906,7 +2018,7 @@ mod minimize_f64_powell_tests {
     //             iter += 1;
     //             // 10d
     //             let n = 10;
-    //             let x = (&Array1::from_shape_fn(n, |_| rng.random::<f64>() * 200.0 - 100.0)
+    //             let x = (&Array1::from_shape_fn(n, |_| rng.random::<MyFloat>() * 200.0 - 100.0)
     //                 - &shift)
     //                 .dot(&m);
     //             let mut powell = Powell::new(elliptic(bias));
@@ -2039,10 +2151,10 @@ mod minimize_f64_powell_tests {
 
     //         // 10d
     //         let n = 10;
-    //         let x = Array1::from_shape_fn(n, |_| rng.random::<f64>() * 200.0 - 100.0);
+    //         let x = Array1::from_shape_fn(n, |_| rng.random::<MyFloat>() * 200.0 - 100.0);
     //         let shift_func = shift.clone();
-    //         let rand_val = rng.random::<f64>();
-    //         let func = move |x: &Array1<f64>| {
+    //         let rand_val = rng.random::<MyFloat>();
+    //         let func = move |x: &Array1<MyFloat>| {
     //             x.iter()
     //                 .enumerate()
     //                 .map(|(i, _)| {
@@ -2052,7 +2164,7 @@ mod minimize_f64_powell_tests {
     //                     }
     //                     new_val + bias
     //                 })
-    //                 .sum::<f64>()
+    //                 .sum::<MyFloat>()
     //                 * (1.0 + 0.4 * rand_val)
     //         };
     //         let objective = MultiDimFn::new(func);
@@ -2181,7 +2293,7 @@ mod minimize_f64_powell_tests {
     //             iter += 1;
     //             // 10d
     //             let n = 10;
-    //             let x = Array1::from_shape_fn(n, |_| rng.random::<f64>() * 200.0 - 100.0);
+    //             let x = Array1::from_shape_fn(n, |_| rng.random::<MyFloat>() * 200.0 - 100.0);
     //             let mut powell = Powell::new(rosenbrock(shift.slice(s![0..10]).to_owned(), bias));
     //             let result = powell
     //                 .minimize(x, Some(1e-10), Some(1e3 as usize * n.pow(2)), Some(1e-10))

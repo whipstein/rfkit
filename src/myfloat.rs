@@ -3,10 +3,48 @@ use num_traits::{Num, One, Zero};
 use rug::Float;
 use rug::ops::{Pow, PowAssign};
 use std::fmt;
-use std::iter::Sum;
+use std::iter::{Product, Sum};
 use std::ops::{
-    Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, RemAssign, Sub, SubAssign,
+    Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Not, Rem, RemAssign, Sub, SubAssign,
 };
+
+/// Defines a multiplicative identity element for `Self`.
+///
+/// # Laws
+///
+/// ```text
+/// a * -1 = -a       ∀ a ∈ Self
+/// -1 * a = -a       ∀ a ∈ Self
+/// ```
+pub trait NegOne: Sized + Mul<Self, Output = Self> {
+    /// Returns the multiplicative identity element of `Self`, `-1`.
+    ///
+    /// # Purity
+    ///
+    /// This function should return the same result at all times regardless of
+    /// external mutable state, for example values stored in TLS or in
+    /// `static mut`s.
+    // This cannot be an associated constant, because of bignums.
+    fn neg_one() -> Self;
+
+    /// Sets `self` to the multiplicative identity element of `Self`, `1`.
+    fn set_neg_one(&mut self) {
+        *self = NegOne::neg_one();
+    }
+
+    /// Returns `true` if `self` is equal to the multiplicative identity.
+    ///
+    /// For performance reasons, it's best to implement this manually.
+    /// After a semver bump, this method will be required, and the
+    /// `where Self: PartialEq` bound will be removed.
+    #[inline]
+    fn is_neg_one(&self) -> bool
+    where
+        Self: PartialEq,
+    {
+        *self == Self::neg_one()
+    }
+}
 
 /// A float wrapper with fixed precision of 53 bits
 pub struct MyFloat(rug::Float);
@@ -94,6 +132,12 @@ impl MyFloat {
         let mut temp = self.0.clone();
         temp.sqrt_mut();
         MyFloat(temp)
+    }
+
+    /// Get the square
+    pub fn square(&self) -> Self {
+        let temp = self * self;
+        MyFloat(temp.0)
     }
 
     /// Calculate the exponential function
@@ -950,6 +994,17 @@ impl One for MyFloat {
     }
 }
 
+// Implement NegOne trait
+impl NegOne for MyFloat {
+    fn neg_one() -> Self {
+        MyFloat::new(-1.0)
+    }
+
+    fn is_neg_one(&self) -> bool {
+        *self == Self::neg_one()
+    }
+}
+
 // Implement Num trait
 impl Num for MyFloat {
     type FromStrRadixErr = rug::float::ParseFloatError;
@@ -1022,6 +1077,12 @@ impl From<f64> for MyFloat {
     }
 }
 
+impl From<&f64> for MyFloat {
+    fn from(value: &f64) -> Self {
+        MyFloat::new(*value)
+    }
+}
+
 // Conversion from Float
 impl From<Float> for MyFloat {
     fn from(value: Float) -> Self {
@@ -1091,8 +1152,46 @@ impl<'a> Sum<&'a MyFloat> for MyFloat {
     }
 }
 
+// Implement Product trait for iterating and summing MyFloat values
+impl Product for MyFloat {
+    fn product<I: Iterator<Item = Self>>(iter: I) -> Self {
+        iter.fold(MyFloat::zero(), |acc, x| acc * x)
+    }
+}
+
+impl<'a> Product<&'a MyFloat> for MyFloat {
+    fn product<I: Iterator<Item = &'a Self>>(iter: I) -> Self {
+        iter.fold(MyFloat::zero(), |acc, x| acc * x)
+    }
+}
+
+// Implement Not trait (logical NOT: 0.0 -> 1.0, non-zero -> 0.0)
+impl Not for MyFloat {
+    type Output = Self;
+
+    fn not(self) -> Self::Output {
+        if self.0.is_zero() {
+            MyFloat::one()
+        } else {
+            MyFloat::zero()
+        }
+    }
+}
+
+impl Not for &MyFloat {
+    type Output = MyFloat;
+
+    fn not(self) -> Self::Output {
+        if self.0.is_zero() {
+            MyFloat::one()
+        } else {
+            MyFloat::zero()
+        }
+    }
+}
+
 #[cfg(test)]
-mod tests {
+mod myfloat_tests {
     use core::f64;
 
     use super::*;
@@ -1531,5 +1630,29 @@ mod tests {
 
         let acos_result = f.acos();
         assert!((acos_result.to_f64() - 0.5_f64.acos()).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_not_operator() {
+        let zero = MyFloat::zero();
+        let non_zero = MyFloat::new(5.0);
+        let one = MyFloat::one();
+
+        // !0.0 should be 1.0
+        let not_zero = !zero;
+        assert_eq!(not_zero.to_f64(), 1.0);
+
+        // !5.0 should be 0.0
+        let not_non_zero = !non_zero;
+        assert_eq!(not_non_zero.to_f64(), 0.0);
+
+        // !1.0 should be 0.0
+        let not_one = !one;
+        assert_eq!(not_one.to_f64(), 0.0);
+
+        // Test with reference
+        let borrowed = MyFloat::new(3.14);
+        let not_borrowed = !&borrowed;
+        assert_eq!(not_borrowed.to_f64(), 0.0);
     }
 }

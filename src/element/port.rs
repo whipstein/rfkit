@@ -1,4 +1,4 @@
-use crate::elements::{Elem, ElemType, Term};
+use crate::element::{Elem, ElemType, Term};
 use crate::frequency::Frequency;
 use crate::point;
 use crate::point::{Point, Pt};
@@ -11,7 +11,7 @@ pub struct Port {
     id: String,
     z: Complex64,
     node: [usize; 1],
-    c: Point,
+    c: Point<Complex64>,
 }
 
 impl Port {
@@ -20,7 +20,7 @@ impl Port {
             id,
             z,
             node,
-            c: point![[Complex64::ZERO]],
+            c: point![Complex64, [Complex64::ZERO]],
         }
     }
 
@@ -41,7 +41,7 @@ impl Default for Port {
 }
 
 impl Elem for Port {
-    fn c(&self, _freq: &Frequency) -> Point {
+    fn c(&self, _freq: &Frequency) -> Point<Complex64> {
         self.c.clone()
     }
 
@@ -61,7 +61,7 @@ impl Elem for Port {
         &self.id
     }
 
-    fn net(&self, freq: &Frequency) -> Points {
+    fn net(&self, freq: &Frequency) -> Points<Complex64> {
         Points::zeros((freq.npts(), 1, 1))
     }
 
@@ -142,7 +142,7 @@ impl Default for PortBuilder {
 }
 
 #[cfg(test)]
-mod test {
+mod element_port_tests {
     use super::*;
     use crate::scale::Scale;
     use crate::unit::UnitValBuilder;
@@ -158,7 +158,7 @@ mod test {
             id: "P1".to_string(),
             z: val,
             node: [1],
-            c: point![[Complex64::ZERO]],
+            c: point![Complex64, [Complex64::ZERO]],
         };
         let exemplar_z = val;
         let calc = PortBuilder::new().z(val).nodes([1]).id("P1").build();

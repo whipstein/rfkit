@@ -1,7 +1,8 @@
 #![allow(dead_code)]
 #![allow(unused_assignments)]
 use crate::error::MinimizerError;
-use crate::minimize::f64::ObjFn;
+use crate::minimize::myfloat::ObjFn;
+use crate::myfloat::MyFloat;
 use ndarray::prelude::*;
 use rand::prelude::*;
 use rand_distr::{Distribution, Normal};
@@ -10,21 +11,21 @@ use std::fmt;
 /// Result of CMA-ES optimization
 #[derive(Debug, Clone)]
 pub struct CmaEsResult {
-    pub xmin: Array1<f64>,
-    pub fmin: f64,
+    pub xmin: Array1<MyFloat>,
+    pub fmin: MyFloat,
     pub generations: usize,
     pub fn_evals: usize,
     pub converged: bool,
-    pub final_sigma: f64,
-    pub condition_number: f64,
-    pub history: Vec<f64>,
+    pub final_sigma: MyFloat,
+    pub condition_number: MyFloat,
+    pub history: Vec<MyFloat>,
 }
 
 #[derive(Clone)]
 pub struct CmaEs {
-    xmin: Array1<f64>,
-    fmin: f64,
-    f: Box<dyn ObjFn<f64>>,
+    xmin: Array1<MyFloat>,
+    fmin: MyFloat,
+    f: Box<dyn ObjFn<MyFloat>>,
     generations: usize,
     converged: bool,
     rng: StdRng,
@@ -33,11 +34,11 @@ pub struct CmaEs {
 impl CmaEs {
     pub fn new<F>(f: F) -> Self
     where
-        F: ObjFn<f64> + 'static,
+        F: ObjFn<MyFloat> + 'static,
     {
         CmaEs {
             xmin: array![],
-            fmin: f64::INFINITY,
+            fmin: f64::INFINITY.into(),
             f: Box::new(f),
             generations: 0,
             converged: false,
@@ -45,10 +46,10 @@ impl CmaEs {
         }
     }
 
-    pub fn new_boxed(f: Box<dyn ObjFn<f64>>) -> Self {
+    pub fn new_boxed(f: Box<dyn ObjFn<MyFloat>>) -> Self {
         CmaEs {
             xmin: array![],
-            fmin: f64::INFINITY,
+            fmin: f64::INFINITY.into(),
             f: f,
             generations: 0,
             converged: false,
@@ -58,11 +59,11 @@ impl CmaEs {
 
     pub fn with_seed<F>(f: F, seed: u64) -> Self
     where
-        F: ObjFn<f64> + 'static,
+        F: ObjFn<MyFloat> + 'static,
     {
         CmaEs {
             xmin: array![],
-            fmin: f64::INFINITY,
+            fmin: f64::INFINITY.into(),
             f: Box::new(f),
             generations: 0,
             converged: false,
@@ -71,17 +72,17 @@ impl CmaEs {
     }
 
     /// Compute eigendecomposition of a symmetric matrix using Jacobi method
-    fn eigen_decomposition(&self, matrix: &Array2<f64>) -> (Array1<f64>, Array2<f64>) {
+    fn eigen_decomposition(&self, matrix: &Array2<MyFloat>) -> (Array1<MyFloat>, Array2<MyFloat>) {
         let n = matrix.nrows();
         let mut a = matrix.clone();
-        let mut v = Array2::eye(n);
+        let mut v = Array2::<MyFloat>::eye(n);
 
         let max_iter = 50;
         let tolerance = 1e-12;
 
         for _ in 0..max_iter {
             // Find largest off-diagonal element
-            let mut max_val = 0.0;
+            let mut max_val = MyFloat::new(0.0);
             let (mut p, mut q) = (0, 1);
 
             for i in 0..n {
@@ -99,47 +100,48 @@ impl CmaEs {
             }
 
             // Compute rotation angle
-            let theta = if (a[[q, q]] - a[[p, p]]).abs() < 1e-10 {
-                std::f64::consts::PI / 4.0
+            let theta = if (&a[[q, q]] - &a[[p, p]]).abs() < 1e-10 {
+                MyFloat::new(std::f64::consts::PI / 4.0)
             } else {
-                0.5 * (2.0 * a[[p, q]] / (a[[q, q]] - a[[p, p]])).atan()
+                0.5 * (2.0 * &a[[p, q]] / (&a[[q, q]] - &a[[p, p]])).atan()
             };
 
             let cos_theta = theta.cos();
             let sin_theta = theta.sin();
 
             // Apply Jacobi rotation
-            let app = a[[p, p]];
-            let aqq = a[[q, q]];
-            let apq = a[[p, q]];
+            let app = a[[p, p]].clone();
+            let aqq = a[[q, q]].clone();
+            let apq = a[[p, q]].clone();
 
-            a[[p, p]] = cos_theta * cos_theta * app + sin_theta * sin_theta * aqq
-                - 2.0 * cos_theta * sin_theta * apq;
-            a[[q, q]] = sin_theta * sin_theta * app
-                + cos_theta * cos_theta * aqq
-                + 2.0 * cos_theta * sin_theta * apq;
-            a[[p, q]] = 0.0;
-            a[[q, p]] = 0.0;
+            a[[p, p]] = &cos_theta * &cos_theta * &app + &sin_theta * &sin_theta * &aqq
+                - 2.0 * &cos_theta * &sin_theta * &apq;
+            a[[q, q]] = &sin_theta * &sin_theta * &app
+                + &cos_theta * &cos_theta * &aqq
+                + 2.0 * &cos_theta * &sin_theta * &apq;
+            a[[p, q]] = 0.0.into();
+            a[[q, p]] = 0.0.into();
 
             for i in 0..n {
                 if i != p && i != q {
-                    let aip = a[[i, p]];
-                    let aiq = a[[i, q]];
-                    a[[i, p]] = cos_theta * aip - sin_theta * aiq;
-                    a[[p, i]] = a[[i, p]];
-                    a[[i, q]] = sin_theta * aip + cos_theta * aiq;
-                    a[[q, i]] = a[[i, q]];
+                    let aip = a[[i, p]].clone();
+                    let aiq = a[[i, q]].clone();
+                    a[[i, p]] = &cos_theta * &aip - &sin_theta * &aiq;
+                    a[[p, i]] = a[[i, p]].clone();
+                    a[[i, q]] = &sin_theta * &aip + &cos_theta * &aiq;
+                    a[[q, i]] = a[[i, q]].clone();
                 }
 
-                let vip = v[[i, p]];
-                let viq = v[[i, q]];
-                v[[i, p]] = cos_theta * vip - sin_theta * viq;
-                v[[i, q]] = sin_theta * vip + cos_theta * viq;
+                let vip = v[[i, p]].clone();
+                let viq = v[[i, q]].clone();
+                v[[i, p]] = &cos_theta * &vip - &sin_theta * &viq;
+                v[[i, q]] = &sin_theta * &vip + &cos_theta * &viq;
             }
         }
 
         // Extract eigenvalues and sort
-        let eigenvalues: Array1<f64> = Array1::from_vec((0..n).map(|i| a[[i, i]]).collect());
+        let eigenvalues: Array1<MyFloat> =
+            Array1::from_vec((0..n).map(|i| a[[i, i]].clone()).collect());
         let mut indices: Vec<usize> = (0..n).collect();
 
         // Sort by eigenvalue magnitude (descending)
@@ -150,35 +152,38 @@ impl CmaEs {
                 .unwrap()
         });
 
-        let sorted_eigenvalues: Array1<f64> = indices.iter().map(|&i| eigenvalues[i]).collect();
+        let sorted_eigenvalues: Array1<MyFloat> =
+            indices.iter().map(|&i| eigenvalues[i].clone()).collect();
         let sorted_eigenvectors =
-            Array2::from_shape_fn((indices.len(), n), |(i, j)| v[[j, indices[i]]]);
+            Array2::from_shape_fn((indices.len(), n), |(i, j)| v[[j, indices[i]]].clone());
 
         (sorted_eigenvalues, sorted_eigenvectors)
     }
 
     /// Compute condition number of covariance matrix
-    fn condition_number(&self, eigenvalues: &Array1<f64>) -> f64 {
-        let max_eig = eigenvalues
+    fn condition_number(&self, eigenvalues: &Array1<MyFloat>) -> MyFloat {
+        let max_eig: MyFloat = eigenvalues
             .iter()
-            .fold(0.0, |acc: f64, &x| acc.max(x.abs()));
-        let min_eig = eigenvalues
+            .fold(0.0, |acc: f64, x: &MyFloat| acc.max(x.abs().to_f64()))
+            .into();
+        let min_eig: MyFloat = eigenvalues
             .iter()
-            .fold(f64::INFINITY, |acc, &x| acc.min(x.abs()));
+            .fold(f64::INFINITY, |acc: f64, x| acc.min(x.abs().to_f64()))
+            .into();
         if min_eig > 1e-14 {
-            max_eig / min_eig
+            &max_eig / &min_eig
         } else {
-            f64::INFINITY
+            f64::INFINITY.into()
         }
     }
 
     /// Standard CMA-ES algorithm
     pub fn cma_es(
         &mut self,
-        initial_point: Array1<f64>,
-        initial_sigma: Option<f64>,
+        initial_point: &Array1<MyFloat>,
+        initial_sigma: Option<MyFloat>,
         population_size: Option<usize>,
-        tol: Option<f64>,
+        tol: Option<MyFloat>,
         max_generations: Option<usize>,
     ) -> Result<CmaEsResult, MinimizerError> {
         self.converged = false;
@@ -187,10 +192,10 @@ impl CmaEs {
             return Err(MinimizerError::InvalidDimension);
         }
 
-        let sigma = initial_sigma.unwrap_or(0.3);
+        let sigma = initial_sigma.unwrap_or(0.3.into());
         let lambda = population_size.unwrap_or(4 + (3.0 * (n as f64).ln()) as usize);
         let mu = lambda / 2;
-        let tol = tol.unwrap_or(1e-11);
+        let tol = tol.unwrap_or(1e-11.into());
         let max_gen = max_generations.unwrap_or(1000);
 
         if sigma <= 0.0 {
@@ -210,21 +215,22 @@ impl CmaEs {
             (n as f64).sqrt() * (1.0 - 1.0 / (4.0 * n as f64) + 1.0 / (21.0 * (n as f64).powi(2)));
 
         // Weights for recombination
-        let mut weights = Array1::zeros(mu);
+        let mut weights = Array1::<MyFloat>::zeros(mu);
         for i in 0..mu {
-            weights[i] = ((mu as f64 + 1.0) / 2.0).ln() - ((i + 1) as f64).ln();
+            weights[i] =
+                MyFloat::new((mu as f64 + 1.0) / 2.0).ln() - MyFloat::new((i + 1) as f64).ln();
         }
-        let sum_weights: f64 = weights.iter().sum();
+        let sum_weights: MyFloat = weights.iter().sum();
         for w in &mut weights {
-            *w /= sum_weights;
+            *w /= &sum_weights;
         }
-        let mueff = 1.0 / weights.iter().map(|w| w.powi(2)).sum::<f64>();
+        let mueff = 1.0 / weights.iter().map(|w| w.powi(2)).sum::<MyFloat>();
 
         // Initialize evolution paths and covariance matrix
         let mut xmean = initial_point.clone();
         let mut sigma = sigma;
-        let mut pc = Array1::<f64>::zeros(n);
-        let mut ps = Array1::<f64>::zeros(n);
+        let mut pc = Array1::<MyFloat>::zeros(n);
+        let mut ps = Array1::<MyFloat>::zeros(n);
         let mut c = Array2::eye(n);
 
         let mut fn_evals = 0;
@@ -236,30 +242,31 @@ impl CmaEs {
 
             // Generate and evaluate population
             let (eigenvalues, eigenvectors) = self.eigen_decomposition(&c);
-            let sqrt_eigenvalues: Array1<f64> =
-                Array1::from_shape_fn(eigenvalues.len(), |i| eigenvalues[i].max(0.0).sqrt());
+            let sqrt_eigenvalues: Array1<MyFloat> = Array1::from_shape_fn(eigenvalues.len(), |i| {
+                eigenvalues[i].max(&0.0.into()).sqrt()
+            });
 
             let mut population = Vec::with_capacity(lambda);
             let mut fitness = Vec::with_capacity(lambda);
 
             for _ in 0..lambda {
                 // Sample from N(0,I)
-                let mut z = Array1::zeros(n);
+                let mut z = Array1::<MyFloat>::zeros(n);
                 for i in 0..n {
                     let normal = Normal::new(0.0, 1.0).unwrap();
-                    z[i] = normal.sample(&mut self.rng);
+                    z[i] = normal.sample(&mut self.rng).into();
                 }
 
                 // Transform: y = B * D * z (where B=eigenvectors, D=sqrt(eigenvalues))
-                let mut y = Array1::<f64>::zeros(n);
+                let mut y = Array1::<MyFloat>::zeros(n);
                 for i in 0..n {
                     for j in 0..n {
-                        y[i] += eigenvectors[[j, i]] * sqrt_eigenvalues[j] * z[j];
+                        y[i] += &eigenvectors[[j, i]] * &sqrt_eigenvalues[j] * &z[j];
                     }
                 }
 
                 // x = xmean + sigma * y
-                let x = Array1::from_shape_fn(xmean.len(), |i| xmean[i] + sigma * y[i]);
+                let x = Array1::from_shape_fn(xmean.len(), |i| &xmean[i] + &sigma * &y[i]);
 
                 let f_val = self.f.call(&x);
                 fn_evals += 1;
@@ -276,8 +283,8 @@ impl CmaEs {
             let mut indices: Vec<usize> = (0..lambda).collect();
             indices.sort_by(|&i, &j| fitness[i].partial_cmp(&fitness[j]).unwrap());
 
-            let best_fitness = fitness[indices[0]];
-            history.push(best_fitness);
+            let best_fitness = fitness[indices[0]].clone();
+            history.push(best_fitness.clone());
 
             // Check for convergence
             if sigma < tol {
@@ -286,7 +293,7 @@ impl CmaEs {
                 self.converged = true;
                 return Ok(CmaEsResult {
                     xmin: self.xmin.clone(),
-                    fmin: self.fmin,
+                    fmin: self.fmin.clone(),
                     generations: self.generations,
                     fn_evals,
                     converged: self.converged,
@@ -301,38 +308,38 @@ impl CmaEs {
             for i in 0..mu {
                 let idx = indices[i];
                 for j in 0..n {
-                    xmean[j] += weights[i] * population[idx].0[j];
+                    xmean[j] += &weights[i] * &population[idx].0[j];
                 }
             }
 
             // Update evolution paths
-            let mut ymean = Array1::<f64>::zeros(n);
-            let mut zmean = Array1::<f64>::zeros(n);
+            let mut ymean = Array1::<MyFloat>::zeros(n);
+            let mut zmean = Array1::<MyFloat>::zeros(n);
             for i in 0..mu {
                 let idx = indices[i];
                 for j in 0..n {
-                    ymean[j] += weights[i] * population[idx].1[j];
-                    zmean[j] += weights[i] * population[idx].2[j];
+                    ymean[j] += &weights[i] * &population[idx].1[j];
+                    zmean[j] += &weights[i] * &population[idx].2[j];
                 }
             }
 
             // Update ps (evolution path for sigma)
             for i in 0..n {
-                ps[i] = (1.0 - cs) * ps[i] + (cs * (2.0 - cs) * mueff).sqrt() * zmean[i];
+                ps[i] = (1.0 - cs) * &ps[i] + (cs * (2.0 - cs) * &mueff).sqrt() * &zmean[i];
             }
 
-            let ps_norm = ps.iter().map(|x| x.powi(2)).sum::<f64>().sqrt();
-            let hsig = if ps_norm / (1.0 - (1.0 - cs).powi(2 * self.generations as i32)).sqrt()
+            let ps_norm = ps.iter().map(|x| x.powi(2)).sum::<MyFloat>().sqrt();
+            let hsig = if &ps_norm / (1.0 - (1.0 - cs).powi(2 * self.generations as i32)).sqrt()
                 < (1.4 + 2.0 / (n as f64 + 1.0)) * chi_n
             {
-                1.0
+                MyFloat::new(1.0)
             } else {
-                0.0
+                0.0.into()
             };
 
             // Update pc (evolution path for covariance)
             for i in 0..n {
-                pc[i] = (1.0 - cc) * pc[i] + hsig * (cc * (2.0 - cc) * mueff).sqrt() * ymean[i];
+                pc[i] = (1.0 - cc) * &pc[i] + &hsig * (cc * (2.0 - cc) * &mueff).sqrt() * &ymean[i];
             }
 
             // Update covariance matrix c
@@ -340,12 +347,13 @@ impl CmaEs {
 
             for i in 0..n {
                 for j in 0..n {
-                    c[[i, j]] = (1.0 - c1a - cmu) * c[[i, j]] + c1 * pc[i] * pc[j];
+                    c[[i, j]] = (1.0 - &c1a - cmu) * &c[[i, j]] + c1 * &pc[i] * &pc[j];
 
                     // Add rank-mu update
                     for k in 0..mu {
                         let idx = indices[k];
-                        c[[i, j]] += cmu * weights[k] * population[idx].1[i] * population[idx].1[j];
+                        c[[i, j]] +=
+                            cmu * &weights[k] * &population[idx].1[i] * &population[idx].1[j];
                     }
                 }
             }
@@ -354,7 +362,7 @@ impl CmaEs {
             sigma *= (cs / damps * (ps_norm / chi_n - 1.0)).exp();
 
             // Limit sigma
-            sigma = sigma.min(1e10).max(1e-10);
+            sigma = sigma.min(&1e10.into()).max(&1e-10.into());
         }
 
         // Final result
@@ -365,26 +373,26 @@ impl CmaEs {
         let mut fitness = Vec::with_capacity(lambda);
 
         let (eigenvalues_final, eigenvectors_final) = self.eigen_decomposition(&c);
-        let sqrt_eigenvalues_final: Array1<f64> = eigenvalues_final
+        let sqrt_eigenvalues_final: Array1<MyFloat> = eigenvalues_final
             .iter()
-            .map(|&x| x.max(0.0).sqrt())
+            .map(|x| x.max(&0.0.into()).sqrt())
             .collect();
 
         for _ in 0..lambda {
-            let mut z = Array1::zeros(n);
+            let mut z = Array1::<MyFloat>::zeros(n);
             for i in 0..n {
                 let normal = Normal::new(0.0, 1.0).unwrap();
-                z[i] = normal.sample(&mut self.rng);
+                z[i] = normal.sample(&mut self.rng).into();
             }
 
-            let mut y = Array1::<f64>::zeros(n);
+            let mut y = Array1::<MyFloat>::zeros(n);
             for i in 0..n {
                 for j in 0..n {
-                    y[i] += eigenvectors_final[[j, i]] * sqrt_eigenvalues_final[j] * z[j];
+                    y[i] += &eigenvectors_final[[j, i]] * &sqrt_eigenvalues_final[j] * &z[j];
                 }
             }
 
-            let x = Array1::from_shape_fn(xmean.len(), |i| xmean[i] + sigma * y[i]);
+            let x = Array1::from_shape_fn(xmean.len(), |i| &xmean[i] + &sigma * &y[i]);
             let f_val = self.f.call(&x);
             fn_evals += 1;
 
@@ -396,12 +404,12 @@ impl CmaEs {
         indices.sort_by(|&i, &j| fitness[i].partial_cmp(&fitness[j]).unwrap());
 
         self.xmin = population[indices[0]].clone();
-        self.fmin = fitness[indices[0]];
+        self.fmin = fitness[indices[0]].clone();
         self.converged = false;
 
         Ok(CmaEsResult {
             xmin: self.xmin.clone(),
-            fmin: self.fmin,
+            fmin: self.fmin.clone(),
             generations: self.generations,
             fn_evals,
             converged: self.converged,
@@ -412,22 +420,26 @@ impl CmaEs {
     }
 
     /// Simplified CMA-ES with default parameters
-    pub fn minimize(&mut self, initial_point: Array1<f64>) -> Result<CmaEsResult, MinimizerError> {
+    pub fn minimize(
+        &mut self,
+        initial_point: &Array1<MyFloat>,
+    ) -> Result<CmaEsResult, MinimizerError> {
         self.cma_es(initial_point, None, None, None, None)
     }
 
     /// CMA-ES with restart strategy for better global optimization
     pub fn cma_es_with_restart(
         &mut self,
-        initial_point: Array1<f64>,
-        initial_sigma: Option<f64>,
+        initial_point: &Array1<MyFloat>,
+        initial_sigma: Option<MyFloat>,
         max_restarts: Option<usize>,
-        tol: Option<f64>,
+        tol: Option<MyFloat>,
         max_generations_per_run: Option<usize>,
     ) -> Result<CmaEsResult, MinimizerError> {
         let max_restarts = max_restarts.unwrap_or(3);
         let max_gen_per_run = max_generations_per_run.unwrap_or(1000);
-        let tol = tol.unwrap_or(1e-11);
+        let tol = tol.unwrap_or(1e-11.into());
+        let initial_sigma = initial_sigma.clone().unwrap_or(0.3.into());
 
         let mut best_result: Option<CmaEsResult> = None;
         let mut total_fn_evals = 0;
@@ -438,19 +450,18 @@ impl CmaEs {
             // Perturb initial point for restarts
             let mut start_point = initial_point.clone();
             if restart > 0 {
-                let sigma_perturbation =
-                    initial_sigma.unwrap_or(0.3) * (1.0 + restart as f64 * 0.5);
+                let sigma_perturbation = &initial_sigma * (1.0 + restart as f64 * 0.5);
                 for x in &mut start_point {
-                    let normal = Normal::new(0.0, sigma_perturbation).unwrap();
+                    let normal = Normal::new(0.0, sigma_perturbation.to_f64()).unwrap();
                     *x += normal.sample(&mut self.rng);
                 }
             }
 
             let result = self.cma_es(
-                start_point,
-                initial_sigma,
+                &start_point,
+                Some(initial_sigma.clone()),
                 None,
-                Some(tol),
+                Some(tol.clone()),
                 Some(max_gen_per_run),
             )?;
 
@@ -485,7 +496,7 @@ impl CmaEs {
 
         let final_result = best_result.unwrap();
         self.xmin = final_result.xmin.clone();
-        self.fmin = final_result.fmin;
+        self.fmin = final_result.fmin.clone();
         self.converged = final_result.converged;
         self.generations = total_generations;
 
@@ -493,8 +504,8 @@ impl CmaEs {
     }
 
     /// Get current best point
-    pub fn get_best(&self) -> (Array1<f64>, f64) {
-        (self.xmin.clone(), self.fmin)
+    pub fn get_best(&self) -> (Array1<MyFloat>, MyFloat) {
+        (self.xmin.clone(), self.fmin.clone())
     }
 }
 
@@ -509,56 +520,61 @@ impl fmt::Debug for CmaEs {
 }
 
 #[cfg(test)]
-mod minimize_f64_cmaes_tests {
+mod minimize_myfloat_cmaes_tests {
     use super::*;
-    use crate::minimize::f64::{F1dim, MultiDimFn};
+    use crate::minimize::myfloat::{F1dim, MultiDimFn};
     use std::f64::consts::{E, PI};
 
     // Helper function to create Ackley
-    fn ackley(bias: f64) -> F1dim {
-        F1dim::new(MultiDimFn::new(move |x: &Array1<f64>| {
+    fn ackley(bias: &MyFloat) -> F1dim {
+        let b = bias.clone();
+        F1dim::new(MultiDimFn::new(move |x: &Array1<MyFloat>| {
             let n = x.len() as f64;
-            let t1 = x.iter().map(|val| val.powi(2)).sum::<f64>();
-            let t2 = x.iter().map(|val| (2.0 * PI * val).cos()).sum::<f64>();
-            -20.0 * (-0.2 * (t1 / n).sqrt()).exp() - (t2 / n).exp() + 20.0 + E + bias
+            let t1 = x.iter().map(|val| val.powi(2)).sum::<MyFloat>();
+            let t2 = x.iter().map(|val| (2.0 * PI * val).cos()).sum::<MyFloat>();
+            -20.0 * (-0.2 * (t1 / n).sqrt()).exp() - (t2 / n).exp() + 20.0 + E + &b
         }))
     }
 
     // Helper function to create Elliptic
-    fn elliptic(bias: f64) -> F1dim {
-        F1dim::new(MultiDimFn::new(move |x: &Array1<f64>| {
-            let sum: f64 = x
+    fn elliptic(bias: &MyFloat) -> F1dim {
+        let b = bias.clone();
+        F1dim::new(MultiDimFn::new(move |x: &Array1<MyFloat>| {
+            let sum: MyFloat = x
                 .iter()
                 .enumerate()
                 .map(|(i, val)| 1e6_f64.powf((i / (x.len() - 1)) as f64) * val.powi(2))
                 .sum();
-            sum + bias
+            sum + &b
         }))
     }
 
     // Helper function to create Griewank
-    fn griewank(bias: f64) -> F1dim {
-        F1dim::new(MultiDimFn::new(move |x: &Array1<f64>| {
-            let t1 = x.iter().map(|val| val.powi(2)).sum::<f64>() / 4000.0;
+    fn griewank(bias: &MyFloat) -> F1dim {
+        let b = bias.clone();
+        F1dim::new(MultiDimFn::new(move |x: &Array1<MyFloat>| {
+            let t1 = x.iter().map(|val| val.powi(2)).sum::<MyFloat>() / 4000.0;
             let t2 = x
                 .iter()
                 .enumerate()
                 .map(|(i, val)| (val / (i as f64 + 1.0).sqrt()).cos())
-                .product::<f64>();
-            t1 - t2 + 1.0 + bias
+                .product::<MyFloat>();
+            t1 - t2 + 1.0 + &b
         }))
     }
 
     // Helper function to create Rosenbrock
-    fn rosenbrock(shift: Array1<f64>, bias: f64) -> F1dim {
-        F1dim::new(MultiDimFn::new(move |x: &Array1<f64>| {
-            let x_new = x - &shift + 1.0;
-            let sum: f64 = x_new
+    fn rosenbrock(shift: &Array1<MyFloat>, bias: &MyFloat) -> F1dim {
+        let s = shift.clone();
+        let b = bias.clone();
+        F1dim::new(MultiDimFn::new(move |x: &Array1<MyFloat>| {
+            let x_new = x - &s + 1.0;
+            let sum: MyFloat = x_new
                 .windows(2)
                 .into_iter()
-                .map(|pair| 100.0 * (pair[0].powi(2) - pair[1]).powi(2) + (pair[0] - 1.0).powi(2))
+                .map(|pair| 100.0 * (pair[0].powi(2) - &pair[1]).powi(2) + (&pair[0] - 1.0).powi(2))
                 .sum();
-            sum + bias
+            sum + &b
         }))
     }
 
@@ -568,31 +584,31 @@ mod minimize_f64_cmaes_tests {
         #[test]
         fn test_2d_quadratic() {
             // f(x,y) = (x-1)² + (y-2)², minimum at (1,2)
-            let func = |x: &Array1<f64>| (x[0] - 1.0).powi(2) + (x[1] - 2.0).powi(2);
+            let func = |x: &Array1<MyFloat>| (&x[0] - 1.0).powi(2) + (&x[1] - 2.0).powi(2);
             let objective = MultiDimFn::new(func);
             let mut cmaes = CmaEs::with_seed(objective, 42);
 
-            let result = cmaes.minimize(array![0.0, 0.0]).unwrap();
+            let result = cmaes.minimize(&array![0.0.into(), 0.0.into()]).unwrap();
 
-            assert!((result.xmin[0] - 1.0).abs() < 1e-3);
-            assert!((result.xmin[1] - 2.0).abs() < 1e-3);
+            assert!((&result.xmin[0] - 1.0).abs() < 1e-3);
+            assert!((&result.xmin[1] - 2.0).abs() < 1e-3);
             assert!(result.fmin < 1e-5);
 
-            assert!((cmaes.xmin[0] - 1.0).abs() < 1e-3);
-            assert!((cmaes.xmin[1] - 2.0).abs() < 1e-3);
+            assert!((&cmaes.xmin[0] - 1.0).abs() < 1e-3);
+            assert!((&cmaes.xmin[1] - 2.0).abs() < 1e-3);
             assert!(cmaes.fmin < 1e-5);
         }
 
         #[test]
         fn test_1d_quadratic() {
             // f(x) = (x-5)², minimum at x=5
-            let func = |x: &Array1<f64>| (x[0] - 5.0).powi(2);
+            let func = |x: &Array1<MyFloat>| (&x[0] - 5.0).powi(2);
             let objective = MultiDimFn::new(func);
             let mut cmaes = CmaEs::with_seed(objective, 42);
 
-            let result = cmaes.minimize(array![0.0]).unwrap();
+            let result = cmaes.minimize(&array![0.0.into()]).unwrap();
 
-            assert!((result.xmin[0] - 5.0).abs() < 1e-3);
+            assert!((&result.xmin[0] - 5.0).abs() < 1e-3);
             assert!(result.fmin < 1e-5);
             assert!(result.converged || result.fmin < 1e-5);
         }
@@ -600,46 +616,49 @@ mod minimize_f64_cmaes_tests {
         #[test]
         fn test_rosenbrock_2d() {
             // Rosenbrock function: f(x,y) = (1-x)² + 100(y-x²)²
-            let rosenbrock =
-                |x: &Array1<f64>| (1.0 - x[0]).powi(2) + 100.0 * (x[1] - x[0].powi(2)).powi(2);
+            let rosenbrock = |x: &Array1<MyFloat>| {
+                (1.0 - &x[0]).powi(2) + 100.0 * (&x[1] - x[0].powi(2)).powi(2)
+            };
             let objective = MultiDimFn::new(rosenbrock);
             let mut cmaes = CmaEs::with_seed(objective, 42);
 
             let result = cmaes
                 .cma_es(
-                    array![-1.2, 1.0],
-                    Some(0.5),
+                    &array![MyFloat::new(-1.2), 1.0.into()],
+                    Some(0.5.into()),
                     Some(50),
-                    Some(1e-8),
+                    Some(1e-8.into()),
                     Some(500),
                 )
                 .unwrap();
 
             println!("\nresult.xmin = {:?}\n", result.xmin);
-            assert!((result.xmin[0] - 1.0).abs() < 1e-2);
-            assert!((result.xmin[1] - 1.0).abs() < 1e-2);
+            assert!((&result.xmin[0] - 1.0).abs() < 1e-2);
+            assert!((&result.xmin[1] - 1.0).abs() < 1e-2);
             assert!(result.fmin < 1e-3);
 
-            assert!((cmaes.xmin[0] - 1.0).abs() < 1e-2);
-            assert!((cmaes.xmin[1] - 1.0).abs() < 1e-2);
+            assert!((&cmaes.xmin[0] - 1.0).abs() < 1e-2);
+            assert!((&cmaes.xmin[1] - 1.0).abs() < 1e-2);
             assert!(cmaes.fmin < 1e-3);
         }
 
         #[test]
         fn test_3d_sphere() {
             // f(x,y,z) = x² + y² + z², minimum at (0,0,0)
-            let sphere = |x: &Array1<f64>| x.iter().map(|&xi| xi * xi).sum();
+            let sphere = |x: &Array1<MyFloat>| x.iter().map(|xi| xi * xi).sum();
             let objective = MultiDimFn::new(sphere);
             let mut cmaes = CmaEs::with_seed(objective, 42);
 
-            let result = cmaes.minimize(array![1.0, 1.0, 1.0]).unwrap();
+            let result = cmaes
+                .minimize(&array![1.0.into(), 1.0.into(), 1.0.into()])
+                .unwrap();
 
-            for &coord in &result.xmin {
+            for coord in result.xmin {
                 assert!(coord.abs() < 1e-3);
             }
             assert!(result.fmin < 1e-5);
 
-            for &coord in &cmaes.xmin {
+            for coord in cmaes.xmin {
                 assert!(coord.abs() < 1e-3);
             }
             assert!(cmaes.fmin < 1e-5);
@@ -648,26 +667,26 @@ mod minimize_f64_cmaes_tests {
         #[test]
         fn test_ellipsoid_function() {
             // Ellipsoid: f(x) = sum(i * x_i^2), scaled quadratic
-            let ellipsoid = |x: &Array1<f64>| {
+            let ellipsoid = |x: &Array1<MyFloat>| {
                 x.iter()
                     .enumerate()
-                    .map(|(i, &xi)| (i + 1) as f64 * xi.powi(2))
-                    .sum::<f64>()
+                    .map(|(i, xi)| (i + 1) as f64 * xi.powi(2))
+                    .sum::<MyFloat>()
             };
             let objective = MultiDimFn::new(ellipsoid);
             let mut cmaes = CmaEs::with_seed(objective, 42);
 
             let result = cmaes
                 .cma_es(
-                    array![1.0, 2.0, 3.0],
-                    Some(1.0),
+                    &array![1.0.into(), 2.0.into(), 3.0.into()],
+                    Some(1.0.into()),
                     None,
-                    Some(1e-8),
+                    Some(1e-8.into()),
                     Some(200),
                 )
                 .unwrap();
 
-            for &coord in &result.xmin {
+            for coord in result.xmin {
                 assert!(coord.abs() < 1e-3);
             }
             assert!(result.fmin < 1e-5);
@@ -679,17 +698,17 @@ mod minimize_f64_cmaes_tests {
 
         #[test]
         fn test_custom_population_size() {
-            let func = |x: &Array1<f64>| x[0].powi(2) + x[1].powi(2);
+            let func = |x: &Array1<MyFloat>| x[0].powi(2) + x[1].powi(2);
             let objective = MultiDimFn::new(func);
             let mut cmaes = CmaEs::with_seed(objective, 42);
 
             // Test with small population
             let result1 = cmaes
                 .cma_es(
-                    array![1.0, 1.0],
-                    Some(0.5),
+                    &array![1.0.into(), 1.0.into()],
+                    Some(0.5.into()),
                     Some(6), // Small population
-                    Some(1e-6),
+                    Some(1e-6.into()),
                     Some(200),
                 )
                 .unwrap();
@@ -697,10 +716,10 @@ mod minimize_f64_cmaes_tests {
             // Test with large population
             let result2 = cmaes
                 .cma_es(
-                    array![1.0, 1.0],
-                    Some(0.5),
+                    &array![1.0.into(), 1.0.into()],
+                    Some(0.5.into()),
                     Some(50), // Large population
-                    Some(1e-6),
+                    Some(1e-6.into()),
                     Some(100),
                 )
                 .unwrap();
@@ -716,17 +735,17 @@ mod minimize_f64_cmaes_tests {
 
         #[test]
         fn test_different_initial_sigma() {
-            let func = |x: &Array1<f64>| (x[0] - 2.0).powi(2) + (x[1] + 1.0).powi(2);
+            let func = |x: &Array1<MyFloat>| (&x[0] - 2.0).powi(2) + (&x[1] + 1.0).powi(2);
             let objective = MultiDimFn::new(func);
 
             // Test small sigma
             let mut cmaes1 = CmaEs::with_seed(objective.clone(), 42);
             let result1 = cmaes1
                 .cma_es(
-                    array![0.0, 0.0],
-                    Some(0.1), // Small sigma
+                    &array![0.0.into(), 0.0.into()],
+                    Some(0.1.into()), // Small sigma
                     None,
-                    Some(1e-6),
+                    Some(1e-6.into()),
                     Some(300),
                 )
                 .unwrap();
@@ -735,34 +754,34 @@ mod minimize_f64_cmaes_tests {
             let mut cmaes2 = CmaEs::with_seed(objective, 42);
             let result2 = cmaes2
                 .cma_es(
-                    array![0.0, 0.0],
-                    Some(2.0), // Large sigma
+                    &array![0.0.into(), 0.0.into()],
+                    Some(2.0.into()), // Large sigma
                     None,
-                    Some(1e-6),
+                    Some(1e-6.into()),
                     Some(300),
                 )
                 .unwrap();
 
             // Both should find the minimum
-            assert!((result1.xmin[0] - 2.0).abs() < 1e-2);
-            assert!((result1.xmin[1] + 1.0).abs() < 1e-2);
-            assert!((result2.xmin[0] - 2.0).abs() < 1e-2);
-            assert!((result2.xmin[1] + 1.0).abs() < 1e-2);
+            assert!((&result1.xmin[0] - 2.0).abs() < 1e-2);
+            assert!((&result1.xmin[1] + 1.0).abs() < 1e-2);
+            assert!((&result2.xmin[0] - 2.0).abs() < 1e-2);
+            assert!((&result2.xmin[1] + 1.0).abs() < 1e-2);
         }
 
         #[test]
         fn test_tolerance_settings() {
-            let func = |x: &Array1<f64>| x[0].powi(2) + x[1].powi(2);
+            let func = |x: &Array1<MyFloat>| x[0].powi(2) + x[1].powi(2);
             let objective = MultiDimFn::new(func);
             let mut cmaes = CmaEs::with_seed(objective, 42);
 
             // Test with loose tolerance
             let result = cmaes
                 .cma_es(
-                    array![1.0, 1.0],
-                    Some(0.5),
+                    &array![1.0.into(), 1.0.into()],
+                    Some(0.5.into()),
                     None,
-                    Some(1e-3), // Loose tolerance
+                    Some(1e-3.into()), // Loose tolerance
                     Some(1000),
                 )
                 .unwrap();
@@ -782,20 +801,26 @@ mod minimize_f64_cmaes_tests {
 
         #[test]
         fn test_restart_strategy() {
-            let func = |x: &Array1<f64>| (x[0] - 3.0).powi(2) + (x[1] + 2.0).powi(2) + 5.0;
+            let func = |x: &Array1<MyFloat>| (&x[0] - 3.0).powi(2) + (&x[1] + 2.0).powi(2) + 5.0;
             let objective = MultiDimFn::new(func);
             let mut cmaes = CmaEs::with_seed(objective, 42);
 
             let result = cmaes
-                .cma_es_with_restart(array![0.0, 0.0], Some(1.0), Some(2), Some(1e-8), Some(100))
+                .cma_es_with_restart(
+                    &array![0.0.into(), 0.0.into()],
+                    Some(1.0.into()),
+                    Some(2),
+                    Some(1e-8.into()),
+                    Some(100),
+                )
                 .unwrap();
 
-            assert!((result.xmin[0] - 3.0).abs() < 1e-2);
-            assert!((result.xmin[1] + 2.0).abs() < 1e-2);
+            assert!((&result.xmin[0] - 3.0).abs() < 1e-2);
+            assert!((&result.xmin[1] + 2.0).abs() < 1e-2);
             assert!((result.fmin - 5.0).abs() < 1e-3);
 
-            assert!((cmaes.xmin[0] - 3.0).abs() < 1e-2);
-            assert!((cmaes.xmin[1] + 2.0).abs() < 1e-2);
+            assert!((&cmaes.xmin[0] - 3.0).abs() < 1e-2);
+            assert!((&cmaes.xmin[1] + 2.0).abs() < 1e-2);
             assert!((cmaes.fmin - 5.0).abs() < 1e-3);
 
             // Check that restart accumulated function evaluations and generations
@@ -806,24 +831,36 @@ mod minimize_f64_cmaes_tests {
         #[test]
         fn test_restart_improves_result() {
             // Function that's difficult from certain starting points
-            let func = |x: &Array1<f64>| {
-                let x1 = x[0];
-                let x2 = x[1];
+            let func = |x: &Array1<MyFloat>| {
+                let x1 = x[0].clone();
+                let x2 = x[1].clone();
                 // Himmelblau's function (multimodal)
-                (x1.powi(2) + x2 - 11.0).powi(2) + (x1 + x2.powi(2) - 7.0).powi(2)
+                (x1.powi(2) + &x2 - 11.0).powi(2) + (x1 + x2.powi(2) - 7.0).powi(2)
             };
             let objective = MultiDimFn::new(func);
 
             // Single run
             let mut cmaes1 = CmaEs::with_seed(objective.clone(), 42);
             let result1 = cmaes1
-                .cma_es(array![0.0, 0.0], Some(1.0), None, Some(1e-6), Some(200))
+                .cma_es(
+                    &array![0.0.into(), 0.0.into()],
+                    Some(1.0.into()),
+                    None,
+                    Some(1e-6.into()),
+                    Some(200),
+                )
                 .unwrap();
 
             // With restarts
             let mut cmaes2 = CmaEs::with_seed(objective, 42);
             let result2 = cmaes2
-                .cma_es_with_restart(array![0.0, 0.0], Some(1.0), Some(3), Some(1e-6), Some(150))
+                .cma_es_with_restart(
+                    &array![0.0.into(), 0.0.into()],
+                    Some(1.0.into()),
+                    Some(3),
+                    Some(1e-6.into()),
+                    Some(150),
+                )
                 .unwrap();
 
             // At least one should find a good solution
@@ -838,45 +875,55 @@ mod minimize_f64_cmaes_tests {
 
         #[test]
         fn test_invalid_dimension() {
-            let func = |_: &Array1<f64>| 0.0;
+            let func = |_: &Array1<MyFloat>| 0.0.into();
             let objective = MultiDimFn::new(func);
             let mut cmaes = CmaEs::new(objective);
 
-            let result = cmaes.minimize(array![]);
+            let result = cmaes.minimize(&array![]);
             assert!(result.is_err());
             assert!(matches!(result, Err(MinimizerError::InvalidDimension)));
         }
 
         #[test]
         fn test_invalid_sigma() {
-            let func = |x: &Array1<f64>| x[0].powi(2);
+            let func = |x: &Array1<MyFloat>| x[0].powi(2);
             let objective = MultiDimFn::new(func);
             let mut cmaes = CmaEs::new(objective);
 
             // Test zero sigma
-            let result = cmaes.cma_es(array![1.0], Some(0.0), None, None, None);
+            let result = cmaes.cma_es(&array![1.0.into()], Some(0.0.into()), None, None, None);
             assert!(result.is_err());
             assert!(matches!(result, Err(MinimizerError::InvalidTolerance)));
 
             // Test negative sigma
-            let result = cmaes.cma_es(array![1.0], Some(-0.1), None, None, None);
+            let result = cmaes.cma_es(
+                &array![1.0.into()],
+                Some(MyFloat::new(-0.1)),
+                None,
+                None,
+                None,
+            );
             assert!(result.is_err());
             assert!(matches!(result, Err(MinimizerError::InvalidTolerance)));
         }
 
         #[test]
         fn test_function_evaluation_error() {
-            let bad_func = |x: &Array1<f64>| {
-                if x[0] > 5.0 { f64::NAN } else { x[0].powi(2) }
+            let bad_func = |x: &Array1<MyFloat>| {
+                if x[0] > 5.0 {
+                    f64::NAN.into()
+                } else {
+                    x[0].powi(2)
+                }
             };
             let objective = MultiDimFn::new(bad_func);
             let mut cmaes = CmaEs::with_seed(objective, 42);
 
             let result = cmaes.cma_es(
-                array![10.0], // Start in bad region
-                Some(1.0),
+                &array![10.0.into()], // Start in bad region
+                Some(1.0.into()),
                 Some(10),
-                Some(1e-6),
+                Some(1e-6.into()),
                 Some(50),
             );
 
@@ -890,9 +937,9 @@ mod minimize_f64_cmaes_tests {
 
         #[test]
         fn test_infinite_function_values() {
-            let inf_func = |x: &Array1<f64>| {
+            let inf_func = |x: &Array1<MyFloat>| {
                 if x[0].abs() > 10.0 {
-                    f64::INFINITY
+                    f64::INFINITY.into()
                 } else {
                     x[0].powi(2)
                 }
@@ -901,10 +948,10 @@ mod minimize_f64_cmaes_tests {
             let mut cmaes = CmaEs::with_seed(objective, 42);
 
             let result = cmaes.cma_es(
-                array![0.0],
-                Some(2.0), // Large enough to potentially hit boundaries
+                &array![0.0.into()],
+                Some(2.0.into()), // Large enough to potentially hit boundaries
                 Some(20),
-                Some(1e-6),
+                Some(1e-6.into()),
                 Some(100),
             );
 
@@ -925,11 +972,11 @@ mod minimize_f64_cmaes_tests {
 
         #[test]
         fn test_convergence_tracking() {
-            let func = |x: &Array1<f64>| x[0].powi(2) + x[1].powi(2);
+            let func = |x: &Array1<MyFloat>| x[0].powi(2) + x[1].powi(2);
             let objective = MultiDimFn::new(func);
             let mut cmaes = CmaEs::with_seed(objective, 42);
 
-            let result = cmaes.minimize(array![2.0, 2.0]).unwrap();
+            let result = cmaes.minimize(&array![2.0.into(), 2.0.into()]).unwrap();
 
             assert!(!result.history.is_empty());
             assert!(result.history[0] > result.fmin);
@@ -943,11 +990,11 @@ mod minimize_f64_cmaes_tests {
 
         #[test]
         fn test_condition_number_tracking() {
-            let func = |x: &Array1<f64>| x[0].powi(2) + 100.0 * x[1].powi(2); // Ill-conditioned
+            let func = |x: &Array1<MyFloat>| x[0].powi(2) + 100.0 * x[1].powi(2); // Ill-conditioned
             let objective = MultiDimFn::new(func);
             let mut cmaes = CmaEs::with_seed(objective, 42);
 
-            let result = cmaes.minimize(array![1.0, 1.0]).unwrap();
+            let result = cmaes.minimize(&array![1.0.into(), 1.0.into()]).unwrap();
 
             assert!(result.condition_number >= 1.0);
             assert!(result.final_sigma > 0.0);
@@ -957,16 +1004,16 @@ mod minimize_f64_cmaes_tests {
 
         #[test]
         fn test_function_evaluation_counting() {
-            let func = |x: &Array1<f64>| x[0].powi(2) + x[1].powi(2);
+            let func = |x: &Array1<MyFloat>| x[0].powi(2) + x[1].powi(2);
             let objective = MultiDimFn::new(func);
             let mut cmaes = CmaEs::with_seed(objective, 42);
 
             let result = cmaes
                 .cma_es(
-                    array![1.0, 1.0],
-                    Some(0.5),
+                    &array![1.0.into(), 1.0.into()],
+                    Some(0.5.into()),
                     Some(10), // Small population for predictable count
-                    Some(1e-8),
+                    Some(1e-8.into()),
                     Some(50),
                 )
                 .unwrap();
@@ -986,15 +1033,21 @@ mod minimize_f64_cmaes_tests {
         #[test]
         fn test_high_dimensional() {
             // Test 5D sphere function
-            let sphere_5d = |x: &Array1<f64>| x.iter().map(|&xi| xi * xi).sum::<f64>();
+            let sphere_5d = |x: &Array1<MyFloat>| x.iter().map(|xi| xi * xi).sum::<MyFloat>();
             let objective = MultiDimFn::new(sphere_5d);
             let mut cmaes = CmaEs::with_seed(objective, 42);
 
             let result = cmaes
-                .cma_es(Array1::ones(5), Some(0.5), None, Some(1e-6), Some(200))
+                .cma_es(
+                    &Array1::ones(5),
+                    Some(0.5.into()),
+                    None,
+                    Some(1e-6.into()),
+                    Some(200),
+                )
                 .unwrap();
 
-            for &coord in &result.xmin {
+            for coord in result.xmin {
                 assert!(coord.abs() < 1e-2);
             }
             assert!(result.fmin < 1e-3);
@@ -1003,21 +1056,21 @@ mod minimize_f64_cmaes_tests {
         #[test]
         fn test_very_high_dimensional() {
             // Test 10D sphere function
-            let sphere_10d = |x: &Array1<f64>| x.iter().map(|&xi| xi * xi).sum::<f64>();
+            let sphere_10d = |x: &Array1<MyFloat>| x.iter().map(|xi| xi * xi).sum::<MyFloat>();
             let objective = MultiDimFn::new(sphere_10d);
             let mut cmaes = CmaEs::with_seed(objective, 42);
 
             let result = cmaes
                 .cma_es(
-                    Array1::ones(10) * 0.5,
-                    Some(1.0),
-                    Some(50),   // Larger population for higher dimensions
-                    Some(1e-4), // Relaxed tolerance
+                    &(Array1::ones(10) * 0.5),
+                    Some(1.0.into()),
+                    Some(50),          // Larger population for higher dimensions
+                    Some(1e-4.into()), // Relaxed tolerance
                     Some(300),
                 )
                 .unwrap();
 
-            for &coord in &result.xmin {
+            for coord in result.xmin {
                 assert!(coord.abs() < 0.1);
             }
             assert!(result.fmin < 0.1);
@@ -1027,16 +1080,22 @@ mod minimize_f64_cmaes_tests {
         fn test_dimension_scaling() {
             // Test that algorithm adapts to dimension
             for dim in [2, 4, 6] {
-                let sphere = |x: &Array1<f64>| x.iter().map(|&xi| xi * xi).sum::<f64>();
+                let sphere = |x: &Array1<MyFloat>| x.iter().map(|xi| xi * xi).sum::<MyFloat>();
                 let objective = MultiDimFn::new(sphere);
                 let mut cmaes = CmaEs::with_seed(objective, 42);
 
                 let result = cmaes
-                    .cma_es(Array1::ones(dim), Some(0.5), None, Some(1e-4), Some(200))
+                    .cma_es(
+                        &Array1::ones(dim),
+                        Some(0.5.into()),
+                        None,
+                        Some(1e-4.into()),
+                        Some(200),
+                    )
                     .unwrap();
 
                 // Should find minimum regardless of dimension
-                for &coord in &result.xmin {
+                for coord in result.xmin {
                     assert!(
                         coord.abs() < 0.1,
                         "Failed for dimension {}: coord={}",
@@ -1055,6 +1114,8 @@ mod minimize_f64_cmaes_tests {
     }
 
     mod cec2005_tests {
+        use crate::minimize::myfloat::dot_1d_2d;
+
         use super::*;
         use rand::Rng;
 
@@ -1172,9 +1233,9 @@ mod minimize_f64_cmaes_tests {
 
             // 10d
             let n = 10;
-            let x = Array1::from_shape_fn(n, |_| rng.random::<f64>() * 200.0 - 100.0);
+            let x = Array1::from_shape_fn(n, |_| (rng.random::<f64>() * 200.0 - 100.0).into());
             let shift_func = shift.clone();
-            let func = move |x: &Array1<f64>| {
+            let func = move |x: &Array1<MyFloat>| {
                 x.iter()
                     .enumerate()
                     .map(|(i, val)| (val - shift_func[i]).powi(2) + bias)
@@ -1184,27 +1245,27 @@ mod minimize_f64_cmaes_tests {
             let mut cmaes = CmaEs::with_seed(objective, 42);
             let result = cmaes
                 .cma_es(
-                    x,
-                    Some(0.3),
+                    &x,
+                    Some(0.3.into()),
                     Some(4 + (3.0 * (n as f64).ln()).floor() as usize),
-                    Some(1e-10),
+                    Some(1e-10.into()),
                     Some(1000),
                 )
                 .unwrap();
             for i in 0..10 {
-                assert!((result.xmin[i] - shift[i]).abs() < 1e-2);
-                assert!((result.fmin - bias) < 1e-3);
+                assert!((&result.xmin[i] - shift[i]).abs() < 1e-2);
+                assert!((&result.fmin - bias) < 1e-3);
 
-                assert!((cmaes.xmin[i] - shift[i]).abs() < 1e-2);
-                assert!((cmaes.fmin - bias) < 1e-3)
+                assert!((&cmaes.xmin[i] - shift[i]).abs() < 1e-2);
+                assert!((&cmaes.fmin - bias) < 1e-3)
             }
 
             // 30d
             if TEST_30D {
                 let n = 30;
-                let x = Array1::from_shape_fn(n, |_| rng.random::<f64>() * 200.0 - 100.0);
+                let x = Array1::from_shape_fn(n, |_| (rng.random::<f64>() * 200.0 - 100.0).into());
                 let shift_func = shift.clone();
-                let func = move |x: &Array1<f64>| {
+                let func = move |x: &Array1<MyFloat>| {
                     x.iter()
                         .enumerate()
                         .map(|(i, val)| (val - shift_func[i]).powi(2) + bias)
@@ -1214,28 +1275,28 @@ mod minimize_f64_cmaes_tests {
                 let mut cmaes = CmaEs::with_seed(objective, 42);
                 let result = cmaes
                     .cma_es(
-                        x,
-                        Some(0.3),
+                        &x,
+                        Some(0.3.into()),
                         Some(4 + (3.0 * (n as f64).ln()).floor() as usize),
-                        Some(1e-10),
+                        Some(1e-10.into()),
                         Some(1000),
                     )
                     .unwrap();
                 for i in 0..10 {
-                    assert!((result.xmin[i] - shift[i]).abs() < 1e-2);
-                    assert!((result.fmin - bias) < 1e-3);
+                    assert!((&result.xmin[i] - shift[i]).abs() < 1e-2);
+                    assert!((&result.fmin - bias) < 1e-3);
 
-                    assert!((cmaes.xmin[i] - shift[i]).abs() < 1e-2);
-                    assert!((cmaes.fmin - bias) < 1e-3)
+                    assert!((&cmaes.xmin[i] - shift[i]).abs() < 1e-2);
+                    assert!((&cmaes.fmin - bias) < 1e-3)
                 }
             }
 
             // 50d
             if TEST_50D {
                 let n = 50;
-                let x = Array1::from_shape_fn(n, |_| rng.random::<f64>() * 200.0 - 100.0);
+                let x = Array1::from_shape_fn(n, |_| (rng.random::<f64>() * 200.0 - 100.0).into());
                 let shift_func = shift.clone();
-                let func = move |x: &Array1<f64>| {
+                let func = move |x: &Array1<MyFloat>| {
                     x.iter()
                         .enumerate()
                         .map(|(i, val)| (val - shift_func[i]).powi(2) + bias)
@@ -1245,19 +1306,19 @@ mod minimize_f64_cmaes_tests {
                 let mut cmaes = CmaEs::with_seed(objective, 42);
                 let result = cmaes
                     .cma_es(
-                        x,
-                        Some(0.3),
+                        &x,
+                        Some(0.3.into()),
                         Some(4 + (3.0 * (n as f64).ln()).floor() as usize),
-                        Some(1e-10),
+                        Some(1e-10.into()),
                         Some(1000),
                     )
                     .unwrap();
                 for i in 0..10 {
-                    assert!((result.xmin[i] - shift[i]).abs() < 1e-2);
-                    assert!((result.fmin - bias) < 1e-3);
+                    assert!((&result.xmin[i] - shift[i]).abs() < 1e-2);
+                    assert!((&result.fmin - bias) < 1e-3);
 
-                    assert!((cmaes.xmin[i] - shift[i]).abs() < 1e-2);
-                    assert!((cmaes.fmin - bias) < 1e-3)
+                    assert!((&cmaes.xmin[i] - shift[i]).abs() < 1e-2);
+                    assert!((&cmaes.fmin - bias) < 1e-3)
                 }
             }
         }
@@ -1371,15 +1432,15 @@ mod minimize_f64_cmaes_tests {
 
             // 10d
             let n = 10;
-            let x = Array1::from_shape_fn(n, |_| rng.random::<f64>() * 200.0 - 100.0);
+            let x = Array1::from_shape_fn(n, |_| (rng.random::<f64>() * 200.0 - 100.0).into());
             let shift_func = shift.clone();
-            let func = move |x: &Array1<f64>| {
+            let func = move |x: &Array1<MyFloat>| {
                 x.iter()
                     .enumerate()
                     .map(|(i, _)| {
-                        let mut new_val = 0.0;
+                        let mut new_val = MyFloat::new(0.0);
                         for j in 0..=i {
-                            new_val += (x[j] - shift_func[j]).powi(2);
+                            new_val += (&x[j] - shift_func[j]).powi(2);
                         }
                         new_val + bias
                     })
@@ -1389,33 +1450,33 @@ mod minimize_f64_cmaes_tests {
             let mut cmaes = CmaEs::with_seed(objective, 42);
             let result = cmaes
                 .cma_es(
-                    x,
-                    Some(0.3),
+                    &x,
+                    Some(0.3.into()),
                     Some(4 + (3.0 * (n as f64).ln()).floor() as usize),
-                    Some(1e-10),
+                    Some(1e-10.into()),
                     Some(1000),
                 )
                 .unwrap();
             for i in 0..10 {
-                assert!((result.xmin[i] - shift[i]).abs() < 1e-2);
-                assert!((result.fmin - bias) < 1e-3);
+                assert!((&result.xmin[i] - shift[i]).abs() < 1e-2);
+                assert!((&result.fmin - bias) < 1e-3);
 
-                assert!((cmaes.xmin[i] - shift[i]).abs() < 1e-2);
-                assert!((cmaes.fmin - bias) < 1e-3)
+                assert!((&cmaes.xmin[i] - shift[i]).abs() < 1e-2);
+                assert!((&cmaes.fmin - bias) < 1e-3)
             }
 
             // 30d
             if TEST_30D {
                 let n = 30;
-                let x = Array1::from_shape_fn(n, |_| rng.random::<f64>() * 200.0 - 100.0);
+                let x = Array1::from_shape_fn(n, |_| (rng.random::<f64>() * 200.0 - 100.0).into());
                 let shift_func = shift.clone();
-                let func = move |x: &Array1<f64>| {
+                let func = move |x: &Array1<MyFloat>| {
                     x.iter()
                         .enumerate()
                         .map(|(i, _)| {
-                            let mut new_val = 0.0;
+                            let mut new_val = MyFloat::new(0.0);
                             for j in 0..=i {
-                                new_val += (x[j] - shift_func[j]).powi(2);
+                                new_val += (&x[j] - shift_func[j]).powi(2);
                             }
                             new_val + bias
                         })
@@ -1425,34 +1486,34 @@ mod minimize_f64_cmaes_tests {
                 let mut cmaes = CmaEs::with_seed(objective, 42);
                 let result = cmaes
                     .cma_es(
-                        x,
-                        Some(0.3),
+                        &x,
+                        Some(0.3.into()),
                         Some(4 + (3.0 * (n as f64).ln()).floor() as usize),
-                        Some(1e-10),
+                        Some(1e-10.into()),
                         Some(1000),
                     )
                     .unwrap();
                 for i in 0..10 {
-                    assert!((result.xmin[i] - shift[i]).abs() < 1e-2);
-                    assert!((result.fmin - bias) < 1e-3);
+                    assert!((&result.xmin[i] - shift[i]).abs() < 1e-2);
+                    assert!((&result.fmin - bias) < 1e-3);
 
-                    assert!((cmaes.xmin[i] - shift[i]).abs() < 1e-2);
-                    assert!((cmaes.fmin - bias) < 1e-3)
+                    assert!((&cmaes.xmin[i] - shift[i]).abs() < 1e-2);
+                    assert!((&cmaes.fmin - bias) < 1e-3)
                 }
             }
 
             // 50d
             if TEST_50D {
                 let n = 50;
-                let x = Array1::from_shape_fn(n, |_| rng.random::<f64>() * 200.0 - 100.0);
+                let x = Array1::from_shape_fn(n, |_| (rng.random::<f64>() * 200.0 - 100.0).into());
                 let shift_func = shift.clone();
-                let func = move |x: &Array1<f64>| {
+                let func = move |x: &Array1<MyFloat>| {
                     x.iter()
                         .enumerate()
                         .map(|(i, _)| {
-                            let mut new_val = 0.0;
+                            let mut new_val = MyFloat::new(0.0);
                             for j in 0..=i {
-                                new_val += (x[j] - shift_func[j]).powi(2);
+                                new_val += (&x[j] - shift_func[j]).powi(2);
                             }
                             new_val + bias
                         })
@@ -1462,19 +1523,19 @@ mod minimize_f64_cmaes_tests {
                 let mut cmaes = CmaEs::with_seed(objective, 42);
                 let result = cmaes
                     .cma_es(
-                        x,
-                        Some(0.3),
+                        &x,
+                        Some(0.3.into()),
                         Some(4 + (3.0 * (n as f64).ln()).floor() as usize),
-                        Some(1e-10),
+                        Some(1e-10.into()),
                         Some(1000),
                     )
                     .unwrap();
                 for i in 0..10 {
-                    assert!((result.xmin[i] - shift[i]).abs() < 1e-2);
-                    assert!((result.fmin - bias) < 1e-3);
+                    assert!((&result.xmin[i] - shift[i]).abs() < 1e-2);
+                    assert!((&result.fmin - bias) < 1e-3);
 
-                    assert!((cmaes.xmin[i] - shift[i]).abs() < 1e-2);
-                    assert!((cmaes.fmin - bias) < 1e-3)
+                    assert!((&cmaes.xmin[i] - shift[i]).abs() < 1e-2);
+                    assert!((&cmaes.fmin - bias) < 1e-3)
                 }
             }
         }
@@ -1494,141 +1555,144 @@ mod minimize_f64_cmaes_tests {
                 5.3499000e+000,
                 5.2241800e+001
             ];
-            let m = array![
+            let m: Array2<MyFloat> = array![
                 [
-                    1.7830682721057345e-001,
-                    5.5786330587166588e-002,
-                    4.7591905576669730e-001,
-                    2.4551129863391566e-001,
-                    3.1998625926387086e-001,
-                    3.2102001448363848e-001,
-                    2.7787561319902176e-002,
-                    2.6664001046775621e-001,
-                    4.1568009651337917e-001,
-                    -4.7771934552669726e-001
+                    1.7830682721057345e-001.into(),
+                    5.5786330587166588e-002.into(),
+                    4.7591905576669730e-001.into(),
+                    2.4551129863391566e-001.into(),
+                    3.1998625926387086e-001.into(),
+                    3.2102001448363848e-001.into(),
+                    2.7787561319902176e-002.into(),
+                    2.6664001046775621e-001.into(),
+                    4.1568009651337917e-001.into(),
+                    MyFloat::new(-4.7771934552669726e-001)
                 ],
                 [
-                    6.3516362859468667e-001,
-                    5.0091423836646241e-002,
-                    2.0110601384121973e-001,
-                    -6.8076882416633511e-001,
-                    -4.9934546553907944e-002,
-                    -4.6399423424582961e-002,
-                    -1.9460194646748039e-001,
-                    1.8961539926194687e-001,
-                    -1.9416259626804547e-002,
-                    1.0639981029473855e-001
+                    6.3516362859468667e-001.into(),
+                    5.0091423836646241e-002.into(),
+                    2.0110601384121973e-001.into(),
+                    MyFloat::new(-6.8076882416633511e-001),
+                    MyFloat::new(-4.9934546553907944e-002),
+                    MyFloat::new(-4.6399423424582961e-002),
+                    MyFloat::new(-1.9460194646748039e-001),
+                    1.8961539926194687e-001.into(),
+                    MyFloat::new(-1.9416259626804547e-002),
+                    1.0639981029473855e-001.into()
                 ],
                 [
-                    3.2762147366023187e-001,
-                    3.6016598714114556e-001,
-                    -2.3635655094044949e-001,
-                    -1.8566854017444848e-002,
-                    -2.4479096747593634e-001,
-                    4.4818973341886903e-001,
-                    5.3518635733619568e-001,
-                    -3.1206925190530521e-001,
-                    -1.3863719921728737e-001,
-                    -2.0713981146209595e-001
+                    3.2762147366023187e-001.into(),
+                    3.6016598714114556e-001.into(),
+                    MyFloat::new(-2.3635655094044949e-001),
+                    MyFloat::new(-1.8566854017444848e-002),
+                    MyFloat::new(-2.4479096747593634e-001),
+                    4.4818973341886903e-001.into(),
+                    5.3518635733619568e-001.into(),
+                    MyFloat::new(-3.1206925190530521e-001),
+                    MyFloat::new(-1.3863719921728737e-001),
+                    MyFloat::new(-2.0713981146209595e-001)
                 ],
                 [
-                    -6.4783210587984280e-002,
-                    -4.9424101683695937e-001,
-                    1.3101175297435969e-001,
-                    3.1615171931194543e-002,
-                    -1.7506107914871860e-001,
-                    6.8908039344918381e-001,
-                    1.0544234469094992e-002,
-                    2.1948984793273507e-001,
-                    -1.6468539805844565e-001,
-                    3.9048550518513409e-001
+                    MyFloat::new(-6.4783210587984280e-002),
+                    MyFloat::new(-4.9424101683695937e-001),
+                    1.3101175297435969e-001.into(),
+                    3.1615171931194543e-002.into(),
+                    MyFloat::new(-1.7506107914871860e-001),
+                    6.8908039344918381e-001.into(),
+                    1.0544234469094992e-002.into(),
+                    2.1948984793273507e-001.into(),
+                    MyFloat::new(-1.6468539805844565e-001),
+                    3.9048550518513409e-001.into()
                 ],
                 [
-                    -2.7648044785371367e-001,
-                    1.1383114506120220e-001,
-                    -3.0818401502810994e-001,
-                    -3.5959407104438740e-001,
-                    2.6446258034702191e-001,
-                    2.8616788379157501e-002,
-                    4.7528027904995646e-001,
-                    4.0993994049770172e-001,
-                    4.1131043368915432e-001,
-                    2.2899345188886880e-001
+                    MyFloat::new(-2.7648044785371367e-001),
+                    1.1383114506120220e-001.into(),
+                    MyFloat::new(-3.0818401502810994e-001),
+                    MyFloat::new(-3.5959407104438740e-001),
+                    2.6446258034702191e-001.into(),
+                    2.8616788379157501e-002.into(),
+                    4.7528027904995646e-001.into(),
+                    4.0993994049770172e-001.into(),
+                    4.1131043368915432e-001.into(),
+                    2.2899345188886880e-001.into()
                 ],
                 [
-                    1.5454249061641606e-001,
-                    5.4899186274157996e-001,
-                    -1.8382029941792261e-001,
-                    3.3944461903909162e-001,
-                    2.8596188774255699e-001,
-                    1.2833167642713417e-001,
-                    -2.5495080172376317e-001,
-                    3.9460752302037100e-001,
-                    -3.4524640270007412e-001,
-                    2.9590318323368509e-001
+                    1.5454249061641606e-001.into(),
+                    5.4899186274157996e-001.into(),
+                    MyFloat::new(-1.8382029941792261e-001),
+                    3.3944461903909162e-001.into(),
+                    2.8596188774255699e-001.into(),
+                    1.2833167642713417e-001.into(),
+                    MyFloat::new(-2.5495080172376317e-001),
+                    3.9460752302037100e-001.into(),
+                    MyFloat::new(-3.4524640270007412e-001),
+                    2.9590318323368509e-001.into()
                 ],
                 [
-                    -5.1907977690014512e-002,
-                    -1.4450757809700329e-001,
-                    -4.6086919626114314e-001,
-                    -5.3687964818368079e-002,
-                    -3.6317793499109247e-001,
-                    2.7439997038558633e-002,
-                    -2.1422629652542946e-001,
-                    5.0545148893084779e-001,
-                    -9.8064717019089837e-002,
-                    -5.6346991018564507e-001
+                    MyFloat::new(-5.1907977690014512e-002),
+                    MyFloat::new(-1.4450757809700329e-001),
+                    MyFloat::new(-4.6086919626114314e-001),
+                    MyFloat::new(-5.3687964818368079e-002),
+                    MyFloat::new(-3.6317793499109247e-001),
+                    2.7439997038558633e-002.into(),
+                    MyFloat::new(-2.1422629652542946e-001),
+                    5.0545148893084779e-001.into(),
+                    MyFloat::new(-9.8064717019089837e-002),
+                    MyFloat::new(-5.6346991018564507e-001)
                 ],
                 [
-                    5.0142989354460654e-001,
-                    -5.3133659048457516e-001,
-                    -3.7294385871521135e-001,
-                    2.3370866431381510e-001,
-                    4.4327537662488531e-001,
-                    -1.6972740381143742e-001,
-                    2.0364148963331691e-001,
-                    -2.3717523924336927e-002,
-                    -7.1805455862954920e-002,
-                    -7.3332178450339763e-003
+                    5.0142989354460654e-001.into(),
+                    MyFloat::new(-5.3133659048457516e-001),
+                    MyFloat::new(-3.7294385871521135e-001),
+                    2.3370866431381510e-001.into(),
+                    4.4327537662488531e-001.into(),
+                    MyFloat::new(-1.6972740381143742e-001),
+                    2.0364148963331691e-001.into(),
+                    MyFloat::new(-2.3717523924336927e-002),
+                    MyFloat::new(-7.1805455862954920e-002),
+                    MyFloat::new(-7.3332178450339763e-003)
                 ],
                 [
-                    1.0441248047680891e-001,
-                    4.3064226149369542e-002,
-                    -4.1675972625940993e-001,
-                    1.6522876074361707e-002,
-                    1.7437281849141879e-003,
-                    2.9594944879030760e-001,
-                    -5.1197487739368741e-001,
-                    -3.2679819762357892e-001,
-                    5.8253106590933512e-001,
-                    1.3204141339826148e-001
+                    1.0441248047680891e-001.into(),
+                    4.3064226149369542e-002.into(),
+                    MyFloat::new(-4.1675972625940993e-001),
+                    1.6522876074361707e-002.into(),
+                    1.7437281849141879e-003.into(),
+                    2.9594944879030760e-001.into(),
+                    MyFloat::new(-5.1197487739368741e-001),
+                    MyFloat::new(-3.2679819762357892e-001),
+                    5.8253106590933512e-001.into(),
+                    1.3204141339826148e-001.into()
                 ],
                 [
-                    -2.9645907657631693e-001,
-                    -3.1303011496605505e-002,
-                    -7.8009154082116602e-002,
-                    -4.1548534874482024e-001,
-                    5.6959403572443468e-001,
-                    2.9095198400348149e-001,
-                    -1.8560717510075503e-001,
-                    -2.4653488847859115e-001,
-                    -3.7149025085479792e-001,
-                    -3.0015617693118707e-001
+                    MyFloat::new(-2.9645907657631693e-001),
+                    MyFloat::new(-3.1303011496605505e-002),
+                    MyFloat::new(-7.8009154082116602e-002),
+                    MyFloat::new(-4.1548534874482024e-001),
+                    5.6959403572443468e-001.into(),
+                    2.9095198400348149e-001.into(),
+                    MyFloat::new(-1.8560717510075503e-001),
+                    MyFloat::new(-2.4653488847859115e-001),
+                    MyFloat::new(-3.7149025085479792e-001),
+                    MyFloat::new(-3.0015617693118707e-001)
                 ],
             ];
             let bias = -450.0;
 
             // 10d
             let n = 10;
-            let x = (&Array1::from_shape_fn(n, |_| rng.random::<f64>() * 200.0 - 100.0) - &shift)
-                .dot(&m);
-            let mut cmaes = CmaEs::with_seed(elliptic(bias), 42);
+            let x = dot_1d_2d(
+                &(Array1::from_shape_fn(n, |_| MyFloat::new(rng.random::<f64>() * 200.0 - 100.0))
+                    - &shift),
+                &m,
+            );
+            let mut cmaes = CmaEs::with_seed(elliptic(&bias.into()), 42);
             let result = cmaes
                 .cma_es(
-                    x.clone(),
-                    Some(0.3),
+                    &x,
+                    Some(0.3.into()),
                     Some(4 + (3.0 * (n as f64).ln()).floor() as usize),
-                    Some(1e-10),
+                    Some(1e-10.into()),
                     // Some(1e3 as usize * n.pow(2)),
                     Some(10000),
                 )
@@ -1636,11 +1700,11 @@ mod minimize_f64_cmaes_tests {
             for i in 0..10 {
                 // assert!((result.xmin[i] - shift[i]).abs() < 1e-2);
                 assert!(result.xmin[i].abs() < 1e-2);
-                assert!((result.fmin - bias) < 1e-3);
+                assert!((&result.fmin - bias) < 1e-3);
 
                 // assert!((cmaes.xmin[i] - shift[i]).abs() < 1e-2);
                 assert!(cmaes.xmin[i].abs() < 1e-2);
-                assert!((cmaes.fmin - bias) < 1e-3)
+                assert!((&cmaes.fmin - bias) < 1e-3)
             }
         }
 
@@ -1753,169 +1817,169 @@ mod minimize_f64_cmaes_tests {
 
             // 10d
             let n = 10;
-            let x = Array1::from_shape_fn(n, |_| rng.random::<f64>() * 200.0 - 100.0);
+            let x = Array1::from_shape_fn(n, |_| (rng.random::<f64>() * 200.0 - 100.0).into());
             let shift_func = shift.clone();
             let rand_val = rng.random::<f64>();
-            let func = move |x: &Array1<f64>| {
+            let func = move |x: &Array1<MyFloat>| {
                 x.iter()
                     .enumerate()
                     .map(|(i, _)| {
-                        let mut new_val = 0.0;
+                        let mut new_val = MyFloat::new(0.0);
                         for j in 0..=i {
-                            new_val += (x[j] - shift_func[j]).powi(2);
+                            new_val += (&x[j] - shift_func[j]).powi(2);
                         }
                         new_val + bias
                     })
-                    .sum::<f64>()
+                    .sum::<MyFloat>()
                     * (1.0 + 0.4 * rand_val)
             };
             let objective = MultiDimFn::new(func);
             let mut cmaes = CmaEs::with_seed(objective, 42);
             let result = cmaes
                 .cma_es(
-                    x,
-                    Some(0.3),
+                    &x,
+                    Some(0.3.into()),
                     Some(4 + (3.0 * (n as f64).ln()).floor() as usize),
-                    Some(1e-10),
+                    Some(1e-10.into()),
                     Some(1000),
                 )
                 .unwrap();
             for i in 0..10 {
-                assert!((result.xmin[i] - shift[i]).abs() < 1e-2);
-                assert!((result.fmin - bias) < 1e-3);
+                assert!((&result.xmin[i] - shift[i]).abs() < 1e-2);
+                assert!((&result.fmin - bias) < 1e-3);
 
-                assert!((cmaes.xmin[i] - shift[i]).abs() < 1e-2);
-                assert!((cmaes.fmin - bias) < 1e-3)
+                assert!((&cmaes.xmin[i] - shift[i]).abs() < 1e-2);
+                assert!((&cmaes.fmin - bias) < 1e-3)
             }
         }
 
         #[test]
         fn test_f6() {
             let mut rng = rand::rng();
-            let shift = array![
-                8.1023200e+001,
-                -4.8395000e+001,
-                1.9231600e+001,
-                -2.5231000e+000,
-                7.0433800e+001,
-                4.7177400e+001,
-                -7.8358000e+000,
-                -8.6669300e+001,
-                5.7853200e+001,
-                -9.9533000e+000,
-                2.0777800e+001,
-                5.2548600e+001,
-                7.5926300e+001,
-                4.2877300e+001,
-                -5.8272000e+001,
-                -1.6972800e+001,
-                7.8384500e+001,
-                7.5042700e+001,
-                -1.6151300e+001,
-                7.0856900e+001,
-                -7.9579500e+001,
-                -2.6483700e+001,
-                5.6369900e+001,
-                -8.8224900e+001,
-                -6.4999600e+001,
-                -5.3502200e+001,
-                -5.4230000e+001,
-                1.8682600e+001,
-                -4.1006100e+001,
-                -5.4213400e+001,
-                -8.7250600e+001,
-                4.4421400e+001,
-                -9.8826000e+000,
-                7.7726600e+001,
-                -6.1210000e+000,
-                -1.4643000e+001,
-                6.2319800e+001,
-                4.5274000e+000,
-                -5.3523400e+001,
-                3.0984700e+001,
-                6.0861300e+001,
-                -8.6464800e+001,
-                3.2629800e+001,
-                -2.1693400e+001,
-                5.9723200e+001,
-                5.0630000e-001,
-                3.7704800e+001,
-                -1.2799300e+001,
-                -3.5168800e+001,
-                -5.5862300e+001,
-                -5.5182300e+001,
-                3.2800100e+001,
-                -3.5502400e+001,
-                7.5012000e+000,
-                -6.2842800e+001,
-                3.5621700e+001,
-                -2.1892800e+001,
-                6.4802000e+001,
-                6.3657900e+001,
-                1.6841300e+001,
-                -6.2050000e-001,
-                7.1958400e+001,
-                5.7893200e+001,
-                2.6083800e+001,
-                5.7235300e+001,
-                2.8840900e+001,
-                -2.8445200e+001,
-                -3.7849300e+001,
-                -2.8585100e+001,
-                6.1342000e+000,
-                4.0880300e+001,
-                -3.4327700e+001,
-                6.0929200e+001,
-                1.2253000e+001,
-                -2.3325500e+001,
-                3.6493100e+001,
-                8.3828000e+000,
-                -9.9215000e+000,
-                3.5022100e+001,
-                2.1835800e+001,
-                5.3067700e+001,
-                8.2231800e+001,
-                4.0662000e+000,
-                6.8425500e+001,
-                -5.8867800e+001,
-                8.6354400e+001,
-                -4.1139400e+001,
-                -4.4580700e+001,
-                6.7633500e+001,
-                4.2715000e+001,
-                -6.5426600e+001,
-                -8.7883700e+001,
-                7.0901600e+001,
-                -5.4155100e+001,
-                -3.6229800e+001,
-                2.9059600e+001,
-                -3.8806400e+001,
-                -5.5396000e+000,
-                -7.8339300e+001,
-                8.7900200e+001
+            let shift: Array1<MyFloat> = array![
+                8.1023200e+001.into(),
+                MyFloat::new(-4.8395000e+001),
+                1.9231600e+001.into(),
+                MyFloat::new(-2.5231000e+000),
+                7.0433800e+001.into(),
+                4.7177400e+001.into(),
+                MyFloat::new(-7.8358000e+000),
+                MyFloat::new(-8.6669300e+001),
+                5.7853200e+001.into(),
+                MyFloat::new(-9.9533000e+000),
+                2.0777800e+001.into(),
+                5.2548600e+001.into(),
+                7.5926300e+001.into(),
+                4.2877300e+001.into(),
+                MyFloat::new(-5.8272000e+001),
+                MyFloat::new(-1.6972800e+001),
+                7.8384500e+001.into(),
+                7.5042700e+001.into(),
+                MyFloat::new(-1.6151300e+001),
+                7.0856900e+001.into(),
+                MyFloat::new(-7.9579500e+001),
+                MyFloat::new(-2.6483700e+001),
+                5.6369900e+001.into(),
+                MyFloat::new(-8.8224900e+001),
+                MyFloat::new(-6.4999600e+001),
+                MyFloat::new(-5.3502200e+001),
+                MyFloat::new(-5.4230000e+001),
+                1.8682600e+001.into(),
+                MyFloat::new(-4.1006100e+001),
+                MyFloat::new(-5.4213400e+001),
+                MyFloat::new(-8.7250600e+001),
+                4.4421400e+001.into(),
+                MyFloat::new(-9.8826000e+000),
+                7.7726600e+001.into(),
+                MyFloat::new(-6.1210000e+000),
+                MyFloat::new(-1.4643000e+001),
+                6.2319800e+001.into(),
+                4.5274000e+000.into(),
+                MyFloat::new(-5.3523400e+001),
+                3.0984700e+001.into(),
+                6.0861300e+001.into(),
+                MyFloat::new(-8.6464800e+001),
+                3.2629800e+001.into(),
+                MyFloat::new(-2.1693400e+001),
+                5.9723200e+001.into(),
+                5.0630000e-001.into(),
+                3.7704800e+001.into(),
+                MyFloat::new(-1.2799300e+001),
+                MyFloat::new(-3.5168800e+001),
+                MyFloat::new(-5.5862300e+001),
+                MyFloat::new(-5.5182300e+001),
+                3.2800100e+001.into(),
+                MyFloat::new(-3.5502400e+001),
+                7.5012000e+000.into(),
+                MyFloat::new(-6.2842800e+001),
+                3.5621700e+001.into(),
+                MyFloat::new(-2.1892800e+001),
+                6.4802000e+001.into(),
+                6.3657900e+001.into(),
+                1.6841300e+001.into(),
+                MyFloat::new(-6.2050000e-001),
+                7.1958400e+001.into(),
+                5.7893200e+001.into(),
+                2.6083800e+001.into(),
+                5.7235300e+001.into(),
+                2.8840900e+001.into(),
+                MyFloat::new(-2.8445200e+001),
+                MyFloat::new(-3.7849300e+001),
+                MyFloat::new(-2.8585100e+001),
+                6.1342000e+000.into(),
+                4.0880300e+001.into(),
+                MyFloat::new(-3.4327700e+001),
+                6.0929200e+001.into(),
+                1.2253000e+001.into(),
+                MyFloat::new(-2.3325500e+001),
+                3.6493100e+001.into(),
+                8.3828000e+000.into(),
+                MyFloat::new(-9.9215000e+000),
+                3.5022100e+001.into(),
+                2.1835800e+001.into(),
+                5.3067700e+001.into(),
+                8.2231800e+001.into(),
+                4.0662000e+000.into(),
+                6.8425500e+001.into(),
+                MyFloat::new(-5.8867800e+001),
+                8.6354400e+001.into(),
+                MyFloat::new(-4.1139400e+001),
+                MyFloat::new(-4.4580700e+001),
+                6.7633500e+001.into(),
+                4.2715000e+001.into(),
+                MyFloat::new(-6.5426600e+001),
+                MyFloat::new(-8.7883700e+001),
+                7.0901600e+001.into(),
+                MyFloat::new(-5.4155100e+001),
+                MyFloat::new(-3.6229800e+001),
+                2.9059600e+001.into(),
+                MyFloat::new(-3.8806400e+001),
+                MyFloat::new(-5.5396000e+000),
+                MyFloat::new(-7.8339300e+001),
+                8.7900200e+001.into()
             ];
-            let bias = 390.0;
+            let bias = MyFloat::new(390.0);
 
             // 10d
             let n = 10;
-            let x = Array1::from_shape_fn(n, |_| rng.random::<f64>() * 200.0 - 100.0);
+            let x = Array1::from_shape_fn(n, |_| (rng.random::<f64>() * 200.0 - 100.0).into());
             let mut cmaes =
-                CmaEs::with_seed(rosenbrock(shift.slice(s![0..10]).to_owned(), bias), 42);
+                CmaEs::with_seed(rosenbrock(&shift.slice(s![0..10]).to_owned(), &bias), 42);
             let result = cmaes
                 .cma_es(
-                    x,
-                    Some(0.3),
+                    &x,
+                    Some(0.3.into()),
                     Some(4 + (3.0 * (n as f64).ln()).floor() as usize),
-                    Some(1e-10),
+                    Some(1e-10.into()),
                     Some(1e3 as usize * n.pow(2)),
                 )
                 .unwrap();
             for i in 0..10 {
-                assert!((result.xmin[i] - shift[i]).abs() < 1e-2);
-                assert!((result.fmin - bias) < 1e-3);
+                assert!((&result.xmin[i] - &shift[i]).abs() < 1e-2);
+                assert!((&result.fmin - &bias) < 1e-3);
 
-                assert!((cmaes.xmin[i] - shift[i]).abs() < 1e-2);
-                assert!((cmaes.fmin - bias) < 1e-3)
+                assert!((&cmaes.xmin[i] - &shift[i]).abs() < 1e-2);
+                assert!((&cmaes.fmin - &bias) < 1e-3)
             }
         }
 
@@ -2060,13 +2124,13 @@ mod minimize_f64_cmaes_tests {
 
         //     // 10d
         //     let n = 10;
-        //     let x = (&Array1::from_shape_fn(n, |_| rng.random::<f64>() * 600.0) - &shift).dot(&m);
+        //     let x = (&Array1::from_shape_fn(n, |_| rng.random::<MyFloat>() * 600.0) - &shift).dot(&m);
         //     let mut cmaes = CmaEs::with_seed(griewank(bias), 42);
         //     let result = cmaes
         //         .cma_es(
         //             x,
         //             Some(0.3),
-        //             Some(4 + (3.0 * (n as f64).ln()).floor() as usize),
+        //             Some(4 + (3.0 * (n as MyFloat).ln()).floor() as usize),
         //             Some(1e-10),
         //             Some(1e3 as usize * n.pow(2)),
         //         )
@@ -2229,13 +2293,13 @@ mod minimize_f64_cmaes_tests {
         //     // 10d
         //     let n = 10;
         //     let x =
-        //         (&Array1::from_shape_fn(n, |_| rng.random::<f64>() * 64.0 - 32.0) - &shift).dot(&m);
+        //         (&Array1::from_shape_fn(n, |_| rng.random::<MyFloat>() * 64.0 - 32.0) - &shift).dot(&m);
         //     let mut cmaes = CmaEs::with_seed(ackley(bias), 42);
         //     let result = cmaes
         //         .cma_es(
         //             x,
         //             Some(0.3),
-        //             Some(4 + (3.0 * (n as f64).ln()).floor() as usize),
+        //             Some(4 + (3.0 * (n as MyFloat).ln()).floor() as usize),
         //             Some(1e-10),
         //             Some(1e3 as usize * n.pow(2)),
         //         )
@@ -2261,13 +2325,13 @@ mod minimize_f64_cmaes_tests {
         #[test]
         fn test_multimodal_function() {
             // Ackley function (multimodal but easier than Rastrigin)
-            let ackley = |x: &Array1<f64>| {
+            let ackley = |x: &Array1<MyFloat>| {
                 let n = x.len() as f64;
-                let sum_sq = x.iter().map(|&xi| xi.powi(2)).sum::<f64>();
+                let sum_sq = x.iter().map(|xi| xi.powi(2)).sum::<MyFloat>();
                 let sum_cos = x
                     .iter()
-                    .map(|&xi| (2.0 * std::f64::consts::PI * xi).cos())
-                    .sum::<f64>();
+                    .map(|xi| (2.0 * std::f64::consts::PI * xi).cos())
+                    .sum::<MyFloat>();
 
                 -20.0 * (-0.2 * (sum_sq / n).sqrt()).exp() - (sum_cos / n).exp()
                     + 20.0
@@ -2277,12 +2341,18 @@ mod minimize_f64_cmaes_tests {
             let mut cmaes = CmaEs::with_seed(objective, 42);
 
             let result = cmaes
-                .cma_es_with_restart(array![1.0, 1.0], Some(2.0), Some(5), Some(1e-6), Some(500))
+                .cma_es_with_restart(
+                    &array![1.0.into(), 1.0.into()],
+                    Some(2.0.into()),
+                    Some(5),
+                    Some(1e-6.into()),
+                    Some(500),
+                )
                 .unwrap();
 
             // Ackley has global minimum at (0,0) with value 0
             // Test should be more lenient for multimodal functions
-            for &coord in &result.xmin {
+            for coord in result.xmin {
                 assert!(
                     coord.abs() < 0.5,
                     "Coordinate {} is too far from optimum",
@@ -2303,23 +2373,29 @@ mod minimize_f64_cmaes_tests {
         #[test]
         fn test_simple_multimodal() {
             // Simpler multimodal test - multiple quadratic wells
-            let multi_quad = |x: &Array1<f64>| {
-                let val1 = (x[0] - 1.0).powi(2) + (x[1] - 1.0).powi(2);
-                let val2 = (x[0] + 1.0).powi(2) + (x[1] + 1.0).powi(2);
-                val1.min(val2) // Two wells at (1,1) and (-1,-1)
+            let multi_quad = |x: &Array1<MyFloat>| {
+                let val1 = (&x[0] - 1.0).powi(2) + (&x[1] - 1.0).powi(2);
+                let val2 = (&x[0] + 1.0).powi(2) + (&x[1] + 1.0).powi(2);
+                val1.min(&val2) // Two wells at (1,1) and (-1,-1)
             };
             let objective = MultiDimFn::new(multi_quad);
             let mut cmaes = CmaEs::with_seed(objective, 123);
 
             let result = cmaes
-                .cma_es(array![0.0, 0.0], Some(1.0), Some(30), Some(1e-8), Some(200))
+                .cma_es(
+                    &array![0.0.into(), 0.0.into()],
+                    Some(1.0.into()),
+                    Some(30),
+                    Some(1e-8.into()),
+                    Some(200),
+                )
                 .unwrap();
 
             // Should find one of the two minima
             let dist_to_first =
-                ((result.xmin[0] - 1.0).powi(2) + (result.xmin[1] - 1.0).powi(2)).sqrt();
+                ((&result.xmin[0] - 1.0).powi(2) + (&result.xmin[1] - 1.0).powi(2)).sqrt();
             let dist_to_second =
-                ((result.xmin[0] + 1.0).powi(2) + (result.xmin[1] + 1.0).powi(2)).sqrt();
+                ((&result.xmin[0] + 1.0).powi(2) + (&result.xmin[1] + 1.0).powi(2)).sqrt();
 
             assert!(
                 dist_to_first < 0.1 || dist_to_second < 0.1,
@@ -2333,23 +2409,29 @@ mod minimize_f64_cmaes_tests {
         fn test_beale_function() {
             // Beale function: f(x,y) = (1.5 - x + xy)² + (2.25 - x + xy²)² + (2.625 - x + xy³)²
             // Global minimum at (3, 0.5) with value 0
-            let beale = |x: &Array1<f64>| {
-                let x1 = x[0];
-                let x2 = x[1];
-                (1.5 - x1 + x1 * x2).powi(2)
-                    + (2.25 - x1 + x1 * x2.powi(2)).powi(2)
-                    + (2.625 - x1 + x1 * x2.powi(3)).powi(2)
+            let beale = |x: &Array1<MyFloat>| {
+                let x1 = x[0].clone();
+                let x2 = x[1].clone();
+                (1.5 - &x1 + &x1 * &x2).powi(2)
+                    + (2.25 - &x1 + &x1 * x2.powi(2)).powi(2)
+                    + (2.625 - &x1 + &x1 * x2.powi(3)).powi(2)
             };
             let objective = MultiDimFn::new(beale);
             let mut cmaes = CmaEs::with_seed(objective, 42);
 
             let result = cmaes
-                .cma_es_with_restart(array![1.0, 1.0], Some(1.0), Some(3), Some(1e-6), Some(300))
+                .cma_es_with_restart(
+                    &array![1.0.into(), 1.0.into()],
+                    Some(1.0.into()),
+                    Some(3),
+                    Some(1e-6.into()),
+                    Some(300),
+                )
                 .unwrap();
 
             // Should be close to global minimum
-            assert!((result.xmin[0] - 3.0).abs() < 0.1);
-            assert!((result.xmin[1] - 0.5).abs() < 0.1);
+            assert!((&result.xmin[0] - 3.0).abs() < 0.1);
+            assert!((&result.xmin[1] - 0.5).abs() < 0.1);
             assert!(result.fmin < 1e-2);
         }
 
@@ -2357,16 +2439,16 @@ mod minimize_f64_cmaes_tests {
         fn test_booth_function() {
             // Booth function: f(x,y) = (x + 2y - 7)² + (2x + y - 5)²
             // Global minimum at (1, 3) with value 0
-            let booth = |x: &Array1<f64>| {
-                (x[0] + 2.0 * x[1] - 7.0).powi(2) + (2.0 * x[0] + x[1] - 5.0).powi(2)
+            let booth = |x: &Array1<MyFloat>| {
+                (&x[0] + 2.0 * &x[1] - 7.0).powi(2) + (2.0 * &x[0] + &x[1] - 5.0).powi(2)
             };
             let objective = MultiDimFn::new(booth);
             let mut cmaes = CmaEs::with_seed(objective, 42);
 
-            let result = cmaes.minimize(array![0.0, 0.0]).unwrap();
+            let result = cmaes.minimize(&array![0.0.into(), 0.0.into()]).unwrap();
 
-            assert!((result.xmin[0] - 1.0).abs() < 1e-3);
-            assert!((result.xmin[1] - 3.0).abs() < 1e-3);
+            assert!((&result.xmin[0] - 1.0).abs() < 1e-3);
+            assert!((&result.xmin[1] - 3.0).abs() < 1e-3);
             assert!(result.fmin < 1e-5);
         }
     }
@@ -2380,7 +2462,7 @@ mod minimize_f64_cmaes_tests {
             let rng = StdRng::seed_from_u64(12345);
 
             // Function with added noise
-            let noisy_quad = move |x: &Array1<f64>| {
+            let noisy_quad = move |x: &Array1<MyFloat>| {
                 let clean = x[0].powi(2) + x[1].powi(2);
                 let noise = rng.clone().random::<f64>() * 0.01 - 0.005; // Small noise ±0.005
                 clean + noise
@@ -2390,16 +2472,16 @@ mod minimize_f64_cmaes_tests {
 
             let result = cmaes
                 .cma_es(
-                    array![1.0, 1.0],
-                    Some(0.5),
-                    Some(50),   // Larger population for noisy functions
-                    Some(1e-4), // Relaxed tolerance for noise
+                    &array![1.0.into(), 1.0.into()],
+                    Some(0.5.into()),
+                    Some(50),          // Larger population for noisy functions
+                    Some(1e-4.into()), // Relaxed tolerance for noise
                     Some(200),
                 )
                 .unwrap();
 
             // Should still find approximate minimum despite noise
-            for &coord in &result.xmin {
+            for coord in result.xmin {
                 assert!(coord.abs() < 0.1);
             }
             assert!(result.fmin < 0.1);
@@ -2408,15 +2490,25 @@ mod minimize_f64_cmaes_tests {
         #[test]
         fn test_very_flat_function() {
             // Very flat function around minimum
-            let flat_func = |x: &Array1<f64>| {
-                let dist_sq = x.iter().map(|&xi| xi.powi(2)).sum::<f64>();
-                if dist_sq < 1e-6 { 0.0 } else { dist_sq.sqrt() }
+            let flat_func = |x: &Array1<MyFloat>| {
+                let dist_sq = x.iter().map(|xi| xi.powi(2)).sum::<MyFloat>();
+                if dist_sq < 1e-6 {
+                    0.0.into()
+                } else {
+                    dist_sq.sqrt()
+                }
             };
             let objective = MultiDimFn::new(flat_func);
             let mut cmaes = CmaEs::with_seed(objective, 42);
 
             let result = cmaes
-                .cma_es(array![0.1, 0.1], Some(0.1), None, Some(1e-8), Some(300))
+                .cma_es(
+                    &array![0.1.into(), 0.1.into()],
+                    Some(0.1.into()),
+                    None,
+                    Some(1e-8.into()),
+                    Some(300),
+                )
                 .unwrap();
 
             // Should find the flat region
@@ -2428,19 +2520,25 @@ mod minimize_f64_cmaes_tests {
         #[test]
         fn test_very_steep_function() {
             // Very steep function
-            let steep_func = |x: &Array1<f64>| {
-                let dist_sq = x.iter().map(|&xi| xi.powi(2)).sum::<f64>();
+            let steep_func = |x: &Array1<MyFloat>| {
+                let dist_sq = x.iter().map(|xi| xi.powi(2)).sum::<MyFloat>();
                 dist_sq.powi(4) // Very steep
             };
             let objective = MultiDimFn::new(steep_func);
             let mut cmaes = CmaEs::with_seed(objective, 42);
 
             let result = cmaes
-                .cma_es(array![0.5, 0.5], Some(0.2), None, Some(1e-6), Some(200))
+                .cma_es(
+                    &array![0.5.into(), 0.5.into()],
+                    Some(0.2.into()),
+                    None,
+                    Some(1e-6.into()),
+                    Some(200),
+                )
                 .unwrap();
 
             // Should still converge
-            for &coord in &result.xmin {
+            for coord in result.xmin {
                 assert!(coord.abs() < 1e-2);
             }
             assert!(result.fmin < 1e-6);
@@ -2450,16 +2548,22 @@ mod minimize_f64_cmaes_tests {
         fn test_asymmetric_function() {
             // Asymmetric function (different scales in different directions)
             let asymmetric =
-                |x: &Array1<f64>| x[0].powi(2) + 1000.0 * x[1].powi(2) + 10.0 * x[0] * x[1];
+                |x: &Array1<MyFloat>| x[0].powi(2) + 1000.0 * x[1].powi(2) + 10.0 * &x[0] * &x[1];
             let objective = MultiDimFn::new(asymmetric);
             let mut cmaes = CmaEs::with_seed(objective, 42);
 
             let result = cmaes
-                .cma_es(array![1.0, 1.0], Some(1.0), None, Some(1e-6), Some(300))
+                .cma_es(
+                    &array![1.0.into(), 1.0.into()],
+                    Some(1.0.into()),
+                    None,
+                    Some(1e-6.into()),
+                    Some(300),
+                )
                 .unwrap();
 
             // Should adapt to the asymmetry and find minimum
-            for &coord in &result.xmin {
+            for coord in result.xmin {
                 assert!(coord.abs() < 1e-2);
             }
             assert!(result.fmin < 1e-4);
@@ -2474,7 +2578,7 @@ mod minimize_f64_cmaes_tests {
 
         #[test]
         fn test_get_best_method() {
-            let func = |x: &Array1<f64>| (x[0] - 2.0).powi(2) + (x[1] - 3.0).powi(2);
+            let func = |x: &Array1<MyFloat>| (&x[0] - 2.0).powi(2) + (&x[1] - 3.0).powi(2);
             let objective = MultiDimFn::new(func);
             let mut cmaes = CmaEs::with_seed(objective, 42);
 
@@ -2484,18 +2588,18 @@ mod minimize_f64_cmaes_tests {
             assert_eq!(initial_f, f64::INFINITY);
 
             // After optimization
-            let result = cmaes.minimize(array![0.0, 0.0]).unwrap();
+            let result = cmaes.minimize(&array![0.0.into(), 0.0.into()]).unwrap();
             let (best_x, best_f) = cmaes.get_best();
 
             assert_eq!(best_x, result.xmin);
             assert_eq!(best_f, result.fmin);
-            assert!((best_x[0] - 2.0).abs() < 1e-3);
-            assert!((best_x[1] - 3.0).abs() < 1e-3);
+            assert!((&best_x[0] - 2.0).abs() < 1e-3);
+            assert!((&best_x[1] - 3.0).abs() < 1e-3);
         }
 
         #[test]
         fn test_debug_formatting() {
-            let func = |x: &Array1<f64>| x[0].powi(2);
+            let func = |x: &Array1<MyFloat>| x[0].powi(2);
             let objective = MultiDimFn::new(func);
             let mut cmaes = CmaEs::with_seed(objective, 42);
 
@@ -2506,7 +2610,7 @@ mod minimize_f64_cmaes_tests {
             assert!(debug_str.contains("converged: false"));
 
             // Test debug format after optimization
-            let _result = cmaes.minimize(array![1.0]).unwrap();
+            let _result = cmaes.minimize(&array![1.0.into()]).unwrap();
             let debug_str_after = format!("{:?}", cmaes);
             assert!(debug_str_after.contains("CmaEs"));
             assert!(debug_str_after.contains("generations:"));
@@ -2514,23 +2618,35 @@ mod minimize_f64_cmaes_tests {
 
         #[test]
         fn test_seed_reproducibility() {
-            let func = |x: &Array1<f64>| x[0].powi(2) + x[1].powi(2);
+            let func = |x: &Array1<MyFloat>| x[0].powi(2) + x[1].powi(2);
 
             // Run with same seed twice
             let objective1 = MultiDimFn::new(func);
             let mut cmaes1 = CmaEs::with_seed(objective1, 12345);
             let result1 = cmaes1
-                .cma_es(array![1.0, 1.0], Some(0.5), Some(20), Some(1e-8), Some(50))
+                .cma_es(
+                    &array![1.0.into(), 1.0.into()],
+                    Some(0.5.into()),
+                    Some(20),
+                    Some(1e-8.into()),
+                    Some(50),
+                )
                 .unwrap();
 
             let objective2 = MultiDimFn::new(func);
             let mut cmaes2 = CmaEs::with_seed(objective2, 12345);
             let result2 = cmaes2
-                .cma_es(array![1.0, 1.0], Some(0.5), Some(20), Some(1e-8), Some(50))
+                .cma_es(
+                    &array![1.0.into(), 1.0.into()],
+                    Some(0.5.into()),
+                    Some(20),
+                    Some(1e-8.into()),
+                    Some(50),
+                )
                 .unwrap();
 
             // Results should be identical (or very close due to floating point)
-            assert!((result1.fmin - result2.fmin).abs() < 1e-10);
+            assert!((&result1.fmin - &result2.fmin).abs() < 1e-10);
             assert_eq!(result1.generations, result2.generations);
             assert_eq!(result1.fn_evals, result2.fn_evals);
 
@@ -2541,23 +2657,23 @@ mod minimize_f64_cmaes_tests {
 
         #[test]
         fn test_constructor_variants() {
-            let func = |x: &Array1<f64>| x[0].powi(2);
+            let func = |x: &Array1<MyFloat>| x[0].powi(2);
             let objective = MultiDimFn::new(func);
 
             // Test new()
             let mut cmaes1 = CmaEs::new(objective.clone());
-            let result1 = cmaes1.minimize(array![1.0]).unwrap();
+            let result1 = cmaes1.minimize(&array![1.0.into()]).unwrap();
             assert!(result1.fmin < 1e-5);
 
             // Test new_boxed()
             let boxed_objective = Box::new(objective.clone());
             let mut cmaes2 = CmaEs::new_boxed(boxed_objective);
-            let result2 = cmaes2.minimize(array![1.0]).unwrap();
+            let result2 = cmaes2.minimize(&array![1.0.into()]).unwrap();
             assert!(result2.fmin < 1e-5);
 
             // Test with_seed()
             let mut cmaes3 = CmaEs::with_seed(objective, 999);
-            let result3 = cmaes3.minimize(array![1.0]).unwrap();
+            let result3 = cmaes3.minimize(&array![1.0.into()]).unwrap();
             assert!(result3.fmin < 1e-5);
         }
     }
@@ -2567,18 +2683,18 @@ mod minimize_f64_cmaes_tests {
 
         #[test]
         fn test_max_generations_limit() {
-            let func = |x: &Array1<f64>| x[0].powi(2) + x[1].powi(2);
+            let func = |x: &Array1<MyFloat>| x[0].powi(2) + x[1].powi(2);
             let objective = MultiDimFn::new(func);
             let mut cmaes = CmaEs::with_seed(objective, 42);
 
             // Set very low generation limit
             let result = cmaes
                 .cma_es(
-                    array![1.0, 1.0],
-                    Some(0.5),
+                    &array![1.0.into(), 1.0.into()],
+                    Some(0.5.into()),
                     None,
-                    Some(1e-12), // Very tight tolerance
-                    Some(5),     // Very few generations
+                    Some(1e-12.into()), // Very tight tolerance
+                    Some(5),            // Very few generations
                 )
                 .unwrap();
 
@@ -2590,9 +2706,9 @@ mod minimize_f64_cmaes_tests {
 
         #[test]
         fn test_sigma_bounds_enforcement() {
-            let func = |x: &Array1<f64>| {
+            let func = |x: &Array1<MyFloat>| {
                 if x[0].abs() < 1e-10 {
-                    0.0
+                    0.0.into()
                 } else {
                     x[0].powi(2)
                 }
@@ -2602,10 +2718,10 @@ mod minimize_f64_cmaes_tests {
 
             let result = cmaes
                 .cma_es(
-                    array![1e-15], // Very small starting point
-                    Some(1e-15),   // Very small sigma
+                    &array![1e-15.into()], // Very small starting point
+                    Some(1e-15.into()),    // Very small sigma
                     None,
-                    Some(1e-20), // Extremely tight tolerance
+                    Some(1e-20.into()), // Extremely tight tolerance
                     Some(500),
                 )
                 .unwrap();
@@ -2617,16 +2733,16 @@ mod minimize_f64_cmaes_tests {
 
         #[test]
         fn test_large_population() {
-            let func = |x: &Array1<f64>| x[0].powi(2) + x[1].powi(2);
+            let func = |x: &Array1<MyFloat>| x[0].powi(2) + x[1].powi(2);
             let objective = MultiDimFn::new(func);
             let mut cmaes = CmaEs::with_seed(objective, 42);
 
             let result = cmaes
                 .cma_es(
-                    array![1.0, 1.0],
-                    Some(0.5),
+                    &array![1.0.into(), 1.0.into()],
+                    Some(0.5.into()),
                     Some(100), // Large but reasonable population
-                    Some(1e-6),
+                    Some(1e-6.into()),
                     Some(100), // More generations for large population
                 )
                 .unwrap();
@@ -2640,7 +2756,7 @@ mod minimize_f64_cmaes_tests {
             assert!(result.fn_evals >= 100 * result.generations); // At least pop_size * generations
 
             // Should make reasonable progress
-            for &coord in &result.xmin {
+            for coord in result.xmin {
                 assert!(
                     coord.abs() < 0.1,
                     "Coordinate {} too far from optimum",
@@ -2651,16 +2767,16 @@ mod minimize_f64_cmaes_tests {
 
         #[test]
         fn test_minimal_population() {
-            let func = |x: &Array1<f64>| x[0].powi(2);
+            let func = |x: &Array1<MyFloat>| x[0].powi(2);
             let objective = MultiDimFn::new(func);
             let mut cmaes = CmaEs::with_seed(objective, 42);
 
             let result = cmaes.cma_es(
-                array![1.0],
-                Some(0.5),
-                Some(5),    // Minimal but viable population for 1D (needs to be > dimension)
-                Some(1e-4), // Relaxed tolerance
-                Some(200),  // More generations for small population
+                &array![1.0.into()],
+                Some(0.5.into()),
+                Some(5), // Minimal but viable population for 1D (needs to be > dimension)
+                Some(1e-4.into()), // Relaxed tolerance
+                Some(200), // More generations for small population
             );
 
             match result {

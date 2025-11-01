@@ -691,7 +691,7 @@ impl fmt::Display for ComplexNumberType {
 }
 
 #[cfg(test)]
-mod tests {
+mod impedance_tests {
     use super::*;
     use crate::util::{comp_c64, comp_f64};
     use float_cmp::F64Margin;
