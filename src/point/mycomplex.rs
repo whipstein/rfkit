@@ -563,15 +563,16 @@ impl Pt<MyComplex, MyFloat> for Point<MyComplex> {
     ///
     /// # Examples
     /// ```rust
-    /// use ndarray::Array2;
+    /// use ndarray::prelude::*;
+    /// use rfkit::prelude::*;
     ///
     /// // Create a 2x2 matrix
-    /// let matrix = Array2::from_shape_vec((2, 2), vec![
+    /// let matrix = Point::from_shape_vec((2, 2), vec![
     ///     MyComplex::from_f64(1.0, 0.0), MyComplex::from_f64(2.0, 0.0),
     ///     MyComplex::from_f64(3.0, 0.0), MyComplex::from_f64(4.0, 0.0),
     /// ]).unwrap();
     ///
-    /// let inv_matrix = MyComplex::matrix_inverse(&matrix.view())?;
+    /// let inv_matrix = matrix.inv();
     /// ```
     fn inv(&self) -> Point<MyComplex> {
         self.try_inv().unwrap()

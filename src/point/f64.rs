@@ -437,15 +437,16 @@ impl Pt<f64, f64> for Point<f64> {
     ///
     /// # Examples
     /// ```rust
-    /// use ndarray::Array2;
+    /// use ndarray::prelude::*;
+    /// use rfkit::prelude::*;
     ///
     /// // Create a 2x2 matrix
-    /// let matrix = Array2::from_shape_vec((2, 2), vec![
+    /// let matrix = Point::from_shape_vec((2, 2), vec![
     ///     1.0, 2.0,
     ///     3.0, 4.0,
     /// ]).unwrap();
     ///
-    /// let inv_matrix = f64::matrix_inverse(&matrix.view())?;
+    /// let inv_matrix = matrix.inv();
     /// ```
     fn inv(&self) -> Point<f64> {
         self.try_inv().unwrap()

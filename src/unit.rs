@@ -191,10 +191,9 @@ impl Default for UnitVal {
 ///
 /// ## Example
 /// ```
-/// use rfkit_base_ndarray::unit::{Unit, UnitValBuilder};
-/// use rfkit_base_ndarray::scale::Scale;
+/// use rfkit::prelude::*;
 ///
-/// let unitval = UnitValBuilder::new().val_scaled(1.2, Unit::Pico).build();
+/// let unitval = UnitValBuilder::new().val_scaled(1.2, Scale::Pico).build();
 /// ```
 #[derive(Default)]
 pub struct UnitValBuilder {

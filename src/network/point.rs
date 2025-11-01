@@ -1333,7 +1333,7 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
     where
         Self: Sized,
     {
-        let f = match from {
+        let f_from = match from {
             WaveType::Power => Point::<MyComplex>::from_shape_fn(self.dim(), |(j, k)| {
                 if j == k {
                     (1.0 / z0[j].real().sqrt()).into()
@@ -1352,7 +1352,7 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
                 if j == k { z0[j].sqrt() } else { (0.0).into() }
             }),
         };
-        let g = match from {
+        let g_from = match from {
             WaveType::Power => Point::<MyComplex>::from_shape_fn(self.dim(), |(j, k)| {
                 if j == k { z0[j].clone() } else { (0.0).into() }
             }),
@@ -1375,17 +1375,17 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
 
         let v = match from {
             WaveType::Power => {
-                let val = g.conj() + &g.dot(&self);
-                f.dot(&val)
+                let val = g_from.conj() + &g_from.dot(&self);
+                f_from.dot(&val)
             }
-            _ => f.dot(&(&id + self)),
+            _ => f_from.dot(&(&id + self)),
         };
         let i = match from {
-            WaveType::Power => f.dot(&(&id - self)),
-            _ => g.dot(&(&id - self)),
+            WaveType::Power => f_from.dot(&(&id - self)),
+            _ => g_from.dot(&(&id - self)),
         };
 
-        let f = match to {
+        let f_to = match to {
             WaveType::Power => Point::<MyComplex>::from_shape_fn(self.dim(), |(j, k)| {
                 if j == k {
                     (1.0 / (2.0 * z0[j].real().sqrt())).into()
@@ -1408,13 +1408,13 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
                 }
             }),
         };
-        let g = Point::<MyComplex>::from_shape_fn(self.dim(), |(j, k)| {
+        let g_to = Point::<MyComplex>::from_shape_fn(self.dim(), |(j, k)| {
             if j == k { z0[j].clone() } else { (0.0).into() }
         });
-        let a = f.dot(&(&v + &g.dot(&i)));
+        let a = f_to.dot(&(&v + &g_to.dot(&i)));
         let b = match to {
-            WaveType::Power => f.dot(&(&v - &g.conj().dot(&i))),
-            WaveType::Pseudo | WaveType::Traveling => f.dot(&(&v - &g.conj().dot(&i))),
+            WaveType::Power => f_to.dot(&(&v - &g_to.conj().dot(&i))),
+            WaveType::Pseudo | WaveType::Traveling => f_to.dot(&(&v - &g_to.conj().dot(&i))),
         };
 
         Some(Point::<MyComplex>::from_shape_fn(self.dim(), |(j, k)| {

@@ -4,6 +4,7 @@ use crate::impedance::ComplexNumberType;
 use crate::math::*;
 use crate::mycomplex::MyComplex;
 use crate::myfloat::MyFloat;
+use crate::network::{NetworkPortPoints, Points, PortPoints, PortPointsf64};
 use crate::parameter::RFParameter;
 use crate::point::{Point, Pt};
 use crate::unit::Unit;
@@ -25,8 +26,6 @@ use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, Sub, Su
 use std::process::Child;
 use std::slice::Iter;
 use std::{fmt, fs, mem, process};
-
-use crate::network::{NetworkPortPoints, Points, PortPoints, PortPointsf64};
 
 impl NetworkPortPoints for PortPoints {
     fn db(&self) -> PortPointsf64 {

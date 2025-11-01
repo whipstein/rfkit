@@ -1,6 +1,6 @@
 [package]
-name = "rfkit-base"
-version = "0.2.0"
+name = "rfkit"
+version = "0.2.1"
 edition = "2024"
 
 [profile.release]

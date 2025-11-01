@@ -4,7 +4,7 @@
 //! and macros that you can import easily as a group.
 //!
 //! ```
-//! use rfkit_base_ndarray::prelude::*;
+//! use rfkit::prelude::*;
 //!
 //! ```
 
@@ -37,7 +37,7 @@ pub use crate::minimize::{Minimizer, ObjDerFn, ObjFn};
 #[doc(no_inline)]
 pub use crate::mycomplex::*;
 #[doc(no_inline)]
-pub use crate::myfloat::MyFloat;
+pub use crate::myfloat::*;
 #[doc(no_inline)]
 pub use num::ToPrimitive;
 
@@ -50,6 +50,8 @@ pub use crate::network::{
 pub use crate::point::{Point, Pt};
 #[doc(no_inline)]
 pub use crate::points::{Points, Pts};
+#[doc(no_inline)]
+pub use crate::{point, points};
 
 #[doc(no_inline)]
 pub use crate::parameter::RFParameter;

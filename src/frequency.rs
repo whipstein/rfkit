@@ -159,11 +159,11 @@ impl Default for Frequency {
 /// ## Example
 /// ```
 /// use ndarray::prelude::*;
-/// use rfkit_base_ndarray::prelude::*;
+/// use rfkit::prelude::*;
 ///
-/// let freq1 = FrequencyBuilder::new().freqs_scaled(array![1.0, 2.0, 3.0], Unit::Giga).build();
+/// let freq1 = FrequencyBuilder::new().freqs_scaled(array![1.0, 2.0, 3.0], Scale::Giga).build();
 ///
-/// let freq2 = FrequencyBuilder::new().start_stop_step_scaled(1.0, 3.0, 1.0, Unit::Giga).build();
+/// let freq2 = FrequencyBuilder::new().start_stop_step_scaled(1.0, 3.0, 1.0, Scale::Giga).build();
 /// ```
 #[derive(Default)]
 pub struct FrequencyBuilder {

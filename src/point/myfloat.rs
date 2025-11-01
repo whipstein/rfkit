@@ -544,15 +544,16 @@ impl Pt<MyFloat, MyFloat> for Point<MyFloat> {
     ///
     /// # Examples
     /// ```rust
-    /// use ndarray::Array2;
+    /// use ndarray::prelude::*;
+    /// use rfkit::prelude::*;
     ///
     /// // Create a 2x2 matrix
-    /// let matrix = Array2::from_shape_vec((2, 2), vec![
-    ///     f64::new(1.0, 0.0), f64::new(2.0, 0.0),
-    ///     f64::new(3.0, 0.0), f64::new(4.0, 0.0),
+    /// let matrix = Point::from_shape_vec((2, 2), vec![
+    ///     1.0, 2.0,
+    ///     3.0, 4.0,
     /// ]).unwrap();
     ///
-    /// let inv_matrix = f64::matrix_inverse(&matrix.view())?;
+    /// let inv_matrix = matrix.inv();
     /// ```
     fn inv(&self) -> Point<MyFloat> {
         self.try_inv().unwrap()

@@ -246,9 +246,9 @@ define_element_impl!(
 /// ## Example
 /// ```
 /// use ndarray::prelude::*;
-/// use rfkit_base_ndarray::prelude::*;
+/// use rfkit::prelude::*;
 ///
-/// let elem1 = ElementBuilder::new().id("L1").val_scaled(1.0, Unit::Nano).nodes(vec![1,2]).build();
+/// let elem1 = ElementBuilder::new().id("L1").val_scaled(1.0, Scale::Nano).nodes(vec![1,2]).build();
 ///
 /// let elem2 = ElementBuilder::new().id("P1").z(50_f64.into()).nodes(vec![1]).build();
 /// ```

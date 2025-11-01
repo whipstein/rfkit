@@ -460,15 +460,17 @@ impl Pt<Complex64, f64> for Point<Complex64> {
     ///
     /// # Examples
     /// ```rust
-    /// use ndarray::Array2;
+    /// use num::complex::Complex64;
+    /// use ndarray::prelude::*;
+    /// use rfkit::prelude::*;
     ///
     /// // Create a 2x2 matrix
-    /// let matrix = Array2::from_shape_vec((2, 2), vec![
+    /// let matrix = Point::from_shape_vec((2, 2), vec![
     ///     Complex64::new(1.0, 0.0), Complex64::new(2.0, 0.0),
     ///     Complex64::new(3.0, 0.0), Complex64::new(4.0, 0.0),
     /// ]).unwrap();
     ///
-    /// let inv_matrix = Complex64::matrix_inverse(&matrix.view())?;
+    /// let inv_matrix = matrix.inv();
     /// ```
     fn inv(&self) -> Point<Complex64> {
         self.try_inv().unwrap()
