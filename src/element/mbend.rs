@@ -77,7 +77,7 @@ impl Default for Mbend {
             width: *UnitVal::default().set_unit(Unit::Meter),
             miter: false,
             sub: Msub::default(),
-            nodes: [0, 0],
+            nodes: [1, 2],
             z0: (50.0).into(),
         }
     }
@@ -224,6 +224,7 @@ impl Unitized for Mbend {
     }
 }
 
+#[derive(Clone)]
 pub struct MbendBuilder {
     id: String,
     width: UnitVal,
@@ -305,84 +306,199 @@ impl Default for MbendBuilder {
     fn default() -> Self {
         Self {
             id: "MB0".to_string(),
-            width: UnitVal::default(),
+            width: *UnitVal::default().set_unit(Unit::Meter),
             miter: false,
             sub: Msub::default(),
-            nodes: [0, 0],
+            nodes: [1, 2],
             z0: (50.0).into(),
         }
     }
 }
 
-// #[cfg(test)]
-// mod test {
-//     use super::*;
-//     use crate::elements::msub::MsubBuilder;
-//     use crate::unit::UnitValBuilder;
-//     use crate::util::{comp_c64, comp_f64, comp_point_c64};
-//     use float_cmp::F64Margin;
-//     use num::complex::c64;
+#[cfg(test)]
+mod element_mbend_tests {
+    use super::*;
+    use crate::element::msub::MsubBuilder;
+    // use crate::unit::UnitValBuilder;
+    // use crate::util::{comp_c64, comp_f64, comp_point_c64};
+    use float_cmp::*;
+    use num::complex::c64;
 
-//     #[test]
-//     fn element_mbend() {
-//         let freq_unitval = UnitValBuilder::new()
-//             .val_scaled(1.0, Scale::Giga)
-//             .unit(Unit::Hz)
-//             .build();
-//         let freq = Frequency::from_unitval(&freq_unitval);
-//         let sub = MsubBuilder::new()
-//             .id("Msub0")
-//             .er(12.4)
-//             .tand(0.0004)
-//             .height(
-//                 UnitValBuilder::new()
-//                     .val(25e-6)
-//                     .scale(Scale::Micro)
-//                     .unit(Unit::Meter)
-//                     .build(),
-//             )
-//             .thickness(
-//                 UnitValBuilder::new()
-//                     .val(0.77e-6)
-//                     .scale(Scale::Micro)
-//                     .unit(Unit::Meter)
-//                     .build(),
-//             )
-//             .build();
+    const DEFAULT_MARGIN: F64Margin = F64Margin {
+        epsilon: 1e-10,
+        ulps: 4,
+    };
 
-//         let width_val = 5.8736e-6;
-//         let exemplar = Mbend {
-//             id: "MB1".to_string(),
-//             width: UnitValBuilder::new()
-//                 .val(width_val)
-//                 .scale(Scale::Micro)
-//                 .unit(Unit::Meter)
-//                 .build(),
-//             miter: false,
-//             sub: sub.clone(),
-//             nodes: [1, 2],
-//             z0: (50.0).into(),
-//         };
-//         let exemplar_z = c64(2_f64.sqrt() * 50.0, 0.0);
-//         let calc = MbendBuilder::new()
-//             .width_val(width_val)
-//             .width_scale(Scale::Micro)
-//             .width_unit(Unit::Meter)
-//             .miter(false)
-//             .sub(&sub)
-//             .nodes([1, 2])
-//             .id("MB1")
-//             .build();
-//         let margin = F64Margin::default();
+    const RELAXED_MARGIN: F64Margin = F64Margin {
+        epsilon: 1e-6,
+        ulps: 10,
+    };
 
-//         assert_eq!(&exemplar.id(), &calc.id());
-//         comp_point_c64(&exemplar.c(&freq), &calc.c(&freq), margin, "calc.c()");
+    // #[test]
+    // fn element_mbend() {
+    //     let freq_unitval = UnitValBuilder::new()
+    //         .val_scaled(1.0, Scale::Giga)
+    //         .unit(Unit::Hz)
+    //         .build();
+    //     let freq = Frequency::from_unitval(&freq_unitval);
+    //     let sub = MsubBuilder::new()
+    //         .id("Msub0")
+    //         .er(12.4)
+    //         .tand(0.0004)
+    //         .height(
+    //             UnitValBuilder::new()
+    //                 .val(25e-6)
+    //                 .scale(Scale::Micro)
+    //                 .unit(Unit::Meter)
+    //                 .build(),
+    //         )
+    //         .thickness(
+    //             UnitValBuilder::new()
+    //                 .val(0.77e-6)
+    //                 .scale(Scale::Micro)
+    //                 .unit(Unit::Meter)
+    //                 .build(),
+    //         )
+    //         .build();
 
-//         let margin = F64Margin {
-//             epsilon: 1e-4,
-//             ulps: 10,
-//         };
-//         comp_c64(&exemplar_z, &calc.z(&freq), margin, "calc.z()", "0");
-//         comp_f64(&exemplar_z.re, &calc.z0(&freq), margin, "calc.z0()", "0");
-//     }
-// }
+    //     let width_val = 5.8736e-6;
+    //     let exemplar = Mbend {
+    //         id: "MB1".to_string(),
+    //         width: UnitValBuilder::new()
+    //             .val(width_val)
+    //             .scale(Scale::Micro)
+    //             .unit(Unit::Meter)
+    //             .build(),
+    //         miter: false,
+    //         sub: sub.clone(),
+    //         nodes: [1, 2],
+    //         z0: (50.0).into(),
+    //     };
+    //     let exemplar_z = c64(2_f64.sqrt() * 50.0, 0.0);
+    //     let calc = MbendBuilder::new()
+    //         .width_val(width_val)
+    //         .width_scale(Scale::Micro)
+    //         .width_unit(Unit::Meter)
+    //         .miter(false)
+    //         .sub(&sub)
+    //         .nodes([1, 2])
+    //         .id("MB1")
+    //         .build();
+    //     let margin = F64Margin::default();
+
+    //     assert_eq!(&exemplar.id(), &calc.id());
+    //     comp_point_c64(&exemplar.c(&freq), &calc.c(&freq), margin, "calc.c()");
+
+    //     let margin = F64Margin {
+    //         epsilon: 1e-4,
+    //         ulps: 10,
+    //     };
+    //     comp_c64(&exemplar_z, &calc.z(&freq), margin, "calc.z()", "0");
+    //     comp_f64(&exemplar_z.re, &calc.z0(&freq), margin, "calc.z0()", "0");
+    // }
+
+    mod mbend_tests {
+        use super::*;
+
+        #[test]
+        fn test_mbend_builder_default() {
+            let mbend = MbendBuilder::new().build();
+            assert_eq!(mbend.id(), "MB0");
+            assert_eq!(mbend.nodes(), vec![1, 2]);
+        }
+
+        #[test]
+        fn test_mbend_miter_vs_no_miter() {
+            let sub = MsubBuilder::new()
+                .er(12.4)
+                .height_scaled(25.0, Scale::Micro)
+                .build();
+
+            let mbend_no_miter = MbendBuilder::new()
+                .width_scaled(10.0, Scale::Micro)
+                .miter(false)
+                .sub(&sub)
+                .build();
+
+            let mbend_miter = MbendBuilder::new()
+                .width_scaled(10.0, Scale::Micro)
+                .miter(true)
+                .sub(&sub)
+                .build();
+
+            // Both should build successfully
+            assert!(!mbend_no_miter.miter);
+            assert!(mbend_miter.miter);
+        }
+
+        #[test]
+        fn test_mbend_with_substrate() {
+            let sub = MsubBuilder::new()
+                .er(12.4)
+                .height_scaled(25.0, Scale::Micro)
+                .thickness_scaled(0.77, Scale::Micro)
+                .build();
+
+            let mbend = MbendBuilder::new()
+                .id("MB1")
+                .width_scaled(5.8736, Scale::Micro)
+                .miter(false)
+                .sub(&sub)
+                .nodes([1, 2])
+                .z0(c64(50.0, 0.0))
+                .build();
+
+            assert_eq!(mbend.id(), "MB1");
+            assert_eq!(mbend.nodes(), vec![1, 2]);
+        }
+
+        #[test]
+        fn test_mbend_c_matrix_not_zero() {
+            let freq = Frequency::new(array![1e9], Scale::Base);
+            let sub = MsubBuilder::new()
+                .er(12.4)
+                .height_scaled(25.0, Scale::Micro)
+                .build();
+
+            let mbend = MbendBuilder::new()
+                .width_scaled(10.0, Scale::Micro)
+                .sub(&sub)
+                .build();
+
+            let c_matrix = mbend.c(&freq);
+
+            // For bend, matrix should have non-zero elements
+            assert_ne!(c_matrix[[0, 0]], Complex64::ZERO);
+            assert_ne!(c_matrix[[1, 1]], Complex64::ZERO);
+        }
+
+        #[test]
+        fn test_mbend_elem_type() {
+            let sub = MsubBuilder::new().build();
+            let mbend = MbendBuilder::new().sub(&sub).build();
+            assert_eq!(mbend.elem(), ElemType::Mbend);
+        }
+
+        #[test]
+        fn test_mbend_zero_length() {
+            let freq = Frequency::new(array![1e9], Scale::Base);
+            let sub = MsubBuilder::new().build();
+            let mbend = MbendBuilder::new().sub(&sub).build();
+
+            // Bend has no physical length
+            assert_eq!(mbend.length(&freq), 0.0);
+        }
+
+        #[test]
+        fn test_mbend_distributed_trait() {
+            let sub = MsubBuilder::new().build();
+            let mbend = MbendBuilder::new()
+                .width_scaled(10.0, Scale::Micro)
+                .sub(&sub)
+                .build();
+
+            approx_eq!(f64, mbend.width(), 10e-6);
+            assert_eq!(mbend.val(), 0.0);
+        }
+    }
+}

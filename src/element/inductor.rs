@@ -43,7 +43,7 @@ impl Default for Inductor {
         Self {
             id: "L0".to_string(),
             ind: UnitVal::default(),
-            nodes: [0, 0],
+            nodes: [1, 2],
             c: point![
                 Complex64,
                 [c64(1.0 / 3.0, 0.0), c64(2.0 / 3.0, 0.0)],
@@ -145,6 +145,7 @@ impl Unitized for Inductor {
     }
 }
 
+#[derive(Clone)]
 pub struct InductorBuilder {
     id: String,
     ind: UnitVal,
@@ -208,7 +209,7 @@ impl Default for InductorBuilder {
         Self {
             id: "L0".to_string(),
             ind: *UnitVal::default().set_unit(Unit::Henry),
-            nodes: [0, 0],
+            nodes: [1, 2],
             z0: c64(50.0, 0.0),
         }
     }
@@ -219,7 +220,17 @@ mod element_inductor_tests {
     use super::*;
     use crate::unit::UnitValBuilder;
     use crate::util::{comp_c64, comp_point_c64};
-    use float_cmp::F64Margin;
+    use float_cmp::*;
+
+    const DEFAULT_MARGIN: F64Margin = F64Margin {
+        epsilon: 1e-10,
+        ulps: 4,
+    };
+
+    const RELAXED_MARGIN: F64Margin = F64Margin {
+        epsilon: 1e-6,
+        ulps: 10,
+    };
 
     #[test]
     fn element_inductor() {
@@ -252,5 +263,104 @@ mod element_inductor_tests {
         assert_eq!(&Unit::Henry, &calc.unit());
         comp_point_c64(&exemplar.c(&freq), &calc.c(&freq), margin, "calc.c()");
         comp_c64(&exemplar_z.into(), &calc.z(&freq), margin, "calc.z()", "0");
+    }
+
+    mod inductor_tests {
+        use super::*;
+
+        #[test]
+        fn test_inductor_builder_default() {
+            let ind = InductorBuilder::new().build();
+            assert_eq!(ind.id(), "L0");
+            assert_eq!(ind.nodes(), vec![1, 2]);
+            assert_eq!(ind.unit(), Unit::Henry);
+        }
+
+        #[test]
+        fn test_inductor_impedance_calculation() {
+            let freq = Frequency::new(array![1e9], Scale::Base);
+            let ind = InductorBuilder::new().val_scaled(1.0, Scale::Nano).build();
+
+            let z = ind.z(&freq);
+            let expected_z = Complex64::I * 2.0 * PI * 1e9 * 1e-9;
+
+            assert!(approx_eq!(f64, z.re, expected_z.re, epsilon = 1e-6));
+            assert!(approx_eq!(f64, z.im, expected_z.im, epsilon = 1e-6));
+        }
+
+        #[test]
+        fn test_inductor_frequency_proportional() {
+            let freqs = array![1e9, 2e9, 5e9];
+            let freq = Frequency::new(freqs.clone(), Scale::Base);
+            let ind = InductorBuilder::new().val_scaled(1.0, Scale::Nano).build();
+
+            let z1 = ind.z_at(&freq, 0);
+            let z2 = ind.z_at(&freq, 1);
+
+            // At 2x frequency, impedance should be 2x
+            assert!(approx_eq!(f64, z2.im, z1.im * 2.0, RELAXED_MARGIN));
+        }
+
+        #[test]
+        fn test_inductor_c_matrix() {
+            let freq = Frequency::new(array![1e9], Scale::Base);
+            let ind = InductorBuilder::new().build();
+            let c_matrix = ind.c(&freq);
+
+            assert!(approx_eq!(
+                f64,
+                c_matrix[[0, 0]].re,
+                1.0 / 3.0,
+                DEFAULT_MARGIN
+            ));
+            assert!(approx_eq!(
+                f64,
+                c_matrix[[1, 1]].re,
+                1.0 / 3.0,
+                DEFAULT_MARGIN
+            ));
+            assert!(approx_eq!(
+                f64,
+                c_matrix[[0, 1]].re,
+                2.0 / 3.0,
+                DEFAULT_MARGIN
+            ));
+        }
+
+        #[test]
+        fn test_inductor_various_values() {
+            let freq = Frequency::new(array![1e9], Scale::Base);
+            let test_values = vec![
+                (1.0, Scale::Nano),
+                (10.0, Scale::Nano),
+                (1.0, Scale::Micro),
+                (100.0, Scale::Pico),
+            ];
+
+            for (val, scale) in test_values {
+                let ind = InductorBuilder::new().val_scaled(val, scale).build();
+
+                let z = ind.z(&freq);
+                let actual_val = val * scale.multiplier();
+                let expected = Complex64::I * 2.0 * PI * 1e9 * actual_val;
+
+                assert!(approx_eq!(f64, z.im, expected.im, RELAXED_MARGIN));
+            }
+        }
+
+        #[test]
+        fn test_inductor_elem_type() {
+            let ind = InductorBuilder::new().build();
+            assert_eq!(ind.elem(), ElemType::Inductor);
+        }
+
+        #[test]
+        fn test_inductor_net_matrix() {
+            let freq = Frequency::new(array![1e9, 5e9], Scale::Base);
+            let ind = InductorBuilder::new().build();
+            let net = ind.net(&freq);
+
+            assert_eq!(net.shape(), (2, 2, 2));
+        }
     }
 }

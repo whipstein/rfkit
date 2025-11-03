@@ -34,7 +34,7 @@ impl Default for Port {
         Self {
             id: "C0".to_string(),
             z: Complex64::ZERO,
-            node: [0],
+            node: [1],
             c: Point::zeros((1, 1)),
         }
     }
@@ -93,6 +93,7 @@ impl Term for Port {
     }
 }
 
+#[derive(Clone)]
 pub struct PortBuilder {
     id: String,
     z: Complex64,
@@ -135,7 +136,7 @@ impl Default for PortBuilder {
         Self {
             id: "C0".to_string(),
             z: Complex64::ZERO,
-            node: [0],
+            node: [1],
             z0: c64(50.0, 0.0),
         }
     }
@@ -147,7 +148,17 @@ mod element_port_tests {
     use crate::scale::Scale;
     use crate::unit::UnitValBuilder;
     use crate::util::{comp_c64, comp_point_c64};
-    use float_cmp::F64Margin;
+    use float_cmp::*;
+
+    const DEFAULT_MARGIN: F64Margin = F64Margin {
+        epsilon: 1e-10,
+        ulps: 4,
+    };
+
+    const RELAXED_MARGIN: F64Margin = F64Margin {
+        epsilon: 1e-6,
+        ulps: 10,
+    };
 
     #[test]
     fn element_port() {
@@ -167,5 +178,88 @@ mod element_port_tests {
         assert_eq!(&exemplar.id(), &calc.id());
         comp_point_c64(&exemplar.c(&freq), &calc.c(&freq), margin, "calc.c()");
         comp_c64(&exemplar_z.into(), &calc.z(&freq), margin, "calc.z()", "0");
+    }
+
+    mod port_tests {
+        use super::*;
+
+        #[test]
+        fn test_port_builder_default() {
+            let port = PortBuilder::new().build();
+            assert_eq!(port.id(), "C0"); // Default ID from code
+            assert_eq!(port.nodes(), vec![1]);
+        }
+
+        #[test]
+        fn test_port_custom_impedance() {
+            let impedances = vec![
+                c64(50.0, 0.0),
+                c64(75.0, 0.0),
+                c64(100.0, 0.0),
+                c64(50.0, 10.0), // With imaginary part
+            ];
+
+            let freq = Frequency::new(array![1e9], Scale::Base);
+
+            for z_val in impedances {
+                let port = PortBuilder::new().z(z_val).build();
+
+                let z = port.z(&freq);
+                assert_eq!(z, z_val);
+            }
+        }
+
+        #[test]
+        fn test_port_frequency_independent() {
+            let freqs = array![1e6, 1e9, 10e9, 100e9];
+            let freq = Frequency::new(freqs.clone(), Scale::Base);
+            let port = PortBuilder::new().z(c64(50.0, 0.0)).build();
+
+            for i in 0..freqs.len() {
+                let z = port.z_at(&freq, i);
+                assert_eq!(z, c64(50.0, 0.0));
+            }
+        }
+
+        #[test]
+        fn test_port_node_assignment() {
+            let nodes = vec![0, 1, 5, 10, 100];
+
+            for node in nodes {
+                let port = PortBuilder::new().nodes([node]).build();
+                assert_eq!(port.nodes(), vec![node]);
+            }
+        }
+
+        #[test]
+        fn test_port_c_matrix() {
+            let freq = Frequency::new(array![1e9], Scale::Base);
+            let port = PortBuilder::new().build();
+            let c_matrix = port.c(&freq);
+
+            assert_eq!(c_matrix[[0, 0]], Complex64::ZERO);
+        }
+
+        #[test]
+        fn test_port_elem_type() {
+            let port = PortBuilder::new().build();
+            assert_eq!(port.elem(), ElemType::Port);
+        }
+
+        #[test]
+        fn test_port_term_trait() {
+            let mut port = PortBuilder::new().z(c64(50.0, 0.0)).build();
+
+            assert_eq!(port.val(), c64(50.0, 0.0));
+
+            port.set_val(c64(75.0, 5.0));
+            assert_eq!(port.val(), c64(75.0, 5.0));
+        }
+
+        #[test]
+        fn test_port_id_setting() {
+            let port = PortBuilder::new().id("P1").build();
+            assert_eq!(port.id(), "P1");
+        }
     }
 }

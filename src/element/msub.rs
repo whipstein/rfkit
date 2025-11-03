@@ -86,7 +86,7 @@ impl Msub {
 
     /// Sheet conductance of the conductor
     pub fn cond_sh(&self, freq: &Frequency) -> f64 {
-        self.conductivity.val() * (-self.thickness.val() / self.delta(freq))
+        self.conductivity.val() * (self.thickness.val() / self.delta(freq))
     }
 
     /// Sheet resistance of the conductor
@@ -116,7 +116,7 @@ impl Default for Msub {
                 .unit(Unit::Meter)
                 .build(),
             thickness: UnitValBuilder::new()
-                .val_scaled(100.0, Scale::Micro)
+                .val_scaled(1.0, Scale::Micro)
                 .unit(Unit::Meter)
                 .build(),
             conductivity: UnitValBuilder::new()
@@ -171,6 +171,7 @@ impl Elem for Msub {
     }
 }
 
+#[derive(Clone)]
 pub struct MsubBuilder {
     id: String,
     er: f64,
@@ -291,7 +292,17 @@ mod element_msub_tests {
     use crate::frequency::FrequencyBuilder;
     use crate::unit::UnitValBuilder;
     use crate::util::{comp_c64, comp_point_c64, comp_points_c64, comp_vec_c64};
-    use float_cmp::F64Margin;
+    use float_cmp::*;
+
+    const DEFAULT_MARGIN: F64Margin = F64Margin {
+        epsilon: 1e-10,
+        ulps: 4,
+    };
+
+    const RELAXED_MARGIN: F64Margin = F64Margin {
+        epsilon: 1e-6,
+        ulps: 10,
+    };
 
     #[test]
     fn element_msub() {
@@ -334,5 +345,103 @@ mod element_msub_tests {
         assert_eq!(&exemplar.height(), &calc.height());
         assert_eq!(&exemplar.thickness(), &calc.thickness());
         assert_eq!(&exemplar.conductivity(), &calc.conductivity());
+    }
+
+    mod msub_tests {
+        use super::*;
+
+        #[test]
+        fn test_msub_builder_default() {
+            let msub = MsubBuilder::new().build();
+            assert_eq!(msub.id(), "Msub0");
+            assert_eq!(msub.er(), 1.0);
+            assert_eq!(msub.tand(), 0.0);
+        }
+
+        #[test]
+        fn test_msub_with_parameters() {
+            let height = UnitValBuilder::new()
+                .val_scaled(25.0, Scale::Micro)
+                .unit(Unit::Meter)
+                .build();
+
+            let thickness = UnitValBuilder::new()
+                .val_scaled(0.77, Scale::Micro)
+                .unit(Unit::Meter)
+                .build();
+
+            let conductivity = UnitValBuilder::new()
+                .val_scaled(35.0, Scale::Mega)
+                .unit(Unit::Sieman)
+                .build();
+
+            let msub = MsubBuilder::new()
+                .id("Msub1")
+                .er(12.4)
+                .tand(0.0004)
+                .height(height)
+                .thickness(thickness)
+                .conductivity(conductivity)
+                .build();
+
+            assert_eq!(msub.id(), "Msub1");
+            assert_eq!(msub.er(), 12.4);
+            assert!(approx_eq!(f64, msub.tand(), 0.0004, RELAXED_MARGIN));
+        }
+
+        #[test]
+        fn test_msub_skin_depth() {
+            let freq = Frequency::new(array![1e9], Scale::Base);
+            let msub = MsubBuilder::new()
+                .conductivity_scaled(35.0, Scale::Mega)
+                .build();
+
+            let delta = msub.delta(&freq);
+            assert!(delta > 0.0);
+            assert!(delta < 1e-5); // Should be in micrometers range
+        }
+
+        #[test]
+        fn test_msub_roughness_factor() {
+            let freq = Frequency::new(array![1e9], Scale::Base);
+            let msub = MsubBuilder::new()
+                .conductivity_scaled(35.0, Scale::Mega)
+                .rough(1e-7)
+                .build();
+
+            let roughness = msub.roughness(&freq);
+            assert!(roughness >= 1.0); // Should be >= 1
+        }
+
+        #[test]
+        fn test_msub_sheet_resistance() {
+            let freq = Frequency::new(array![1e9], Scale::Base);
+            let msub = MsubBuilder::new()
+                .conductivity_scaled(35.0, Scale::Mega)
+                .thickness_scaled(0.77, Scale::Micro)
+                .build();
+
+            let res_sh = msub.res_sh(&freq);
+            assert!(res_sh > 0.0);
+        }
+
+        #[test]
+        fn test_msub_elem_type() {
+            let msub = MsubBuilder::new().build();
+            assert_eq!(msub.elem(), ElemType::Msub);
+        }
+
+        #[test]
+        fn test_msub_zero_impedance() {
+            let freq = Frequency::new(array![1e9], Scale::Base);
+            let msub = MsubBuilder::new().build();
+            assert_eq!(msub.z(&freq), Complex64::ZERO);
+        }
+
+        #[test]
+        fn test_msub_no_nodes() {
+            let msub = MsubBuilder::new().build();
+            assert_eq!(msub.nodes().len(), 0);
+        }
     }
 }

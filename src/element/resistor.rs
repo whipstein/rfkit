@@ -42,7 +42,7 @@ impl Default for Resistor {
         Self {
             id: "R0".to_string(),
             res: UnitVal::default(),
-            nodes: [0, 0],
+            nodes: [1, 2],
             c: point![
                 Complex64,
                 [c64(1.0 / 3.0, 0.0), c64(2.0 / 3.0, 0.0)],
@@ -144,6 +144,7 @@ impl Unitized for Resistor {
     }
 }
 
+#[derive(Clone)]
 pub struct ResistorBuilder {
     id: String,
     res: UnitVal,
@@ -207,7 +208,7 @@ impl Default for ResistorBuilder {
         Self {
             id: "R0".to_string(),
             res: *UnitVal::default().set_unit(Unit::Ohm),
-            nodes: [0, 0],
+            nodes: [1, 2],
             z0: c64(50.0, 0.0),
         }
     }
@@ -218,7 +219,17 @@ mod element_resistor_tests {
     use super::*;
     use crate::unit::UnitValBuilder;
     use crate::util::{comp_c64, comp_point_c64};
-    use float_cmp::F64Margin;
+    use float_cmp::*;
+
+    const DEFAULT_MARGIN: F64Margin = F64Margin {
+        epsilon: 1e-10,
+        ulps: 4,
+    };
+
+    const RELAXED_MARGIN: F64Margin = F64Margin {
+        epsilon: 1e-6,
+        ulps: 10,
+    };
 
     #[test]
     fn element_resistor() {
@@ -251,5 +262,96 @@ mod element_resistor_tests {
         assert_eq!(&Unit::Ohm, &calc.unit());
         comp_point_c64(&exemplar.c(&freq), &calc.c(&freq), margin, "calc.c()");
         comp_c64(&exemplar_z.into(), &calc.z(&freq), margin, "calc.z()", "0");
+    }
+
+    mod resistor_tests {
+        use super::*;
+
+        #[test]
+        fn test_resistor_builder_default() {
+            let res = ResistorBuilder::new().build();
+            assert_eq!(res.id(), "R0");
+            assert_eq!(res.nodes(), vec![1, 2]);
+            assert_eq!(res.unit(), Unit::Ohm);
+        }
+
+        #[test]
+        fn test_resistor_frequency_independent() {
+            let freqs = array![1e6, 1e9, 10e9, 100e9];
+            let freq = Frequency::new(freqs.clone(), Scale::Base);
+            let res = ResistorBuilder::new().val(50.0).build();
+
+            // Resistor impedance should be constant across all frequencies
+            for i in 0..freqs.len() {
+                let z = res.z_at(&freq, i);
+                assert!(approx_eq!(f64, z.re, 50.0, DEFAULT_MARGIN));
+                assert!(approx_eq!(f64, z.im, 0.0, DEFAULT_MARGIN));
+            }
+        }
+
+        #[test]
+        fn test_resistor_impedance_real_only() {
+            let freq = Frequency::new(array![1e9], Scale::Base);
+            let values = vec![1.0, 10.0, 50.0, 100.0, 1000.0];
+
+            for val in values {
+                let res = ResistorBuilder::new().val(val).build();
+                let z = res.z(&freq);
+                assert!(approx_eq!(f64, z.re, val, DEFAULT_MARGIN));
+                assert!(approx_eq!(f64, z.im, 0.0, DEFAULT_MARGIN));
+            }
+        }
+
+        #[test]
+        fn test_resistor_c_matrix() {
+            let freq = Frequency::new(array![1e9], Scale::Base);
+            let res = ResistorBuilder::new().build();
+            let c_matrix = res.c(&freq);
+
+            // Same structure as capacitor
+            assert!(approx_eq!(
+                f64,
+                c_matrix[[0, 0]].re,
+                1.0 / 3.0,
+                DEFAULT_MARGIN
+            ));
+            assert!(approx_eq!(
+                f64,
+                c_matrix[[1, 1]].re,
+                1.0 / 3.0,
+                DEFAULT_MARGIN
+            ));
+            assert!(approx_eq!(
+                f64,
+                c_matrix[[0, 1]].re,
+                2.0 / 3.0,
+                DEFAULT_MARGIN
+            ));
+        }
+
+        #[test]
+        fn test_resistor_scaling() {
+            let res = ResistorBuilder::new().val_scaled(1.0, Scale::Kilo).build();
+
+            assert_eq!(res.val_scaled(), 1.0);
+            assert_eq!(res.val(), 1000.0);
+            assert_eq!(res.scale(), Scale::Kilo);
+        }
+
+        #[test]
+        fn test_resistor_node_configuration() {
+            let nodes = vec![[0, 1], [1, 2], [2, 5], [10, 20]];
+
+            for node_pair in nodes {
+                let res = ResistorBuilder::new().nodes(node_pair).build();
+                assert_eq!(res.nodes(), vec![node_pair[0], node_pair[1]]);
+            }
+        }
+
+        #[test]
+        fn test_resistor_elem_type() {
+            let res = ResistorBuilder::new().build();
+            assert_eq!(res.elem(), ElemType::Resistor);
+        }
     }
 }

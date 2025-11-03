@@ -43,7 +43,7 @@ impl Default for Capacitor {
         Self {
             id: "C0".to_string(),
             cap: UnitVal::default(),
-            nodes: [0, 0],
+            nodes: [1, 2],
             c: point![
                 Complex64,
                 [c64(1.0 / 3.0, 0.0), c64(2.0 / 3.0, 0.0)],
@@ -146,6 +146,7 @@ impl Unitized for Capacitor {
     }
 }
 
+#[derive(Clone)]
 pub struct CapacitorBuilder {
     id: String,
     cap: UnitVal,
@@ -209,7 +210,7 @@ impl Default for CapacitorBuilder {
         Self {
             id: "C0".to_string(),
             cap: *UnitVal::default().set_unit(Unit::Farad),
-            nodes: [0, 0],
+            nodes: [1, 2],
             z0: c64(50.0, 0.0),
         }
     }
@@ -217,11 +218,20 @@ impl Default for CapacitorBuilder {
 
 #[cfg(test)]
 mod element_capacitor_tests {
-    use float_cmp::F64Margin;
-
     use super::*;
     use crate::unit::UnitValBuilder;
     use crate::util::{comp_c64, comp_point_c64};
+    use float_cmp::*;
+
+    const DEFAULT_MARGIN: F64Margin = F64Margin {
+        epsilon: 1e-10,
+        ulps: 4,
+    };
+
+    const RELAXED_MARGIN: F64Margin = F64Margin {
+        epsilon: 1e-6,
+        ulps: 10,
+    };
 
     #[test]
     fn element_capacitor() {
@@ -257,5 +267,152 @@ mod element_capacitor_tests {
         assert_eq!(&Unit::Farad, &calc.unit());
         comp_point_c64(&exemplar.c(&freq), &calc.c(&freq), margin, "calc.c()");
         comp_c64(&exemplar_z, &calc.z(&freq), margin, "calc.z()", "0");
+    }
+
+    mod capacitor_tests {
+        use super::*;
+
+        #[test]
+        fn test_capacitor_builder_default() {
+            let cap = CapacitorBuilder::new().build();
+            assert_eq!(cap.id(), "C0");
+            assert_eq!(cap.nodes(), vec![1, 2]);
+            assert_eq!(cap.unit(), Unit::Farad);
+        }
+
+        #[test]
+        fn test_capacitor_builder_with_all_parameters() {
+            let cap = CapacitorBuilder::new()
+                .id("C1")
+                .val_scaled(10.0, Scale::Pico)
+                .nodes([1, 3])
+                .z0(c64(75.0, 0.0))
+                .build();
+
+            assert_eq!(cap.id(), "C1");
+            assert_eq!(cap.nodes(), vec![1, 3]);
+            assert_eq!(cap.val_scaled(), 10.0);
+            assert_eq!(cap.scale(), Scale::Pico);
+        }
+
+        #[test]
+        fn test_capacitor_impedance_calculation() {
+            let freq = Frequency::new(array![1e9], Scale::Base);
+            let cap = CapacitorBuilder::new().val_scaled(1.0, Scale::Pico).build();
+
+            let z = cap.z(&freq);
+            let expected_z = 1.0 / (Complex64::I * 2.0 * PI * 1e9 * 1e-12);
+
+            assert!(approx_eq!(f64, z.re, expected_z.re, epsilon = 1e-6));
+            assert!(approx_eq!(f64, z.im, expected_z.im, epsilon = 1e-6));
+        }
+
+        #[test]
+        fn test_capacitor_c_matrix_structure() {
+            let freq = Frequency::new(array![1e9], Scale::Base);
+            let cap = CapacitorBuilder::new().build();
+            let c_matrix = cap.c(&freq);
+
+            // Check diagonal and off-diagonal elements
+            assert!(approx_eq!(
+                f64,
+                c_matrix[[0, 0]].re,
+                1.0 / 3.0,
+                DEFAULT_MARGIN
+            ));
+            assert!(approx_eq!(
+                f64,
+                c_matrix[[1, 1]].re,
+                1.0 / 3.0,
+                DEFAULT_MARGIN
+            ));
+            assert!(approx_eq!(
+                f64,
+                c_matrix[[0, 1]].re,
+                2.0 / 3.0,
+                DEFAULT_MARGIN
+            ));
+            assert!(approx_eq!(
+                f64,
+                c_matrix[[1, 0]].re,
+                2.0 / 3.0,
+                DEFAULT_MARGIN
+            ));
+        }
+
+        #[test]
+        fn test_capacitor_multiple_frequencies() {
+            let freqs = array![1e9, 2e9, 5e9, 10e9];
+            let freq = Frequency::new(freqs.clone(), Scale::Base);
+            let cap = CapacitorBuilder::new().val_scaled(1.0, Scale::Pico).build();
+
+            for i in 0..freqs.len() {
+                let z = cap.z_at(&freq, i);
+                let expected = 1.0 / (Complex64::I * 2.0 * PI * freqs[i] * 1e-12);
+                assert!(approx_eq!(f64, z.re, expected.re, RELAXED_MARGIN));
+                assert!(approx_eq!(f64, z.im, expected.im, RELAXED_MARGIN));
+            }
+        }
+
+        #[test]
+        fn test_capacitor_value_scaling() {
+            let cap = CapacitorBuilder::new()
+                .val_scaled(10.0, Scale::Pico)
+                .build();
+
+            assert_eq!(cap.val_scaled(), 10.0);
+            assert_eq!(cap.val(), 10e-12);
+        }
+
+        #[test]
+        fn test_capacitor_set_operations() {
+            let mut cap = CapacitorBuilder::new().build();
+
+            cap.set_id("C_new");
+            assert_eq!(cap.id(), "C_new");
+
+            cap.set_val(5e-12);
+            assert_eq!(cap.val(), 5e-12);
+
+            cap.set_scale(Scale::Nano);
+            assert_eq!(cap.scale(), Scale::Nano);
+        }
+
+        #[test]
+        fn test_capacitor_elem_type() {
+            let cap = CapacitorBuilder::new().build();
+            assert_eq!(cap.elem(), ElemType::Capacitor);
+        }
+
+        #[test]
+        fn test_capacitor_net_matrix() {
+            let freq = Frequency::new(array![1e9, 2e9], Scale::Base);
+            let cap = CapacitorBuilder::new().build();
+            let net = cap.net(&freq);
+
+            assert_eq!(net.shape(), (2, 2, 2)); // [npts, 2, 2]
+
+            // Check structure is consistent across frequencies
+            for i in 0..2 {
+                assert!(approx_eq!(
+                    f64,
+                    net[[i, 0, 0]].re,
+                    1.0 / 3.0,
+                    DEFAULT_MARGIN
+                ));
+                assert!(approx_eq!(
+                    f64,
+                    net[[i, 1, 1]].re,
+                    1.0 / 3.0,
+                    DEFAULT_MARGIN
+                ));
+                assert!(approx_eq!(
+                    f64,
+                    net[[i, 0, 1]].re,
+                    2.0 / 3.0,
+                    DEFAULT_MARGIN
+                ));
+            }
+        }
     }
 }

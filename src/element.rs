@@ -24,7 +24,7 @@ pub use self::inductor::{Inductor, InductorBuilder};
 pub use self::mbend::{Mbend, MbendBuilder};
 pub use self::mlef::{Mlef, MlefBuilder};
 pub use self::mlin::{Mlin, MlinBuilder};
-pub use self::msub::Msub;
+pub use self::msub::{Msub, MsubBuilder};
 pub use self::port::{Port, PortBuilder};
 pub use self::resistor::{Resistor, ResistorBuilder};
 
@@ -775,4 +775,1085 @@ macro_rules! define_mlin_calcs {
             }
         }
     };
+}
+
+#[cfg(test)]
+mod element_tests {
+    use super::*;
+    use crate::point::Pt;
+    use crate::points::Pts;
+    use float_cmp::*;
+    use ndarray::prelude::*;
+    use std::f64::consts::PI;
+
+    const DEFAULT_MARGIN: F64Margin = F64Margin {
+        epsilon: 1e-10,
+        ulps: 4,
+    };
+
+    const RELAXED_MARGIN: F64Margin = F64Margin {
+        epsilon: 1e-6,
+        ulps: 10,
+    };
+
+    mod integration_tests {
+        use super::*;
+
+        #[test]
+        fn test_rlc_series_combination() {
+            let freq = Frequency::new(array![1e9], Scale::Base);
+
+            let r = ResistorBuilder::new().val(50.0).build();
+            let l = InductorBuilder::new().val_scaled(1.0, Scale::Nano).build();
+            let c = CapacitorBuilder::new().val_scaled(1.0, Scale::Pico).build();
+
+            let z_r = r.z(&freq);
+            let z_l = l.z(&freq);
+            let z_c = c.z(&freq);
+            let z_total = z_r + z_l + z_c;
+
+            // Total impedance should be sum of individual impedances
+            assert!(z_total.re > 0.0); // Resistive part
+            assert!(z_total.im.abs() > 0.0); // Reactive part
+        }
+
+        #[test]
+        fn test_element_type_differentiation() {
+            let cap = CapacitorBuilder::new().build();
+            let res = ResistorBuilder::new().build();
+            let ind = InductorBuilder::new().build();
+            let gnd = Ground::new();
+            let port = PortBuilder::new().build();
+
+            assert_ne!(cap.elem(), res.elem());
+            assert_ne!(res.elem(), ind.elem());
+            assert_ne!(ind.elem(), gnd.elem());
+            assert_ne!(gnd.elem(), port.elem());
+        }
+
+        #[test]
+        fn test_lumped_elements_share_c_matrix_structure() {
+            let freq = Frequency::new(array![1e9], Scale::Base);
+
+            let cap = CapacitorBuilder::new().build();
+            let res = ResistorBuilder::new().build();
+            let ind = InductorBuilder::new().build();
+
+            let c_cap = cap.c(&freq);
+            let c_res = res.c(&freq);
+            let c_ind = ind.c(&freq);
+
+            // All should have same structure (different from impedance)
+            assert!(approx_eq!(
+                f64,
+                c_cap[[0, 0]].re,
+                c_res[[0, 0]].re,
+                DEFAULT_MARGIN
+            ));
+            assert!(approx_eq!(
+                f64,
+                c_res[[0, 0]].re,
+                c_ind[[0, 0]].re,
+                DEFAULT_MARGIN
+            ));
+        }
+
+        #[test]
+        fn test_frequency_sweep_consistency() {
+            let freqs = array![1e6, 1e7, 1e8, 1e9, 10e9];
+            let freq = Frequency::new(freqs.clone(), Scale::Base);
+
+            let cap = CapacitorBuilder::new().val_scaled(1.0, Scale::Pico).build();
+
+            // Check impedance magnitude decreases with frequency
+            let z1 = cap.z_at(&freq, 0).norm();
+            let z2 = cap.z_at(&freq, 1).norm();
+            let z3 = cap.z_at(&freq, 2).norm();
+
+            assert!(z1 > z2);
+            assert!(z2 > z3);
+        }
+
+        #[test]
+        fn test_microstrip_components_with_same_substrate() {
+            let sub = MsubBuilder::new()
+                .er(12.4)
+                .tand(0.0004)
+                .height_scaled(25.0, Scale::Micro)
+                .thickness_scaled(0.77, Scale::Micro)
+                .build();
+
+            let mlin = MlinBuilder::new()
+                .width_scaled(10.0, Scale::Micro)
+                .length_scaled(1000.0, Scale::Micro)
+                .sub(&sub)
+                .build();
+
+            let mlef = MlefBuilder::new()
+                .width_scaled(10.0, Scale::Micro)
+                .length_scaled(1000.0, Scale::Micro)
+                .sub(&sub)
+                .build();
+
+            let mbend = MbendBuilder::new()
+                .width_scaled(10.0, Scale::Micro)
+                .sub(&sub)
+                .build();
+
+            // All should share the same substrate properties
+            assert_eq!(mlin.sub().er(), sub.er());
+            assert_eq!(mlef.sub().er(), sub.er());
+            assert_eq!(mbend.sub().er(), sub.er());
+        }
+    }
+
+    mod edge_case_tests {
+        use super::*;
+
+        #[test]
+        fn test_very_small_component_values() {
+            let freq = Frequency::new(array![1e9], Scale::Base);
+
+            let cap = CapacitorBuilder::new()
+                .val_scaled(1.0, Scale::Femto)
+                .build();
+
+            let z = cap.z(&freq);
+            println!("\n\nz = {}\n\n", z.norm());
+            assert!(z.norm() > 1e5); // Very large impedance for small cap
+        }
+
+        #[test]
+        fn test_very_large_component_values() {
+            let freq = Frequency::new(array![1e9], Scale::Base);
+
+            let cap = CapacitorBuilder::new()
+                .val_scaled(1.0, Scale::Milli)
+                .build();
+
+            let z = cap.z(&freq);
+            assert!(z.norm() < 1.0); // Very small impedance for large cap
+        }
+
+        #[test]
+        fn test_zero_frequency_handling() {
+            let freq = Frequency::new(array![0.0], Scale::Base);
+            let res = ResistorBuilder::new().val(50.0).build();
+
+            let z = res.z(&freq);
+            assert!(approx_eq!(f64, z.re, 50.0, DEFAULT_MARGIN));
+        }
+
+        #[test]
+        fn test_very_high_frequency() {
+            let freq = Frequency::new(array![1e12], Scale::Base); // 1 THz
+
+            let cap = CapacitorBuilder::new().val_scaled(1.0, Scale::Pico).build();
+
+            let z = cap.z(&freq);
+            assert!(z.norm() < 1.0); // Should be very small at THz
+        }
+
+        #[test]
+        fn test_node_numbering_non_sequential() {
+            let nodes_list = vec![[0, 100], [5, 50], [1, 1000]];
+
+            for nodes in nodes_list {
+                let cap = CapacitorBuilder::new().nodes(nodes).build();
+                assert_eq!(cap.nodes(), vec![nodes[0], nodes[1]]);
+            }
+        }
+
+        #[test]
+        fn test_same_node_both_terminals() {
+            // This creates a short circuit - should still build
+            let res = ResistorBuilder::new().nodes([5, 5]).build();
+
+            assert_eq!(res.nodes(), vec![5, 5]);
+        }
+
+        #[test]
+        fn test_element_name_and_id_consistency() {
+            let cap = CapacitorBuilder::new().id("C_test").build();
+
+            assert_eq!(cap.id(), "C_test");
+            assert_eq!(cap.name(), "C_test");
+        }
+    }
+
+    mod builder_pattern_tests {
+        use super::*;
+
+        #[test]
+        fn test_builder_method_chaining() {
+            let cap = CapacitorBuilder::new()
+                .id("C1")
+                .val_scaled(10.0, Scale::Pico)
+                .nodes([1, 2])
+                .z0(c64(75.0, 0.0))
+                .build();
+
+            assert_eq!(cap.id(), "C1");
+            assert_eq!(cap.val_scaled(), 10.0);
+            assert_eq!(cap.nodes(), vec![1, 2]);
+        }
+
+        #[test]
+        fn test_builder_partial_specification() {
+            // Build with only some parameters specified
+            let cap1 = CapacitorBuilder::new().id("C1").build();
+
+            let cap2 = CapacitorBuilder::new().val_scaled(5.0, Scale::Pico).build();
+
+            assert_eq!(cap1.id(), "C1");
+            assert_eq!(cap2.val_scaled(), 5.0);
+        }
+
+        #[test]
+        fn test_multiple_builds_from_same_pattern() {
+            let base_builder = ResistorBuilder::new().val(100.0).z0(c64(50.0, 0.0));
+
+            let res1 = base_builder.clone().id("R1").nodes([1, 2]).build();
+            let res2 = base_builder.clone().id("R2").nodes([2, 3]).build();
+
+            assert_eq!(res1.val(), 100.0);
+            assert_eq!(res2.val(), 100.0);
+            assert_ne!(res1.id(), res2.id());
+        }
+    }
+
+    mod trait_tests {
+        use super::*;
+
+        #[test]
+        fn test_lumped_trait_capacitor() {
+            let mut cap = CapacitorBuilder::new()
+                .val_scaled(10.0, Scale::Pico)
+                .build();
+
+            assert_eq!(cap.val_scaled(), 10.0);
+
+            cap.set_val_scaled(20.0);
+            assert_eq!(cap.val_scaled(), 20.0);
+        }
+
+        #[test]
+        fn test_lumped_trait_resistor() {
+            let mut res = ResistorBuilder::new().val(50.0).build();
+
+            assert_eq!(res.val(), 50.0);
+
+            res.set_val(75.0);
+            assert_eq!(res.val(), 75.0);
+        }
+
+        #[test]
+        fn test_lumped_trait_inductor() {
+            let mut ind = InductorBuilder::new().val_scaled(1.0, Scale::Nano).build();
+
+            assert_eq!(ind.val_scaled(), 1.0);
+
+            ind.set_val_scaled(2.0);
+            assert_eq!(ind.val_scaled(), 2.0);
+        }
+
+        #[test]
+        fn test_unitized_trait() {
+            let cap = CapacitorBuilder::new()
+                .val_scaled(10.0, Scale::Pico)
+                .build();
+
+            assert_eq!(cap.scale(), Scale::Pico);
+            assert_eq!(cap.unit(), Unit::Farad);
+            assert_eq!(cap.val_scaled(), 10.0);
+        }
+
+        #[test]
+        fn test_elem_trait_common_methods() {
+            let freq = Frequency::new(array![1e9], Scale::Base);
+
+            let elements: Vec<Box<dyn Elem>> = vec![
+                Box::new(CapacitorBuilder::new().build()),
+                Box::new(ResistorBuilder::new().build()),
+                Box::new(InductorBuilder::new().build()),
+            ];
+
+            for elem in elements {
+                // All should implement these methods
+                let _ = elem.id();
+                let _ = elem.nodes();
+                let _ = elem.z(&freq);
+                let _ = elem.c(&freq);
+                let _ = elem.elem();
+            }
+        }
+    }
+
+    mod stability_tests {
+        use super::*;
+
+        #[test]
+        fn test_numerical_stability_extreme_frequencies() {
+            let freqs = array![1e-3, 1e0, 1e3, 1e6, 1e9, 1e12];
+            let freq = Frequency::new(freqs.clone(), Scale::Base);
+
+            let cap = CapacitorBuilder::new().val_scaled(1.0, Scale::Pico).build();
+
+            for i in 0..freqs.len() {
+                let z = cap.z_at(&freq, i);
+                assert!(z.is_finite());
+                assert!(!z.is_nan());
+            }
+        }
+
+        #[test]
+        fn test_matrix_operations_consistency() {
+            let freq = Frequency::new(array![1e9], Scale::Base);
+            let cap = CapacitorBuilder::new().build();
+
+            let c1 = cap.c(&freq);
+            let c2 = cap.c(&freq);
+
+            // Multiple calls should return same result
+            for i in 0..2 {
+                for j in 0..2 {
+                    assert_eq!(c1[[i, j]], c2[[i, j]]);
+                }
+            }
+        }
+
+        #[test]
+        fn test_c_at_equals_c_matrix_element() {
+            let freq = Frequency::new(array![1e9], Scale::Base);
+            let cap = CapacitorBuilder::new().build();
+
+            let c_matrix = cap.c(&freq);
+
+            for i in 0..2 {
+                for j in 0..2 {
+                    let c_at = cap.c_at(&freq, i, j);
+                    assert_eq!(c_at, c_matrix[[i, j]]);
+                }
+            }
+        }
+    }
+
+    mod property_tests {
+        use super::*;
+
+        #[test]
+        fn test_capacitor_impedance_inverse_frequency_relationship() {
+            // Property: |Z(2f)| = |Z(f)| / 2 for capacitors
+            let freqs = vec![1e6, 1e7, 1e8, 1e9];
+
+            for &f in &freqs {
+                let freq1 = Frequency::new(array![f], Scale::Base);
+                let freq2 = Frequency::new(array![2.0 * f], Scale::Base);
+
+                let cap = CapacitorBuilder::new().val_scaled(1.0, Scale::Pico).build();
+
+                let z1 = cap.z(&freq1).norm();
+                let z2 = cap.z(&freq2).norm();
+
+                let ratio = z1 / z2;
+                assert!(approx_eq!(f64, ratio, 2.0, epsilon = 1e-10));
+            }
+        }
+
+        #[test]
+        fn test_inductor_impedance_proportional_frequency() {
+            // Property: |Z(2f)| = 2 * |Z(f)| for inductors
+            let freqs = vec![1e6, 1e7, 1e8, 1e9];
+
+            for &f in &freqs {
+                let freq1 = Frequency::new(array![f], Scale::Base);
+                let freq2 = Frequency::new(array![2.0 * f], Scale::Base);
+
+                let ind = InductorBuilder::new().val_scaled(1.0, Scale::Nano).build();
+
+                let z1 = ind.z(&freq1).norm();
+                let z2 = ind.z(&freq2).norm();
+
+                let ratio = z2 / z1;
+                assert!(approx_eq!(f64, ratio, 2.0, epsilon = 1e-10));
+            }
+        }
+
+        #[test]
+        fn test_resistor_frequency_invariance() {
+            // Property: Z(f1) = Z(f2) for all frequencies for resistors
+            let freqs = array![1e3, 1e6, 1e9, 1e12];
+            let freq = Frequency::new(freqs.clone(), Scale::Base);
+
+            let res = ResistorBuilder::new().val(100.0).build();
+
+            let z_reference = res.z_at(&freq, 0);
+
+            for i in 1..freqs.len() {
+                let z = res.z_at(&freq, i);
+                assert_eq!(z, z_reference);
+            }
+        }
+
+        #[test]
+        fn test_series_impedance_additivity() {
+            // Property: Z_total = Z1 + Z2 + Z3 for series connection
+            let freq = Frequency::new(array![1e9], Scale::Base);
+
+            let r = ResistorBuilder::new().val(50.0).build();
+            let l = InductorBuilder::new().val_scaled(10.0, Scale::Nano).build();
+            let c = CapacitorBuilder::new().val_scaled(1.0, Scale::Pico).build();
+
+            let z_r = r.z(&freq);
+            let z_l = l.z(&freq);
+            let z_c = c.z(&freq);
+            let z_series = z_r + z_l + z_c;
+
+            // Real part should equal resistor value
+            assert!(approx_eq!(f64, z_series.re, 50.0, epsilon = 1e-10));
+
+            // Imaginary part should be sum of L and C reactances
+            let expected_im = z_l.im + z_c.im;
+            assert!(approx_eq!(f64, z_series.im, expected_im, epsilon = 1e-6));
+        }
+
+        #[test]
+        fn test_capacitor_reactance_sign() {
+            // Property: Capacitive reactance is always negative
+            let freqs = array![1e6, 1e7, 1e8, 1e9, 1e10];
+            let freq = Frequency::new(freqs.clone(), Scale::Base);
+
+            let cap = CapacitorBuilder::new().val_scaled(1.0, Scale::Pico).build();
+
+            for i in 0..freqs.len() {
+                let z = cap.z_at(&freq, i);
+                assert!(z.im < 0.0, "Capacitive reactance should be negative");
+            }
+        }
+
+        #[test]
+        fn test_inductor_reactance_sign() {
+            // Property: Inductive reactance is always positive
+            let freqs = array![1e6, 1e7, 1e8, 1e9, 1e10];
+            let freq = Frequency::new(freqs.clone(), Scale::Base);
+
+            let ind = InductorBuilder::new().val_scaled(1.0, Scale::Nano).build();
+
+            for i in 0..freqs.len() {
+                let z = ind.z_at(&freq, i);
+                assert!(z.im > 0.0, "Inductive reactance should be positive");
+            }
+        }
+
+        #[test]
+        fn test_c_matrix_symmetry_lumped() {
+            // Property: C matrix should be symmetric for lumped elements
+            let freq = Frequency::new(array![1e9], Scale::Base);
+
+            let elements = vec![
+                Box::new(CapacitorBuilder::new().build()) as Box<dyn Elem>,
+                Box::new(ResistorBuilder::new().build()) as Box<dyn Elem>,
+                Box::new(InductorBuilder::new().build()) as Box<dyn Elem>,
+            ];
+
+            for elem in elements {
+                let c = elem.c(&freq);
+                assert_eq!(c[[0, 1]], c[[1, 0]], "C matrix should be symmetric");
+            }
+        }
+
+        #[test]
+        fn test_value_scaling_consistency() {
+            // Property: val() should equal val_scaled() * scale.multiplier()
+            let test_cases = vec![
+                (1.0, Scale::Pico),
+                (10.0, Scale::Nano),
+                (1.0, Scale::Micro),
+                (100.0, Scale::Milli),
+            ];
+
+            for (scaled_val, scale) in test_cases {
+                let cap = CapacitorBuilder::new()
+                    .val_scaled(scaled_val, scale)
+                    .build();
+
+                let expected = scaled_val * scale.multiplier();
+                assert!(approx_eq!(f64, cap.val(), expected, epsilon = 1e-20));
+            }
+        }
+    }
+
+    mod parametric_tests {
+        use super::*;
+
+        #[test]
+        fn test_capacitor_values_parametric() {
+            let test_values = vec![
+                (1.0, Scale::Femto),
+                (10.0, Scale::Femto),
+                (100.0, Scale::Femto),
+                (1.0, Scale::Pico),
+                (10.0, Scale::Pico),
+                (100.0, Scale::Pico),
+                (1.0, Scale::Nano),
+                (10.0, Scale::Nano),
+            ];
+
+            let freq = Frequency::new(array![1e9], Scale::Base);
+
+            for (val, scale) in test_values {
+                let cap = CapacitorBuilder::new().val_scaled(val, scale).build();
+
+                let z = cap.z(&freq);
+                let actual_capacitance = val * scale.multiplier();
+                let expected_reactance = -1.0 / (2.0 * PI * 1e9 * actual_capacitance);
+
+                assert!(approx_eq!(f64, z.im, expected_reactance, epsilon = 1e-6));
+            }
+        }
+
+        #[test]
+        fn test_resistor_values_parametric() {
+            let resistances = vec![1.0, 10.0, 50.0, 75.0, 100.0, 1000.0, 10000.0];
+            let freq = Frequency::new(array![1e9], Scale::Base);
+
+            for r_val in resistances {
+                let res = ResistorBuilder::new().val(r_val).build();
+
+                let z = res.z(&freq);
+                assert!(approx_eq!(f64, z.re, r_val, epsilon = 1e-10));
+                assert!(approx_eq!(f64, z.im, 0.0, epsilon = 1e-10));
+            }
+        }
+
+        #[test]
+        fn test_inductor_values_parametric() {
+            let test_values = vec![
+                (1.0, Scale::Pico),
+                (10.0, Scale::Pico),
+                (100.0, Scale::Pico),
+                (1.0, Scale::Nano),
+                (10.0, Scale::Nano),
+                (100.0, Scale::Nano),
+                (1.0, Scale::Micro),
+            ];
+
+            let freq = Frequency::new(array![1e9], Scale::Base);
+
+            for (val, scale) in test_values {
+                let ind = InductorBuilder::new().val_scaled(val, scale).build();
+
+                let z = ind.z(&freq);
+                let actual_inductance = val * scale.multiplier();
+                let expected_reactance = 2.0 * PI * 1e9 * actual_inductance;
+
+                assert!(approx_eq!(f64, z.im, expected_reactance, epsilon = 1e-6));
+            }
+        }
+
+        #[test]
+        fn test_frequency_sweep_parametric() {
+            let frequencies = vec![
+                1e3,   // 1 kHz
+                1e6,   // 1 MHz
+                10e6,  // 10 MHz
+                100e6, // 100 MHz
+                1e9,   // 1 GHz
+                10e9,  // 10 GHz
+                100e9, // 100 GHz
+            ];
+
+            let cap = CapacitorBuilder::new().val_scaled(1.0, Scale::Pico).build();
+
+            for &f in &frequencies {
+                let freq = Frequency::new(array![f], Scale::Base);
+                let z = cap.z(&freq);
+
+                let expected_reactance = -1.0 / (2.0 * PI * f * 1e-12);
+                assert!(approx_eq!(f64, z.im, expected_reactance, epsilon = 1e-6));
+            }
+        }
+
+        #[test]
+        fn test_port_impedances_parametric() {
+            let impedances = vec![
+                c64(50.0, 0.0),
+                c64(75.0, 0.0),
+                c64(100.0, 0.0),
+                c64(50.0, 10.0),
+                c64(50.0, -10.0),
+                c64(25.0, 25.0),
+            ];
+
+            let freq = Frequency::new(array![1e9], Scale::Base);
+
+            for z_val in impedances {
+                let port = PortBuilder::new().z(z_val).build();
+
+                let z = port.z(&freq);
+                assert_eq!(z, z_val);
+            }
+        }
+    }
+
+    mod circuit_scenarios {
+        use super::*;
+
+        #[test]
+        fn test_rc_low_pass_filter() {
+            // Test RC low-pass filter at cutoff frequency
+            let r_val = 1000.0; // 1k ohm
+            let c_val = 1.59e-7; // ~159 nF
+            let fc = 1.0 / (2.0 * PI * r_val * c_val); // Cutoff frequency ~1 kHz
+
+            let freq = Frequency::new(array![fc], Scale::Base);
+            let r = ResistorBuilder::new().val(r_val).build();
+            let c = CapacitorBuilder::new().val(c_val).build();
+
+            let _z_r = r.z(&freq);
+            let z_c = c.z(&freq);
+
+            // At cutoff, |Xc| should equal R
+            assert!(approx_eq!(f64, z_c.norm(), r_val, epsilon = 1.0));
+        }
+
+        #[test]
+        fn test_rl_high_pass_filter() {
+            // Test RL high-pass filter
+            let r_val = 100.0; // 100 ohm
+            let l_val = 1.59e-3; // ~1.59 mH
+            let fc = r_val / (2.0 * PI * l_val); // Cutoff frequency ~10 kHz
+
+            let freq = Frequency::new(array![fc], Scale::Base);
+            let r = ResistorBuilder::new().val(r_val).build();
+            let l = InductorBuilder::new().val(l_val).build();
+
+            let _z_r = r.z(&freq);
+            let z_l = l.z(&freq);
+
+            // At cutoff, |Xl| should equal R
+            assert!(approx_eq!(f64, z_l.norm(), r_val, epsilon = 1.0));
+        }
+
+        #[test]
+        fn test_series_resonance() {
+            // LC series resonance: at resonance, X_L + X_C = 0
+            let l_val = 1e-6; // 1 µH
+            let c_val = 1e-12; // 1 pF
+            let mid_val: f64 = l_val * c_val;
+            let f_res = 1.0 / (2.0 * PI * mid_val.sqrt()); // ~159 MHz
+
+            let freq = Frequency::new(array![f_res], Scale::Base);
+            let l = InductorBuilder::new().val(l_val).build();
+            let c = CapacitorBuilder::new().val(c_val).build();
+
+            let z_l = l.z(&freq);
+            let z_c = c.z(&freq);
+            let z_total = z_l + z_c;
+
+            // At resonance, imaginary part should be very small
+            assert!(approx_eq!(f64, z_total.im, 0.0, epsilon = 100.0));
+        }
+
+        #[test]
+        fn test_impedance_matching_network() {
+            // Test 50 ohm to 75 ohm matching at 1 GHz
+            let freq = Frequency::new(array![1e9], Scale::Base);
+
+            let port_in = PortBuilder::new().z(c64(50.0, 0.0)).nodes([1]).build();
+
+            let port_out = PortBuilder::new().z(c64(75.0, 0.0)).nodes([2]).build();
+
+            assert_eq!(port_in.z(&freq), c64(50.0, 0.0));
+            assert_eq!(port_out.z(&freq), c64(75.0, 0.0));
+        }
+
+        #[test]
+        fn test_coupled_microstrip_lines() {
+            let sub = MsubBuilder::new()
+                .er(12.4)
+                .tand(0.0004)
+                .height_scaled(25.0, Scale::Micro)
+                .thickness_scaled(0.77, Scale::Micro)
+                .build();
+
+            let mlin1 = MlinBuilder::new()
+                .id("ML1")
+                .width_scaled(10.0, Scale::Micro)
+                .length_scaled(1000.0, Scale::Micro)
+                .sub(&sub)
+                .nodes([1, 2])
+                .build();
+
+            let mlin2 = MlinBuilder::new()
+                .id("ML2")
+                .width_scaled(10.0, Scale::Micro)
+                .length_scaled(1000.0, Scale::Micro)
+                .sub(&sub)
+                .nodes([3, 4])
+                .build();
+
+            // Both lines share the same substrate
+            assert_eq!(mlin1.sub().er(), mlin2.sub().er());
+            assert_ne!(mlin1.nodes(), mlin2.nodes());
+        }
+
+        #[test]
+        fn test_microstrip_bend_corner_model() {
+            let sub = MsubBuilder::new()
+                .er(10.0)
+                .height_scaled(50.0, Scale::Micro)
+                .thickness_scaled(1.0, Scale::Micro)
+                .build();
+
+            let freq = Frequency::new(array![1e9], Scale::Base);
+
+            // Test both mitered and non-mitered bends
+            let bend_no_miter = MbendBuilder::new()
+                .width_scaled(10.0, Scale::Micro)
+                .miter(false)
+                .sub(&sub)
+                .build();
+
+            let bend_miter = MbendBuilder::new()
+                .width_scaled(10.0, Scale::Micro)
+                .miter(true)
+                .sub(&sub)
+                .build();
+
+            let c_no_miter = bend_no_miter.c(&freq);
+            let c_miter = bend_miter.c(&freq);
+
+            // The C matrices should be different
+            assert_ne!(c_no_miter[[0, 0]], c_miter[[0, 0]]);
+        }
+
+        #[test]
+        fn test_transmission_line_cascade() {
+            let sub = MsubBuilder::new()
+                .er(12.4)
+                .height_scaled(25.0, Scale::Micro)
+                .thickness_scaled(0.77, Scale::Micro)
+                .build();
+
+            // Create three cascaded transmission line sections
+            let tl1 = MlinBuilder::new()
+                .id("TL1")
+                .width_scaled(10.0, Scale::Micro)
+                .length_scaled(500.0, Scale::Micro)
+                .sub(&sub)
+                .nodes([1, 2])
+                .build();
+
+            let tl2 = MlinBuilder::new()
+                .id("TL2")
+                .width_scaled(10.0, Scale::Micro)
+                .length_scaled(500.0, Scale::Micro)
+                .sub(&sub)
+                .nodes([2, 3])
+                .build();
+
+            let tl3 = MlinBuilder::new()
+                .id("TL3")
+                .width_scaled(10.0, Scale::Micro)
+                .length_scaled(500.0, Scale::Micro)
+                .sub(&sub)
+                .nodes([3, 4])
+                .build();
+
+            // Verify cascade connectivity
+            assert_eq!(tl1.nodes()[1], tl2.nodes()[0]);
+            assert_eq!(tl2.nodes()[1], tl3.nodes()[0]);
+        }
+    }
+
+    mod boundary_tests {
+        use super::*;
+
+        #[test]
+        fn test_minimum_capacitance() {
+            let freq = Frequency::new(array![1e9], Scale::Base);
+            let cap = CapacitorBuilder::new()
+                .val_scaled(1.0, Scale::Femto) // 1 fF
+                .build();
+
+            let z = cap.z(&freq);
+            assert!(z.is_finite());
+            assert!(z.norm() > 1e5); // Very large impedance
+        }
+
+        #[test]
+        fn test_maximum_capacitance() {
+            let freq = Frequency::new(array![1e9], Scale::Base);
+            let cap = CapacitorBuilder::new()
+                .val_scaled(1.0, Scale::Milli) // 1 mF
+                .build();
+
+            let z = cap.z(&freq);
+            assert!(z.is_finite());
+            assert!(z.norm() < 1.0); // Very small impedance
+        }
+
+        #[test]
+        fn test_minimum_inductance() {
+            let freq = Frequency::new(array![1e9], Scale::Base);
+            let ind = InductorBuilder::new()
+                .val_scaled(1.0, Scale::Pico) // 1 pH
+                .build();
+
+            let z = ind.z(&freq);
+            assert!(z.is_finite());
+            assert!(z.norm() < 1.0); // Very small impedance
+        }
+
+        #[test]
+        fn test_maximum_inductance() {
+            let freq = Frequency::new(array![1e9], Scale::Base);
+            let ind = InductorBuilder::new()
+                .val_scaled(1.0, Scale::Milli) // 1 mH
+                .build();
+
+            let z = ind.z(&freq);
+            assert!(z.is_finite());
+            assert!(z.norm() > 1e6); // Very large impedance
+        }
+
+        #[test]
+        fn test_minimum_resistance() {
+            let freq = Frequency::new(array![1e9], Scale::Base);
+            let res = ResistorBuilder::new()
+                .val_scaled(1.0, Scale::Milli) // 1 mOhm
+                .build();
+
+            let z = res.z(&freq);
+            assert!(approx_eq!(f64, z.re, 0.001, epsilon = 1e-10));
+        }
+
+        #[test]
+        fn test_maximum_resistance() {
+            let freq = Frequency::new(array![1e9], Scale::Base);
+            let res = ResistorBuilder::new()
+                .val_scaled(1.0, Scale::Mega) // 1 MOhm
+                .build();
+
+            let z = res.z(&freq);
+            assert!(approx_eq!(f64, z.re, 1e6, epsilon = 1e-4));
+        }
+
+        #[test]
+        fn test_microstrip_minimum_width() {
+            let sub = MsubBuilder::new()
+                .er(12.4)
+                .height_scaled(25.0, Scale::Micro)
+                .build();
+
+            let mlin = MlinBuilder::new()
+                .width_scaled(0.1, Scale::Micro) // Very narrow
+                .length_scaled(100.0, Scale::Micro)
+                .sub(&sub)
+                .build();
+
+            assert!(mlin.width() > 0.0);
+            assert_eq!(mlin.width(), 0.1e-6);
+        }
+
+        #[test]
+        fn test_microstrip_maximum_width() {
+            let sub = MsubBuilder::new()
+                .er(12.4)
+                .height_scaled(25.0, Scale::Micro)
+                .build();
+
+            let mlin = MlinBuilder::new()
+                .width_scaled(1000.0, Scale::Micro) // Very wide
+                .length_scaled(100.0, Scale::Micro)
+                .sub(&sub)
+                .build();
+
+            assert_eq!(mlin.width(), 1000e-6);
+        }
+
+        #[test]
+        fn test_frequency_at_boundary_zero() {
+            let freq = Frequency::new(array![1e-12], Scale::Base); // Near zero
+            let res = ResistorBuilder::new().val(50.0).build();
+
+            let z = res.z(&freq);
+            assert!(z.is_finite());
+        }
+
+        #[test]
+        fn test_frequency_at_boundary_high() {
+            let freq = Frequency::new(array![1e15], Scale::Base); // 1 PHz
+            let res = ResistorBuilder::new().val(50.0).build();
+
+            let z = res.z(&freq);
+            assert!(z.is_finite());
+            assert!(approx_eq!(f64, z.re, 50.0, epsilon = 1e-10));
+        }
+    }
+
+    mod invariant_tests {
+        use super::*;
+
+        #[test]
+        fn test_clone_consistency() {
+            let cap1 = CapacitorBuilder::new()
+                .id("C1")
+                .val_scaled(10.0, Scale::Pico)
+                .nodes([1, 2])
+                .build();
+
+            let cap2 = cap1.clone();
+
+            assert_eq!(cap1.id(), cap2.id());
+            assert_eq!(cap1.val(), cap2.val());
+            assert_eq!(cap1.nodes(), cap2.nodes());
+        }
+
+        #[test]
+        fn test_equality_consistency() {
+            let cap1 = CapacitorBuilder::new()
+                .id("C1")
+                .val_scaled(10.0, Scale::Pico)
+                .build();
+
+            let cap2 = CapacitorBuilder::new()
+                .id("C1")
+                .val_scaled(10.0, Scale::Pico)
+                .build();
+
+            assert_eq!(cap1, cap2);
+        }
+
+        #[test]
+        fn test_impedance_calculation_deterministic() {
+            let freq = Frequency::new(array![1e9], Scale::Base);
+            let cap = CapacitorBuilder::new().val_scaled(1.0, Scale::Pico).build();
+
+            let z1 = cap.z(&freq);
+            let z2 = cap.z(&freq);
+            let z3 = cap.z(&freq);
+
+            assert_eq!(z1, z2);
+            assert_eq!(z2, z3);
+        }
+
+        #[test]
+        fn test_node_list_immutability_through_interface() {
+            let cap = CapacitorBuilder::new().nodes([1, 2]).build();
+
+            let nodes1 = cap.nodes();
+            let nodes2 = cap.nodes();
+
+            assert_eq!(nodes1, nodes2);
+        }
+
+        #[test]
+        fn test_c_matrix_dimensions_consistency() {
+            let freq = Frequency::new(array![1e9], Scale::Base);
+
+            let two_port_elements: Vec<Box<dyn Elem>> = vec![
+                Box::new(CapacitorBuilder::new().build()),
+                Box::new(ResistorBuilder::new().build()),
+                Box::new(InductorBuilder::new().build()),
+            ];
+
+            for elem in two_port_elements {
+                let c = elem.c(&freq);
+                assert_eq!(c.shape(), (2, 2));
+            }
+
+            let one_port_elements: Vec<Box<dyn Elem>> = vec![
+                Box::new(Ground::new()),
+                Box::new(PortBuilder::new().build()),
+            ];
+
+            for elem in one_port_elements {
+                let c = elem.c(&freq);
+                assert_eq!(c.shape(), (1, 1));
+            }
+        }
+
+        #[test]
+        fn test_net_matrix_dimensions_consistency() {
+            let freqs = array![1e9, 2e9, 5e9];
+            let freq = Frequency::new(freqs.clone(), Scale::Base);
+
+            let cap = CapacitorBuilder::new().build();
+            let net = cap.net(&freq);
+
+            assert_eq!(net.shape(), (3, 2, 2)); // [npts, 2, 2]
+        }
+    }
+
+    mod documentation_examples {
+        use super::*;
+
+        #[test]
+        fn test_basic_capacitor_usage() {
+            // Example from documentation
+            let cap = CapacitorBuilder::new()
+                .id("C1")
+                .val_scaled(10.0, Scale::Pico)
+                .nodes([1, 2])
+                .build();
+
+            let freq = Frequency::new(array![1e9], Scale::Base);
+            let z = cap.z(&freq);
+
+            assert!(z.is_finite());
+            assert!(z.im < 0.0); // Capacitive
+        }
+
+        #[test]
+        fn test_basic_resistor_usage() {
+            let res = ResistorBuilder::new()
+                .id("R1")
+                .val(50.0)
+                .nodes([1, 2])
+                .build();
+
+            let freq = Frequency::new(array![1e9], Scale::Base);
+            let z = res.z(&freq);
+
+            assert!(approx_eq!(f64, z.re, 50.0, epsilon = 1e-10));
+        }
+
+        #[test]
+        fn test_basic_inductor_usage() {
+            let ind = InductorBuilder::new()
+                .id("L1")
+                .val_scaled(1.0, Scale::Nano)
+                .nodes([1, 2])
+                .build();
+
+            let freq = Frequency::new(array![1e9], Scale::Base);
+            let z = ind.z(&freq);
+
+            assert!(z.is_finite());
+            assert!(z.im > 0.0); // Inductive
+        }
+
+        #[test]
+        fn test_basic_microstrip_usage() {
+            let sub = MsubBuilder::new()
+                .id("Sub1")
+                .er(4.5)
+                .tand(0.02)
+                .height_scaled(1.6, Scale::Milli)
+                .build();
+
+            let mlin = MlinBuilder::new()
+                .id("TL1")
+                .width_scaled(3.0, Scale::Milli)
+                .length_scaled(10.0, Scale::Milli)
+                .sub(&sub)
+                .nodes([1, 2])
+                .build();
+
+            assert_eq!(mlin.id(), "TL1");
+            assert_eq!(mlin.nodes(), vec![1, 2]);
+        }
+    }
 }

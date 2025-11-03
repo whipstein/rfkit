@@ -42,7 +42,7 @@ impl Default for Mlin {
             width: *UnitVal::default().set_unit(Unit::Meter),
             length: *UnitVal::default().set_unit(Unit::Meter),
             sub: Msub::default(),
-            nodes: [0, 0],
+            nodes: [1, 2],
         }
     }
 }
@@ -176,6 +176,7 @@ impl Unitized for Mlin {
     }
 }
 
+#[derive(Clone)]
 pub struct MlinBuilder {
     id: String,
     width: UnitVal,
@@ -368,12 +369,12 @@ impl Default for MlinBuilder {
     fn default() -> Self {
         Self {
             id: "ML0".to_string(),
-            width: UnitVal::default(),
-            length: UnitVal::default(),
+            width: *UnitVal::default().set_unit(Unit::Meter),
+            length: *UnitVal::default().set_unit(Unit::Meter),
             scale: Scale::Micro,
             unit: Unit::Meter,
             sub: Msub::default(),
-            nodes: [0, 0],
+            nodes: [1, 2],
             z0: None,
             freq: Frequency::default(),
         }
@@ -386,7 +387,17 @@ mod element_mlin_tests {
     use crate::element::msub::MsubBuilder;
     use crate::unit::UnitValBuilder;
     use crate::util::{comp_c64, comp_f64, comp_point_c64};
-    use float_cmp::F64Margin;
+    use float_cmp::*;
+
+    const DEFAULT_MARGIN: F64Margin = F64Margin {
+        epsilon: 1e-10,
+        ulps: 4,
+    };
+
+    const RELAXED_MARGIN: F64Margin = F64Margin {
+        epsilon: 1e-6,
+        ulps: 10,
+    };
 
     #[test]
     fn element_mlin1() {
@@ -528,4 +539,84 @@ mod element_mlin_tests {
     //     comp_c64(&exemplar_z, &calc.z(&freq), margin, "calc2.z()", "0");
     //     comp_f64(&exemplar_z.re, &calc.z0(&freq), margin, "calc2.z0()", "0");
     // }
+
+    mod mlin_tests {
+        use super::*;
+
+        #[test]
+        fn test_mlin_builder_default() {
+            let mlin = MlinBuilder::new().build();
+            assert_eq!(mlin.id(), "ML0");
+            assert_eq!(mlin.nodes(), vec![1, 2]);
+        }
+
+        #[test]
+        fn test_mlin_with_substrate() {
+            let sub = MsubBuilder::new()
+                .er(12.4)
+                .tand(0.0004)
+                .height_scaled(25.0, Scale::Micro)
+                .thickness_scaled(0.77, Scale::Micro)
+                .build();
+
+            let mlin = MlinBuilder::new()
+                .id("ML1")
+                .width_scaled(5.6758, Scale::Micro)
+                .length_scaled(0.25, Scale::Base)
+                .sub(&sub)
+                .nodes([1, 2])
+                .build();
+
+            assert_eq!(mlin.id(), "ML1");
+            assert_eq!(mlin.nodes(), vec![1, 2]);
+        }
+
+        #[test]
+        fn test_mlin_c_matrix_structure() {
+            let freq = Frequency::new(array![1e9], Scale::Base);
+            let sub = MsubBuilder::new().build();
+            let mlin = MlinBuilder::new().sub(&sub).build();
+
+            let c_matrix = mlin.c(&freq);
+
+            // Diagonal should be zero for transmission line
+            assert_eq!(c_matrix[[0, 0]], Complex64::ZERO);
+            assert_eq!(c_matrix[[1, 1]], Complex64::ZERO);
+
+            // Off-diagonal should be exponential terms
+            assert_ne!(c_matrix[[0, 1]], Complex64::ZERO);
+            assert_ne!(c_matrix[[1, 0]], Complex64::ZERO);
+        }
+
+        #[test]
+        fn test_mlin_distributed_trait() {
+            let sub = MsubBuilder::new().build();
+            let mlin = MlinBuilder::new()
+                .width_scaled(10.0, Scale::Micro)
+                .length_scaled(1000.0, Scale::Micro)
+                .sub(&sub)
+                .build();
+
+            approx_eq!(f64, mlin.width(), 10e-6);
+        }
+
+        #[test]
+        fn test_mlin_elem_type() {
+            let sub = MsubBuilder::new().build();
+            let mlin = MlinBuilder::new().sub(&sub).build();
+            assert_eq!(mlin.elem(), ElemType::Mlin);
+        }
+
+        #[test]
+        fn test_mlin_length_units() {
+            let sub = MsubBuilder::new().build();
+            let mlin = MlinBuilder::new()
+                .length_scaled(1000.0, Scale::Micro)
+                .length_unit(Unit::Meter)
+                .sub(&sub)
+                .build();
+
+            assert_eq!(mlin.unit(), Unit::Meter);
+        }
+    }
 }
