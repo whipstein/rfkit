@@ -1,6 +1,6 @@
 #![allow(unused_assignments)]
 #![allow(unused_variables)]
-use crate::minimize::{Minimizer, MinimizerResult, myfloat::ObjFn};
+use crate::minimize::{myfloat::ObjFn, Minimizer, MinimizerResult};
 use crate::myfloat::MyFloat;
 use ndarray::prelude::*;
 
@@ -149,7 +149,7 @@ impl NelderMeadBounded {
         self.verbosity = verbose;
     }
 
-    fn calc_obj(&mut self, x: &Array1<MyFloat>) -> MyFloat {
+    pub fn calc_obj(&mut self, x: &Array1<MyFloat>) -> MyFloat {
         let mut sum = MyFloat::new(0.0);
         for i in 0..x.len() {
             sum += (&self.ub[i] - &x[i]).ln() + (&x[i] - &self.lb[i]).ln();
@@ -157,23 +157,23 @@ impl NelderMeadBounded {
         &self.f.call(x) - &self.mu * &sum
     }
 
-    fn x(&self) -> &Array1<MyFloat> {
+    pub fn x(&self) -> &Array1<MyFloat> {
         &self.x
     }
 
-    fn final_value(&self) -> Option<MyFloat> {
+    pub fn final_value(&self) -> Option<MyFloat> {
         self.res.as_ref().map(|x| x[0].clone())
     }
 
-    fn tolerance(&self) -> Option<MyFloat> {
+    pub fn tolerance(&self) -> Option<MyFloat> {
         self.tol.clone()
     }
 
-    fn iterations(&self) -> usize {
+    pub fn iterations(&self) -> usize {
         self.iters
     }
 
-    fn name(&self) -> &str {
+    pub fn name(&self) -> &str {
         "NelderMeadBounded"
     }
 }

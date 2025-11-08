@@ -1,6 +1,6 @@
 #![allow(unused_assignments)]
 #![allow(unused_variables)]
-use crate::minimize::{Minimizer, MinimizerResult, f64::ObjFn};
+use crate::minimize::{f64::ObjFn, Minimizer, MinimizerResult};
 use ndarray::prelude::*;
 
 /// Result of Nelder-Mead optimization
@@ -148,7 +148,7 @@ impl NelderMeadBounded {
         self.verbosity = verbose;
     }
 
-    fn calc_obj(&mut self, x: &Array1<f64>) -> f64 {
+    pub fn calc_obj(&mut self, x: &Array1<f64>) -> f64 {
         let mut sum = 0.0;
         for i in 0..x.len() {
             sum += (self.ub[i] - x[i].clone()).ln() + (x[i].clone() - self.lb[i]).ln();
@@ -156,23 +156,23 @@ impl NelderMeadBounded {
         self.f.call(x) - self.mu * sum
     }
 
-    fn x(&self) -> &Array1<f64> {
+    pub fn x(&self) -> &Array1<f64> {
         &self.x
     }
 
-    fn final_value(&self) -> Option<f64> {
+    pub fn final_value(&self) -> Option<f64> {
         self.res.as_ref().map(|x| x[0])
     }
 
-    fn tolerance(&self) -> Option<f64> {
+    pub fn tolerance(&self) -> Option<f64> {
         self.tol
     }
 
-    fn iterations(&self) -> usize {
+    pub fn iterations(&self) -> usize {
         self.iters
     }
 
-    fn name(&self) -> &str {
+    pub fn name(&self) -> &str {
         "NelderMeadBounded"
     }
 }
