@@ -1,5 +1,6 @@
 use crate::element::{Elem, ElemType, Element};
 use crate::frequency::Frequency;
+use crate::network::{Network, NetworkBuilder};
 use crate::point::{Point, Pt};
 use crate::points::{Points, Pts};
 use crate::prelude::ElementBuilder;
@@ -340,10 +341,11 @@ impl CircuitMap {
 /// Scattering," P. Hallbjörner,
 /// Microwave and Optical Technology Letters,
 /// Vol. 38, No. 2, 2003, pgs 99-102.
-#[derive(Debug)]
-struct Circuit {
+#[derive(Debug, Clone)]
+pub struct Circuit {
     c: Points<Complex64>,               // Element Scattering Matrix
     freq: Frequency,                    // Frequencies
+    z0: Array1<Complex64>,              // Port Impedances
     map: CircuitMap,                    // Map element node to full circuit matrix position
     nodes: BTreeMap<usize, Node>,       // Interactions
     ports_only: bool,                   // Circuit Contains Ports Only
@@ -361,6 +363,9 @@ impl Circuit {
             if elem.elem() == ElemType::Port {
                 self.dim = (self.dim.0, self.dim.1 + 1, self.dim.2 + 1);
                 self.map.add_port(elem_node, elem.id());
+                let mut z0 = self.z0.clone().to_vec();
+                z0.push(elem.z(&self.freq));
+                self.z0 = Array1::from_vec(z0);
             } else {
                 self.ports_only = false;
                 self.map.add(elem_node, i, elem.id());
@@ -470,6 +475,7 @@ impl Circuit {
         Circuit {
             c: self.c.clone(),
             freq: self.freq.clone(),
+            z0: self.z0.clone(),
             map: self.map.clone(),
             nodes: self.nodes.clone(),
             ports_only: self.ports_only,
@@ -490,6 +496,7 @@ impl Circuit {
             dim: (f.npts(), 0, 0),
             dimx: (f.npts(), 1, 1),
             freq: f.clone(),
+            z0: array![],
             map: CircuitMap::new(),
             nodes: nodes,
             ports_only: true,
@@ -505,15 +512,60 @@ impl Circuit {
         self.calc_c(freq);
         self.calc_s();
     }
+
+    pub fn c(&self) -> Points<Complex64> {
+        self.c.clone()
+    }
+
+    pub fn freq(&self) -> Frequency {
+        self.freq.clone()
+    }
+
+    pub fn ports_only(&self) -> bool {
+        self.ports_only
+    }
+
+    pub fn s(&self) -> Points<Complex64> {
+        self.s.clone()
+    }
+
+    pub fn x(&self) -> Points<Complex64> {
+        self.x.clone()
+    }
+
+    pub fn dim(&self) -> (usize, usize, usize) {
+        self.dim
+    }
+
+    pub fn dimx(&self) -> (usize, usize, usize) {
+        self.dimx
+    }
+
+    pub fn elements(&self) -> HashMap<String, Element> {
+        self.elements.clone()
+    }
+
+    pub fn z0(&self) -> Array1<Complex64> {
+        self.z0.clone()
+    }
+
+    pub fn net(&self) -> Network {
+        NetworkBuilder::new()
+            .freq(self.freq().clone())
+            .z0(self.z0.clone())
+            .s(self.s.clone())
+            .build()
+    }
 }
 
 #[cfg(test)]
 mod circuit_tests {
     use super::*;
     use crate::{
-        element::ElementBuilder,
         element::msub::MsubBuilder,
+        element::{ElementBuilder, QBuilder, QMode},
         frequency::FrequencyBuilder,
+        impedance::{ComplexNumberType, ImpedanceBuilder, ImpedanceMode, ImpedanceType},
         points,
         scale::Scale,
         unit::{Unit, UnitValBuilder},
@@ -549,21 +601,21 @@ mod circuit_tests {
             .unwrap();
         let c1 = ElementBuilder::new()
             .elem(ElemType::Capacitor)
-            .val_scaled(1.0, Scale::Pico)
+            .unitval_val_scaled(1.0, Scale::Pico)
             .nodes(vec![1, 2])
             .id("C1")
             .build()
             .unwrap();
         let l1 = ElementBuilder::new()
             .elem(ElemType::Inductor)
-            .val_scaled(1.0, Scale::Nano)
+            .unitval_val_scaled(1.0, Scale::Nano)
             .nodes(vec![1, 2])
             .id("L1")
             .build()
             .unwrap();
         let r1 = ElementBuilder::new()
             .elem(ElemType::Resistor)
-            .val_scaled(20.0, Scale::Base)
+            .unitval_val_scaled(20.0, Scale::Base)
             .nodes(vec![1, 2])
             .id("R1")
             .build()
@@ -1344,7 +1396,7 @@ mod circuit_tests {
             .unwrap();
         let r1 = ElementBuilder::new()
             .elem(ElemType::Resistor)
-            .val_scaled(20.0, Scale::Base)
+            .unitval_val_scaled(20.0, Scale::Base)
             .nodes(vec![1, 2])
             .id("R1")
             .build()
@@ -1451,7 +1503,7 @@ mod circuit_tests {
             .unwrap();
         let r1 = ElementBuilder::new()
             .elem(ElemType::Resistor)
-            .val_scaled(20.0, Scale::Base)
+            .unitval_val_scaled(20.0, Scale::Base)
             .nodes(vec![1, 2])
             .id("R1")
             .build()
@@ -1568,7 +1620,7 @@ mod circuit_tests {
             .unwrap();
         let c1 = ElementBuilder::new()
             .elem(ElemType::Capacitor)
-            .val_scaled(1.0, Scale::Pico)
+            .unitval_val_scaled(1.0, Scale::Pico)
             .nodes(vec![1, 2])
             .id("C1")
             .build()
@@ -1675,7 +1727,7 @@ mod circuit_tests {
             .unwrap();
         let c1 = ElementBuilder::new()
             .elem(ElemType::Capacitor)
-            .val_scaled(1.0, Scale::Pico)
+            .unitval_val_scaled(1.0, Scale::Pico)
             .nodes(vec![1, 2])
             .id("C1")
             .build()
@@ -1799,7 +1851,7 @@ mod circuit_tests {
             .unwrap();
         let l1 = ElementBuilder::new()
             .elem(ElemType::Inductor)
-            .val_scaled(1.0, Scale::Nano)
+            .unitval_val_scaled(1.0, Scale::Nano)
             .nodes(vec![1, 2])
             .id("L1")
             .build()
@@ -1906,7 +1958,7 @@ mod circuit_tests {
             .unwrap();
         let l1 = ElementBuilder::new()
             .elem(ElemType::Inductor)
-            .val_scaled(1.0, Scale::Nano)
+            .unitval_val_scaled(1.0, Scale::Nano)
             .nodes(vec![1, 2])
             .id("L1")
             .build()
@@ -2006,6 +2058,265 @@ mod circuit_tests {
     }
 
     #[test]
+    fn circuit_shunt_l() {
+        let margin = MARGIN;
+        let z0 = 50.0;
+        let freq = FrequencyBuilder::new()
+            .freqs_scaled(array![275.0], Scale::Giga)
+            .build();
+        let src = ImpedanceBuilder::new()
+            .kind(ImpedanceType::Z)
+            .category(ComplexNumberType::ReIm)
+            .mode(ImpedanceMode::Se)
+            .re(92.8568)
+            .im(0.0)
+            .z0(z0)
+            .freq(freq.unitval(0))
+            .build();
+        let load = ImpedanceBuilder::new()
+            .kind(ImpedanceType::Z)
+            .category(ComplexNumberType::ReIm)
+            .mode(ImpedanceMode::Se)
+            .re(18.9383)
+            .im(0.0)
+            .z0(z0)
+            .freq(freq.unitval(0))
+            .build();
+        let mut cir = Circuit::new(&freq);
+        let p1 = ElementBuilder::new()
+            .elem(ElemType::Port)
+            .z(src.rp().val().into())
+            .nodes(vec![1])
+            .id("p1")
+            .build()
+            .unwrap();
+        let p2 = ElementBuilder::new()
+            .elem(ElemType::Port)
+            .z(load.rp().val().into())
+            .nodes(vec![2])
+            .id("p2")
+            .build()
+            .unwrap();
+        let short = ElementBuilder::new()
+            .elem(ElemType::Short)
+            .nodes(vec![1, 2])
+            .id("S0")
+            .build()
+            .unwrap();
+        let ls = ElementBuilder::new()
+            .elem(ElemType::Inductor)
+            .unitval_val_scaled(5.0, Scale::Pico)
+            .nodes(vec![2, 0])
+            .id("Ls")
+            .build()
+            .unwrap();
+        cir.add_elem(&p1, &freq);
+        cir.add_elem(&p2, &freq);
+        cir.add_elem(&ls, &freq);
+        cir.add_elem(&short, &freq);
+
+        let exemplar_s = points![
+            Complex64,
+            [
+                [
+                    c64(-0.9214835975613086, 0.14295557061866743),
+                    c64(0.1738588301058095, 0.3165464475308452)
+                ],
+                [
+                    c64(0.1738588301058095, 0.3165464475308452),
+                    c64(-0.6150244806572353, 0.7009286382528254)
+                ]
+            ]
+        ];
+        comp_points_c64(&exemplar_s, &cir.s, margin, "cir.s(1)");
+
+        let src = ImpedanceBuilder::new()
+            .kind(ImpedanceType::Z)
+            .category(ComplexNumberType::ReIm)
+            .mode(ImpedanceMode::Se)
+            .re(9.4595)
+            .im(-28.0873)
+            .z0(z0)
+            .freq(freq.unitval(0))
+            .build();
+        let mut cir = Circuit::new(&freq);
+        let p1 = ElementBuilder::new()
+            .elem(ElemType::Port)
+            .z(src.rp().val().into())
+            .nodes(vec![1])
+            .id("p1")
+            .build()
+            .unwrap();
+        let p2 = ElementBuilder::new()
+            .elem(ElemType::Port)
+            .z(load.rp().val().into())
+            .nodes(vec![2])
+            .id("p2")
+            .build()
+            .unwrap();
+        let cp1 = ElementBuilder::new()
+            .elem(ElemType::Capacitor)
+            .unitval_val(src.cp().val().into())
+            .scale(Scale::Femto)
+            .nodes(vec![1, 0])
+            .id("Cp1")
+            .build()
+            .unwrap();
+        cir.add_elem(&p1, &freq);
+        cir.add_elem(&p2, &freq);
+        cir.add_elem(&cp1, &freq);
+        cir.add_elem(&ls, &freq);
+        cir.add_elem(&short, &freq);
+
+        let exemplar_s = points![
+            Complex64,
+            [
+                [
+                    c64(-0.8761891493750931, 0.1631491116557464),
+                    c64(0.27415425099996193, 0.3612609256905665)
+                ],
+                [
+                    c64(0.27415425099996193, 0.3612609256905665),
+                    c64(-0.3929404978481734, 0.7999397306323501)
+                ]
+            ]
+        ];
+        comp_points_c64(&exemplar_s, &cir.s, margin, "cir.s(2)");
+
+        let load = ImpedanceBuilder::new()
+            .kind(ImpedanceType::Z)
+            .category(ComplexNumberType::ReIm)
+            .mode(ImpedanceMode::Se)
+            .re(16.923)
+            .im(-5.84)
+            .z0(z0)
+            .freq(freq.unitval(0))
+            .build();
+        let mut cir = Circuit::new(&freq);
+        let p1 = ElementBuilder::new()
+            .elem(ElemType::Port)
+            .z(src.rp().val().into())
+            .nodes(vec![1])
+            .id("p1")
+            .build()
+            .unwrap();
+        let p2 = ElementBuilder::new()
+            .elem(ElemType::Port)
+            .z(load.rp().val().into())
+            .nodes(vec![2])
+            .id("p2")
+            .build()
+            .unwrap();
+        let cp1 = ElementBuilder::new()
+            .elem(ElemType::Capacitor)
+            .unitval_val(src.cp().val().into())
+            .scale(Scale::Femto)
+            .nodes(vec![1, 0])
+            .id("Cp1")
+            .build()
+            .unwrap();
+        let cp2 = ElementBuilder::new()
+            .elem(ElemType::Capacitor)
+            .unitval_val(load.cp().val().into())
+            .scale(Scale::Femto)
+            .nodes(vec![2, 0])
+            .id("Cp2")
+            .build()
+            .unwrap();
+        cir.add_elem(&p1, &freq);
+        cir.add_elem(&p2, &freq);
+        cir.add_elem(&cp1, &freq);
+        cir.add_elem(&cp2, &freq);
+        cir.add_elem(&ls, &freq);
+        cir.add_elem(&short, &freq);
+
+        let exemplar_s = points![
+            Complex64,
+            [
+                [
+                    c64(-0.8357881602107229, 0.1693191357519407),
+                    c64(0.36361373893745236, 0.3749228076576333)
+                ],
+                [
+                    c64(0.36361373893745236, 0.3749228076576333),
+                    c64(-0.1948512889585977, 0.8301903448634361)
+                ]
+            ]
+        ];
+        comp_points_c64(&exemplar_s, &cir.s, margin, "cir.s(3)");
+
+        let mut cir = Circuit::new(&freq);
+        let ls = ElementBuilder::new()
+            .elem(ElemType::Inductor)
+            .unitval_val_scaled(5.0, Scale::Pico)
+            .q(QBuilder::new()
+                .q(15.0)
+                .fq(freq.clone())
+                .mode(QMode::ProportionalToFreq)
+                .build())
+            .nodes(vec![2, 0])
+            .id("Ls")
+            .build()
+            .unwrap();
+        cir.add_elem(&p1, &freq);
+        cir.add_elem(&p2, &freq);
+        cir.add_elem(&cp1, &freq);
+        cir.add_elem(&cp2, &freq);
+        cir.add_elem(&ls, &freq);
+        cir.add_elem(&short, &freq);
+
+        let exemplar_s = points![
+            Complex64,
+            [
+                [
+                    c64(-0.835105153421519, 0.15050653480106269),
+                    c64(0.36512611863346456, 0.33326612699645153)
+                ],
+                [
+                    c64(0.36512611863346456, 0.33326612699645153),
+                    c64(-0.19150243155181312, 0.7379500933299726)
+                ]
+            ]
+        ];
+        comp_points_c64(&exemplar_s, &cir.s, margin, "cir.s(4)");
+
+        let mut cir = Circuit::new(&freq);
+        let ls = ElementBuilder::new()
+            .elem(ElemType::Inductor)
+            .unitval_val_scaled(11.4782, Scale::Pico)
+            .q(QBuilder::new()
+                .q(15.0)
+                .fq(freq.clone())
+                .mode(QMode::ProportionalToFreq)
+                .build())
+            .nodes(vec![2, 0])
+            .id("Ls")
+            .build()
+            .unwrap();
+        cir.add_elem(&p1, &freq);
+        cir.add_elem(&p2, &freq);
+        cir.add_elem(&cp1, &freq);
+        cir.add_elem(&cp2, &freq);
+        cir.add_elem(&ls, &freq);
+        cir.add_elem(&short, &freq);
+
+        let exemplar_s = points![
+            Complex64,
+            [
+                [
+                    c64(-0.6781331823072998, -0.00000023520389949955467),
+                    c64(0.712708640079339, -0.0000005208112242055668)
+                ],
+                [
+                    c64(0.712708640079339, -0.0000005208112242055668),
+                    c64(0.5781484071113706, -0.0000011532305877395315)
+                ]
+            ]
+        ];
+        comp_points_c64(&exemplar_s, &cir.s, margin, "cir.s(5)");
+    }
+
+    #[test]
     fn circuit_rc() {
         let freq_points: Vec<f64> = vec![1.0];
         let freq = FrequencyBuilder::new()
@@ -2030,14 +2341,14 @@ mod circuit_tests {
             .unwrap();
         let c1 = ElementBuilder::new()
             .elem(ElemType::Capacitor)
-            .val_scaled(1.0, Scale::Pico)
+            .unitval_val_scaled(1.0, Scale::Pico)
             .nodes(vec![1, 2])
             .id("C1")
             .build()
             .unwrap();
         let r1 = ElementBuilder::new()
             .elem(ElemType::Resistor)
-            .val_scaled(20.0, Scale::Base)
+            .unitval_val_scaled(20.0, Scale::Base)
             .nodes(vec![1, 2])
             .id("R1")
             .build()
@@ -2226,14 +2537,14 @@ mod circuit_tests {
             .unwrap();
         let c1 = ElementBuilder::new()
             .elem(ElemType::Capacitor)
-            .val_scaled(1.0, Scale::Pico)
+            .unitval_val_scaled(1.0, Scale::Pico)
             .nodes(vec![1, 2])
             .id("C1")
             .build()
             .unwrap();
         let r1 = ElementBuilder::new()
             .elem(ElemType::Resistor)
-            .val_scaled(20.0, Scale::Base)
+            .unitval_val_scaled(20.0, Scale::Base)
             .nodes(vec![1, 2])
             .id("R1")
             .build()
@@ -2441,14 +2752,14 @@ mod circuit_tests {
             .unwrap();
         let l1 = ElementBuilder::new()
             .elem(ElemType::Inductor)
-            .val_scaled(1.0, Scale::Nano)
+            .unitval_val_scaled(1.0, Scale::Nano)
             .nodes(vec![1, 2])
             .id("L1")
             .build()
             .unwrap();
         let r1 = ElementBuilder::new()
             .elem(ElemType::Resistor)
-            .val_scaled(20.0, Scale::Base)
+            .unitval_val_scaled(20.0, Scale::Base)
             .nodes(vec![1, 2])
             .id("R1")
             .build()
@@ -2557,14 +2868,14 @@ mod circuit_tests {
             .unwrap();
         let l1 = ElementBuilder::new()
             .elem(ElemType::Inductor)
-            .val_scaled(1.0, Scale::Nano)
+            .unitval_val_scaled(1.0, Scale::Nano)
             .nodes(vec![1, 2])
             .id("L1")
             .build()
             .unwrap();
         let r1 = ElementBuilder::new()
             .elem(ElemType::Resistor)
-            .val_scaled(20.0, Scale::Base)
+            .unitval_val_scaled(20.0, Scale::Base)
             .nodes(vec![1, 2])
             .id("R1")
             .build()
@@ -2690,14 +3001,14 @@ mod circuit_tests {
             .unwrap();
         let l1 = ElementBuilder::new()
             .elem(ElemType::Inductor)
-            .val_scaled(1.0, Scale::Nano)
+            .unitval_val_scaled(1.0, Scale::Nano)
             .nodes(vec![1, 2])
             .id("L1")
             .build()
             .unwrap();
         let c1 = ElementBuilder::new()
             .elem(ElemType::Capacitor)
-            .val_scaled(1.0, Scale::Pico)
+            .unitval_val_scaled(1.0, Scale::Pico)
             .nodes(vec![1, 2])
             .id("C1")
             .build()
@@ -2806,14 +3117,14 @@ mod circuit_tests {
             .unwrap();
         let l1 = ElementBuilder::new()
             .elem(ElemType::Inductor)
-            .val_scaled(1.0, Scale::Nano)
+            .unitval_val_scaled(1.0, Scale::Nano)
             .nodes(vec![1, 2])
             .id("L1")
             .build()
             .unwrap();
         let c1 = ElementBuilder::new()
             .elem(ElemType::Capacitor)
-            .val_scaled(1.0, Scale::Pico)
+            .unitval_val_scaled(1.0, Scale::Pico)
             .nodes(vec![1, 0])
             .id("C1")
             .build()
@@ -2930,14 +3241,14 @@ mod circuit_tests {
             .unwrap();
         let l1 = ElementBuilder::new()
             .elem(ElemType::Inductor)
-            .val_scaled(1.0, Scale::Nano)
+            .unitval_val_scaled(1.0, Scale::Nano)
             .nodes(vec![1, 2])
             .id("L1")
             .build()
             .unwrap();
         let c1 = ElementBuilder::new()
             .elem(ElemType::Capacitor)
-            .val_scaled(1.0, Scale::Pico)
+            .unitval_val_scaled(1.0, Scale::Pico)
             .nodes(vec![2, 0])
             .id("C1")
             .build()
@@ -3054,14 +3365,14 @@ mod circuit_tests {
             .unwrap();
         let l1 = ElementBuilder::new()
             .elem(ElemType::Inductor)
-            .val_scaled(1.0, Scale::Nano)
+            .unitval_val_scaled(1.0, Scale::Nano)
             .nodes(vec![2, 0])
             .id("L1")
             .build()
             .unwrap();
         let c1 = ElementBuilder::new()
             .elem(ElemType::Capacitor)
-            .val_scaled(1.0, Scale::Pico)
+            .unitval_val_scaled(1.0, Scale::Pico)
             .nodes(vec![1, 2])
             .id("C1")
             .build()
@@ -3187,21 +3498,21 @@ mod circuit_tests {
             .unwrap();
         let c1 = ElementBuilder::new()
             .elem(ElemType::Capacitor)
-            .val_scaled(1.0, Scale::Pico)
+            .unitval_val_scaled(1.0, Scale::Pico)
             .nodes(vec![1, 2])
             .id("C1")
             .build()
             .unwrap();
         let l1 = ElementBuilder::new()
             .elem(ElemType::Inductor)
-            .val_scaled(1.0, Scale::Nano)
+            .unitval_val_scaled(1.0, Scale::Nano)
             .nodes(vec![1, 2])
             .id("L1")
             .build()
             .unwrap();
         let r1 = ElementBuilder::new()
             .elem(ElemType::Resistor)
-            .val_scaled(20.0, Scale::Base)
+            .unitval_val_scaled(20.0, Scale::Base)
             .nodes(vec![1, 2])
             .id("R1")
             .build()
@@ -3374,7 +3685,7 @@ mod circuit_tests {
             .unwrap();
         let r1 = ElementBuilder::new()
             .elem(ElemType::Resistor)
-            .val(100.0)
+            .unitval_val(100.0)
             .nodes(vec![2, 3])
             .id("R1")
             .build()
@@ -3508,21 +3819,21 @@ mod circuit_tests {
             .unwrap();
         let l1 = ElementBuilder::new()
             .elem(ElemType::Inductor)
-            .val_scaled(1.0, Scale::Nano)
+            .unitval_val_scaled(1.0, Scale::Nano)
             .nodes(vec![1, 3])
             .id("L1")
             .build()
             .unwrap();
         let l2 = ElementBuilder::new()
             .elem(ElemType::Inductor)
-            .val_scaled(1.0, Scale::Nano)
+            .unitval_val_scaled(1.0, Scale::Nano)
             .nodes(vec![3, 2])
             .id("L2")
             .build()
             .unwrap();
         let c1 = ElementBuilder::new()
             .elem(ElemType::Capacitor)
-            .val_scaled(1.0, Scale::Pico)
+            .unitval_val_scaled(1.0, Scale::Pico)
             .nodes(vec![3, 0])
             .id("C1")
             .build()

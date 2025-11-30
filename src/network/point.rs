@@ -6,6 +6,7 @@ use crate::mycomplex::MyComplex;
 use crate::myfloat::MyFloat;
 use crate::network::{NetworkPoint, WaveType};
 use crate::parameter::RFParameter;
+use crate::point;
 use crate::point::{Point, Pt};
 use crate::unit::Unit;
 use ndarray::OwnedRepr;
@@ -87,7 +88,13 @@ impl NetworkPoint<Point<f64>, (f64, f64), Complex64> for Point<Complex64> {
     }
 
     fn db(&self) -> Point<f64> {
-        Point::<f64>::from_shape_fn(self.dim(), |(j, k)| 20.0 * self[(j, k)].norm().log10())
+        Point::<f64>::from_shape_fn(self.dim(), |(j, k)| {
+            if self[(j, k)].norm().log10().is_finite() {
+                20.0 * self[(j, k)].norm().log10()
+            } else {
+                -400.0
+            }
+        })
     }
 
     fn deg(&self) -> Point<f64> {
@@ -1450,21 +1457,43 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
         if !self.is_square() {
             return None;
         }
-        let id = Point::<MyComplex>::eye(self.nrows());
-        let sqz0inv = Point::<MyComplex>::from_shape_fn((self.nrows(), self.ncols()), |(i, j)| {
-            if i == j {
-                1.0 / z0[[i]].sqrt()
-            } else {
-                (0.0).into()
+        if self.nrows() == 2 {
+            let det = (z0[0].conj() + &self[[0, 0]] * &z0[0])
+                * (z0[1].conj() + &self[[1, 1]] * &z0[1])
+                - &self[[0, 1]] * &self[[1, 0]] * &z0[0] * &z0[1];
+            Some(point![
+                MyComplex,
+                [
+                    ((1.0 - &self[[0, 0]]) * (z0[1].conj() + &self[[1, 1]] * &z0[1])
+                        + &self[[0, 1]] * &self[[1, 0]] * &z0[1])
+                        / &det,
+                    -2.0 * &self[[0, 1]] * (z0[0].real() * z0[1].real()).sqrt() / &det
+                ],
+                [
+                    -2.0 * &self[[1, 0]] * (z0[0].real() * z0[1].real()).sqrt() / &det,
+                    ((z0[0].conj() + &self[[0, 0]] * &z0[0]) * (1.0 - &self[[1, 1]])
+                        + &self[[0, 1]] * &self[[1, 0]] * &z0[0])
+                        / &det
+                ]
+            ])
+        } else {
+            let id = Point::<MyComplex>::eye(self.nrows());
+            let sqz0inv =
+                Point::<MyComplex>::from_shape_fn((self.nrows(), self.ncols()), |(i, j)| {
+                    if i == j {
+                        1.0 / z0[[i]].sqrt()
+                    } else {
+                        (0.0).into()
+                    }
+                });
+
+            let diff = &id - self;
+            let sum = (&id + self).try_inv();
+
+            match sum {
+                Ok(x) => Some(sqz0inv.dot(&diff).dot(&x).dot(&sqz0inv)),
+                _ => None,
             }
-        });
-
-        let diff = &id - self;
-        let sum = (&id + self).try_inv();
-
-        match sum {
-            Ok(x) => Some(sqz0inv.dot(&diff).dot(&x).dot(&sqz0inv)),
-            _ => None,
         }
     }
 
@@ -1472,17 +1501,36 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
         if !self.is_square() {
             return None;
         }
-        let id = Point::<MyComplex>::eye(self.nrows());
-        let sqz0 = Point::<MyComplex>::from_shape_fn((self.nrows(), self.ncols()), |(i, j)| {
-            if i == j { z0[[i]].sqrt() } else { (0.0).into() }
-        });
+        if self.nrows() == 2 {
+            let det = (1.0 - &self[[0, 0]]) * (1.0 - &self[[1, 1]]) - &self[[0, 1]] * &self[[1, 0]];
+            Some(point![
+                MyComplex,
+                [
+                    ((z0[0].conj() + &self[[0, 0]] * &z0[0]) * (1.0 - &self[[1, 1]])
+                        + &self[[0, 1]] * &self[[1, 0]] * &z0[0])
+                        / &det,
+                    2.0 * &self[[0, 1]] * (z0[0].real() * z0[1].real()).sqrt() / &det
+                ],
+                [
+                    2.0 * &self[[1, 0]] * (z0[0].real() * z0[1].real()).sqrt() / &det,
+                    ((1.0 - &self[[0, 0]]) * (z0[1].conj() + &self[[1, 1]] * &z0[1])
+                        + &self[[0, 1]] * &self[[1, 0]] * &z0[1])
+                        / &det
+                ]
+            ])
+        } else {
+            let id = Point::<MyComplex>::eye(self.nrows());
+            let sqz0 = Point::<MyComplex>::from_shape_fn((self.nrows(), self.ncols()), |(i, j)| {
+                if i == j { z0[[i]].sqrt() } else { (0.0).into() }
+            });
 
-        let diff = (&id - self).try_inv();
-        let sum = &id + self;
+            let diff = (&id - self).try_inv();
+            let sum = &id + self;
 
-        match diff {
-            Ok(x) => Some(sqz0.dot(&x).dot(&sum).dot(&sqz0)),
-            _ => None,
+            match diff {
+                Ok(x) => Some(sqz0.dot(&x).dot(&sum).dot(&sqz0)),
+                _ => None,
+            }
         }
     }
 

@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+use crate::error::MinimizerError;
 use crate::myfloat::MyFloat;
 use dyn_clone::DynClone;
 use ndarray::prelude::*;
@@ -244,15 +245,28 @@ where
 //     let mut optimizer = NelderMead::new(x, scale, objective);
 //     optimizer.solve(100);
 // }
-pub trait Minimizer<T> {
+pub trait Minimizer<T, U> {
     /// Run the optimization for specified iterations
-    fn minimize(&mut self, max_iters: Option<usize>) -> Box<dyn MinimizerResult<T>>;
+    fn minimize(
+        &mut self,
+        opt: Box<dyn MinimizerOptions<T, U>>,
+    ) -> Result<Box<dyn MinimizerResult<T, U>>, MinimizerError>;
 }
 
-pub trait MinimizerResult<T> {
+pub trait MinimizerOptions<T, U> {
+    fn initial_point(&self) -> T;
+    fn scale(&self) -> T;
+    fn max_iterations(&self) -> usize;
+    fn tolerance(&self) -> U;
+    fn verbosity(&self) -> usize;
+}
+
+pub trait MinimizerResult<T, U> {
     fn xmin(&self) -> T;
-    fn fmin(&self) -> f64;
+    fn fmin(&self) -> U;
+    fn tolerance(&self) -> U;
     fn fn_evals(&self) -> usize;
     fn iters(&self) -> usize;
     fn converged(&self) -> bool;
+    fn history(&self) -> T;
 }

@@ -1,14 +1,14 @@
 #![allow(dead_code)]
 #![allow(unused_assignments)]
 use crate::error::MinimizerError;
-use crate::minimize::f64::ObjFn;
+use crate::minimize::{Minimizer, MinimizerOptions, MinimizerResult, f64::ObjFn};
 use ndarray::prelude::*;
 use rand::prelude::*;
 use rand_distr::{Distribution, Normal};
 use std::fmt;
 
 /// Result of CMA-ES optimization
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct CmaEsResult {
     pub xmin: Array1<f64>,
     pub fmin: f64,
@@ -18,6 +18,121 @@ pub struct CmaEsResult {
     pub final_sigma: f64,
     pub condition_number: f64,
     pub history: Vec<f64>,
+}
+
+impl MinimizerResult<Array1<f64>, f64> for CmaEsResult {
+    fn converged(&self) -> bool {
+        self.converged
+    }
+
+    fn fmin(&self) -> f64 {
+        self.fmin
+    }
+
+    fn tolerance(&self) -> f64 {
+        // CMA-ES doesn't track tolerance the same way, return 0.0
+        0.0
+    }
+
+    fn fn_evals(&self) -> usize {
+        self.fn_evals
+    }
+
+    fn iters(&self) -> usize {
+        self.generations
+    }
+
+    fn xmin(&self) -> Array1<f64> {
+        self.xmin.clone()
+    }
+
+    fn history(&self) -> Array1<f64> {
+        Array1::from_vec(self.history.clone())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct CmaEsOptions {
+    initial_point: Array1<f64>,
+    scale: Array1<f64>,
+    initial_sigma: f64,
+    population_size: usize,
+    tolerance: f64,
+    max_generations: usize,
+    verbosity: usize,
+}
+
+impl CmaEsOptions {
+    pub fn new(
+        init: Array1<f64>,
+        scale: Option<Array1<f64>>,
+        init_sigma: Option<f64>,
+        pop_size: Option<usize>,
+        tol: Option<f64>,
+        max_gen: Option<usize>,
+        verbosity: Option<usize>,
+    ) -> Self {
+        let n = init.len();
+        Self {
+            initial_point: init,
+            scale: scale.unwrap_or(Array1::ones(n)),
+            initial_sigma: init_sigma.unwrap_or(0.3),
+            population_size: pop_size.unwrap_or(4 + (3.0 * (n as f64).ln()) as usize),
+            tolerance: tol.unwrap_or(1e-11),
+            max_generations: max_gen.unwrap_or(1000),
+            verbosity: verbosity.unwrap_or(0),
+        }
+    }
+
+    pub fn set_initial_point(&mut self, init: Array1<f64>) {
+        self.initial_point = init;
+    }
+
+    pub fn set_initial_sigma(&mut self, sigma: f64) {
+        self.initial_sigma = sigma;
+    }
+
+    pub fn set_population_size(&mut self, pop: usize) {
+        self.population_size = pop;
+    }
+
+    pub fn set_tolerance(&mut self, tol: f64) {
+        self.tolerance = tol;
+    }
+
+    pub fn set_max_generations(&mut self, generations: usize) {
+        self.max_generations = generations;
+    }
+
+    pub fn set_scale(&mut self, scale: Array1<f64>) {
+        self.scale = scale;
+    }
+
+    pub fn set_verbosity(&mut self, val: usize) {
+        self.verbosity = val;
+    }
+}
+
+impl MinimizerOptions<Array1<f64>, f64> for CmaEsOptions {
+    fn initial_point(&self) -> Array1<f64> {
+        self.initial_point.clone()
+    }
+
+    fn scale(&self) -> Array1<f64> {
+        self.scale.clone()
+    }
+
+    fn max_iterations(&self) -> usize {
+        self.max_generations
+    }
+
+    fn tolerance(&self) -> f64 {
+        self.tolerance
+    }
+
+    fn verbosity(&self) -> usize {
+        self.verbosity
+    }
 }
 
 #[derive(Clone)]
@@ -180,6 +295,7 @@ impl CmaEs {
         population_size: Option<usize>,
         tol: Option<f64>,
         max_generations: Option<usize>,
+        scale: Option<f64>,
     ) -> Result<CmaEsResult, MinimizerError> {
         self.converged = false;
         let n = initial_point.len();
@@ -192,6 +308,8 @@ impl CmaEs {
         let mu = lambda / 2;
         let tol = tol.unwrap_or(1e-11);
         let max_gen = max_generations.unwrap_or(1000);
+        let scl = scale.unwrap_or(1.0);
+        let init_pt = initial_point * scl;
 
         if sigma <= 0.0 {
             return Err(MinimizerError::InvalidTolerance);
@@ -221,7 +339,7 @@ impl CmaEs {
         let mueff = 1.0 / weights.iter().map(|w| w.powi(2)).sum::<f64>();
 
         // Initialize evolution paths and covariance matrix
-        let mut xmean = initial_point.clone();
+        let mut xmean = init_pt.clone();
         let mut sigma = sigma;
         let mut pc = Array1::<f64>::zeros(n);
         let mut ps = Array1::<f64>::zeros(n);
@@ -259,7 +377,7 @@ impl CmaEs {
                 }
 
                 // x = xmean + sigma * y
-                let x = Array1::from_shape_fn(xmean.len(), |i| xmean[i] + sigma * y[i]);
+                let x = Array1::from_shape_fn(xmean.len(), |i| (xmean[i] + sigma * y[i]) / scl);
 
                 let f_val = self.f.call(&x);
                 fn_evals += 1;
@@ -395,7 +513,7 @@ impl CmaEs {
         let mut indices: Vec<usize> = (0..lambda).collect();
         indices.sort_by(|&i, &j| fitness[i].partial_cmp(&fitness[j]).unwrap());
 
-        self.xmin = population[indices[0]].clone();
+        self.xmin = population[indices[0]].clone() / scl;
         self.fmin = fitness[indices[0]];
         self.converged = false;
 
@@ -411,10 +529,247 @@ impl CmaEs {
         })
     }
 
-    /// Simplified CMA-ES with default parameters
-    pub fn minimize(&mut self, initial_point: Array1<f64>) -> Result<CmaEsResult, MinimizerError> {
-        self.cma_es(initial_point, None, None, None, None)
+    pub fn cma_es_opt(&mut self, opt: CmaEsOptions) -> Result<Box<CmaEsResult>, MinimizerError> {
+        self.converged = false;
+        let n = opt.initial_point.len();
+        if n == 0 {
+            return Err(MinimizerError::InvalidDimension);
+        }
+
+        let sigma = opt.initial_sigma;
+        let lambda = opt.population_size;
+        let mu = lambda / 2;
+        let tol = opt.tolerance;
+        let max_gen = opt.max_generations;
+        let scl = opt.scale;
+        let init_pt = &opt.initial_point * &scl;
+
+        if sigma <= 0.0 {
+            return Err(MinimizerError::InvalidTolerance);
+        }
+
+        // Strategy parameters
+        let cc = (4.0 + mu as f64 / n as f64) / (n as f64 + 4.0 + 2.0 * mu as f64 / n as f64);
+        let cs = (mu as f64 + 2.0) / (n as f64 + mu as f64 + 5.0);
+        let c1 = 2.0 / ((n as f64 + 1.3).powi(2) + mu as f64);
+        let cmu = 2_f64.min(1.0 - c1) * (mu as f64 - 2.0 + 1.0 / mu as f64)
+            / ((n as f64 + 2.0).powi(2) + mu as f64);
+        let damps = 1.0 + 2.0 * (0.0_f64).max((mu as f64 - 1.0) / (n as f64 + 1.0) - 1.0) + cs;
+
+        // Expectation of ||N(0,I)||
+        let chi_n =
+            (n as f64).sqrt() * (1.0 - 1.0 / (4.0 * n as f64) + 1.0 / (21.0 * (n as f64).powi(2)));
+
+        // Weights for recombination
+        let mut weights = Array1::zeros(mu);
+        for i in 0..mu {
+            weights[i] = ((mu as f64 + 1.0) / 2.0).ln() - ((i + 1) as f64).ln();
+        }
+        let sum_weights: f64 = weights.iter().sum();
+        for w in &mut weights {
+            *w /= sum_weights;
+        }
+        let mueff = 1.0 / weights.iter().map(|w| w.powi(2)).sum::<f64>();
+
+        // Initialize evolution paths and covariance matrix
+        let mut xmean = init_pt.clone();
+        let mut sigma = sigma;
+        let mut pc = Array1::<f64>::zeros(n);
+        let mut ps = Array1::<f64>::zeros(n);
+        let mut c = Array2::eye(n);
+
+        let mut fn_evals = 0;
+        self.generations = 0;
+        let mut history = Vec::new();
+
+        while self.generations < max_gen {
+            self.generations += 1;
+
+            // Generate and evaluate population
+            let (eigenvalues, eigenvectors) = self.eigen_decomposition(&c);
+            let sqrt_eigenvalues: Array1<f64> =
+                Array1::from_shape_fn(eigenvalues.len(), |i| eigenvalues[i].max(0.0).sqrt());
+
+            let mut population = Vec::with_capacity(lambda);
+            let mut fitness = Vec::with_capacity(lambda);
+
+            for _ in 0..lambda {
+                // Sample from N(0,I)
+                let mut z = Array1::zeros(n);
+                for i in 0..n {
+                    let normal = Normal::new(0.0, 1.0).unwrap();
+                    z[i] = normal.sample(&mut self.rng);
+                }
+
+                // Transform: y = B * D * z (where B=eigenvectors, D=sqrt(eigenvalues))
+                let mut y = Array1::<f64>::zeros(n);
+                for i in 0..n {
+                    for j in 0..n {
+                        y[i] += eigenvectors[[j, i]] * sqrt_eigenvalues[j] * z[j];
+                    }
+                }
+
+                // x = xmean + sigma * y
+                let x = Array1::from_shape_fn(xmean.len(), |i| (xmean[i] + sigma * y[i]) / scl[i]);
+
+                let f_val = self.f.call(&x);
+                fn_evals += 1;
+
+                if !f_val.is_finite() {
+                    return Err(MinimizerError::FunctionEvaluationError);
+                }
+
+                population.push((x, y, z));
+                fitness.push(f_val);
+            }
+
+            // Sort by fitness
+            let mut indices: Vec<usize> = (0..lambda).collect();
+            indices.sort_by(|&i, &j| fitness[i].partial_cmp(&fitness[j]).unwrap());
+
+            let best_fitness = fitness[indices[0]];
+            history.push(best_fitness);
+
+            // Check for convergence
+            if sigma < tol {
+                self.xmin = population[indices[0]].0.clone();
+                self.fmin = best_fitness;
+                self.converged = true;
+                return Ok(Box::new(CmaEsResult {
+                    xmin: self.xmin.clone(),
+                    fmin: self.fmin,
+                    generations: self.generations,
+                    fn_evals,
+                    converged: self.converged,
+                    final_sigma: sigma,
+                    condition_number: self.condition_number(&eigenvalues),
+                    history,
+                }));
+            }
+
+            // Recombination: update mean
+            xmean = Array1::zeros(n);
+            for i in 0..mu {
+                let idx = indices[i];
+                for j in 0..n {
+                    xmean[j] += weights[i] * population[idx].0[j];
+                }
+            }
+
+            // Update evolution paths
+            let mut ymean = Array1::<f64>::zeros(n);
+            let mut zmean = Array1::<f64>::zeros(n);
+            for i in 0..mu {
+                let idx = indices[i];
+                for j in 0..n {
+                    ymean[j] += weights[i] * population[idx].1[j];
+                    zmean[j] += weights[i] * population[idx].2[j];
+                }
+            }
+
+            // Update ps (evolution path for sigma)
+            for i in 0..n {
+                ps[i] = (1.0 - cs) * ps[i] + (cs * (2.0 - cs) * mueff).sqrt() * zmean[i];
+            }
+
+            let ps_norm = ps.iter().map(|x| x.powi(2)).sum::<f64>().sqrt();
+            let hsig = if ps_norm / (1.0 - (1.0 - cs).powi(2 * self.generations as i32)).sqrt()
+                < (1.4 + 2.0 / (n as f64 + 1.0)) * chi_n
+            {
+                1.0
+            } else {
+                0.0
+            };
+
+            // Update pc (evolution path for covariance)
+            for i in 0..n {
+                pc[i] = (1.0 - cc) * pc[i] + hsig * (cc * (2.0 - cc) * mueff).sqrt() * ymean[i];
+            }
+
+            // Update covariance matrix c
+            let c1a = c1 * (1.0 - (1.0 - hsig.powi(2)) * cc * (2.0 - cc));
+
+            for i in 0..n {
+                for j in 0..n {
+                    c[[i, j]] = (1.0 - c1a - cmu) * c[[i, j]] + c1 * pc[i] * pc[j];
+
+                    // Add rank-mu update
+                    for k in 0..mu {
+                        let idx = indices[k];
+                        c[[i, j]] += cmu * weights[k] * population[idx].1[i] * population[idx].1[j];
+                    }
+                }
+            }
+
+            // Update sigma
+            sigma *= (cs / damps * (ps_norm / chi_n - 1.0)).exp();
+
+            // Limit sigma
+            sigma = sigma.min(1e10).max(1e-10);
+        }
+
+        // Final result
+        let (eigenvalues, _) = self.eigen_decomposition(&c);
+
+        // Find best solution from final population
+        let mut population = Vec::with_capacity(lambda);
+        let mut fitness = Vec::with_capacity(lambda);
+
+        let (eigenvalues_final, eigenvectors_final) = self.eigen_decomposition(&c);
+        let sqrt_eigenvalues_final: Array1<f64> = eigenvalues_final
+            .iter()
+            .map(|&x| x.max(0.0).sqrt())
+            .collect();
+
+        for _ in 0..lambda {
+            let mut z = Array1::zeros(n);
+            for i in 0..n {
+                let normal = Normal::new(0.0, 1.0).unwrap();
+                z[i] = normal.sample(&mut self.rng);
+            }
+
+            let mut y = Array1::<f64>::zeros(n);
+            for i in 0..n {
+                for j in 0..n {
+                    y[i] += eigenvectors_final[[j, i]] * sqrt_eigenvalues_final[j] * z[j];
+                }
+            }
+
+            let x = Array1::from_shape_fn(xmean.len(), |i| xmean[i] + sigma * y[i]);
+            let f_val = self.f.call(&x);
+            fn_evals += 1;
+
+            population.push(x);
+            fitness.push(f_val);
+        }
+
+        let mut indices: Vec<usize> = (0..lambda).collect();
+        indices.sort_by(|&i, &j| fitness[i].partial_cmp(&fitness[j]).unwrap());
+
+        self.xmin = population[indices[0]].clone() / &scl;
+        self.fmin = fitness[indices[0]];
+        self.converged = false;
+
+        Ok(Box::new(CmaEsResult {
+            xmin: self.xmin.clone(),
+            fmin: self.fmin,
+            generations: self.generations,
+            fn_evals,
+            converged: self.converged,
+            final_sigma: sigma,
+            condition_number: self.condition_number(&eigenvalues),
+            history,
+        }))
     }
+
+    // /// Simplified CMA-ES with default parameters
+    // pub fn minimize(
+    //     &mut self,
+    //     initial_point: Array1<f64>,
+    //     scale: Option<f64>,
+    // ) -> Result<CmaEsResult, MinimizerError> {
+    //     self.cma_es(initial_point, None, None, None, None, scale)
+    // }
 
     /// CMA-ES with restart strategy for better global optimization
     pub fn cma_es_with_restart(
@@ -424,6 +779,7 @@ impl CmaEs {
         max_restarts: Option<usize>,
         tol: Option<f64>,
         max_generations_per_run: Option<usize>,
+        scale: Option<f64>,
     ) -> Result<CmaEsResult, MinimizerError> {
         let max_restarts = max_restarts.unwrap_or(3);
         let max_gen_per_run = max_generations_per_run.unwrap_or(1000);
@@ -452,6 +808,7 @@ impl CmaEs {
                 None,
                 Some(tol),
                 Some(max_gen_per_run),
+                scale,
             )?;
 
             total_fn_evals += result.fn_evals;
@@ -495,6 +852,35 @@ impl CmaEs {
     /// Get current best point
     pub fn get_best(&self) -> (Array1<f64>, f64) {
         (self.xmin.clone(), self.fmin)
+    }
+}
+
+impl Minimizer<Array1<f64>, f64> for CmaEs {
+    /// Solve using CMA-ES algorithm
+    fn minimize(
+        &mut self,
+        opt: Box<dyn MinimizerOptions<Array1<f64>, f64>>,
+    ) -> Result<Box<dyn MinimizerResult<Array1<f64>, f64>>, MinimizerError> {
+        // Extract values from the trait object
+        let initial_point = opt.initial_point();
+        let scale = opt.scale();
+        let tolerance = opt.tolerance();
+        let verbosity = opt.verbosity();
+
+        // Create a concrete CmaEsOptions
+        let concrete_opt = CmaEsOptions::new(
+            initial_point,
+            Some(scale),
+            None,
+            None,
+            Some(tolerance),
+            None,
+            Some(verbosity),
+        );
+
+        // Call cma_es_opt and cast result to trait object
+        let result = self.cma_es_opt(concrete_opt)?;
+        Ok(result as Box<dyn MinimizerResult<Array1<f64>, f64>>)
     }
 }
 
@@ -571,12 +957,21 @@ mod minimize_f64_cmaes_tests {
             let func = |x: &Array1<f64>| (x[0] - 1.0).powi(2) + (x[1] - 2.0).powi(2);
             let objective = MultiDimFn::new(func);
             let mut cmaes = CmaEs::with_seed(objective, 42);
+            let options = Box::new(CmaEsOptions::new(
+                array![0.0, 0.0],
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            ));
 
-            let result = cmaes.minimize(array![0.0, 0.0]).unwrap();
+            let result = cmaes.minimize(options).unwrap();
 
-            assert!((result.xmin[0] - 1.0).abs() < 1e-3);
-            assert!((result.xmin[1] - 2.0).abs() < 1e-3);
-            assert!(result.fmin < 1e-5);
+            assert!((result.xmin()[0] - 1.0).abs() < 1e-3);
+            assert!((result.xmin()[1] - 2.0).abs() < 1e-3);
+            assert!(result.fmin() < 1e-5);
 
             assert!((cmaes.xmin[0] - 1.0).abs() < 1e-3);
             assert!((cmaes.xmin[1] - 2.0).abs() < 1e-3);
@@ -589,12 +984,21 @@ mod minimize_f64_cmaes_tests {
             let func = |x: &Array1<f64>| (x[0] - 5.0).powi(2);
             let objective = MultiDimFn::new(func);
             let mut cmaes = CmaEs::with_seed(objective, 42);
+            let options = Box::new(CmaEsOptions::new(
+                array![0.0],
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            ));
 
-            let result = cmaes.minimize(array![0.0]).unwrap();
+            let result = cmaes.minimize(options).unwrap();
 
-            assert!((result.xmin[0] - 5.0).abs() < 1e-3);
-            assert!(result.fmin < 1e-5);
-            assert!(result.converged || result.fmin < 1e-5);
+            assert!((result.xmin()[0] - 5.0).abs() < 1e-3);
+            assert!(result.fmin() < 1e-5);
+            assert!(result.converged() || result.fmin() < 1e-5);
         }
 
         #[test]
@@ -604,6 +1008,15 @@ mod minimize_f64_cmaes_tests {
                 |x: &Array1<f64>| (1.0 - x[0]).powi(2) + 100.0 * (x[1] - x[0].powi(2)).powi(2);
             let objective = MultiDimFn::new(rosenbrock);
             let mut cmaes = CmaEs::with_seed(objective, 42);
+            let _options = Box::new(CmaEsOptions::new(
+                array![-1.2, 1.0],
+                None,
+                Some(0.5),
+                Some(50),
+                Some(1e-8),
+                Some(500),
+                None,
+            ));
 
             let result = cmaes
                 .cma_es(
@@ -612,6 +1025,7 @@ mod minimize_f64_cmaes_tests {
                     Some(50),
                     Some(1e-8),
                     Some(500),
+                    None,
                 )
                 .unwrap();
 
@@ -631,13 +1045,22 @@ mod minimize_f64_cmaes_tests {
             let sphere = |x: &Array1<f64>| x.iter().map(|&xi| xi * xi).sum();
             let objective = MultiDimFn::new(sphere);
             let mut cmaes = CmaEs::with_seed(objective, 42);
+            let options = Box::new(CmaEsOptions::new(
+                array![1.0, 1.0, 1.0],
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            ));
 
-            let result = cmaes.minimize(array![1.0, 1.0, 1.0]).unwrap();
+            let result = cmaes.minimize(options).unwrap();
 
-            for &coord in &result.xmin {
+            for &coord in &result.xmin() {
                 assert!(coord.abs() < 1e-3);
             }
-            assert!(result.fmin < 1e-5);
+            assert!(result.fmin() < 1e-5);
 
             for &coord in &cmaes.xmin {
                 assert!(coord.abs() < 1e-3);
@@ -656,6 +1079,15 @@ mod minimize_f64_cmaes_tests {
             };
             let objective = MultiDimFn::new(ellipsoid);
             let mut cmaes = CmaEs::with_seed(objective, 42);
+            let _options = Box::new(CmaEsOptions::new(
+                array![1.0, 2.0, 3.0],
+                None,
+                Some(1.0),
+                None,
+                Some(1e-8),
+                Some(200),
+                None,
+            ));
 
             let result = cmaes
                 .cma_es(
@@ -664,6 +1096,7 @@ mod minimize_f64_cmaes_tests {
                     None,
                     Some(1e-8),
                     Some(200),
+                    None,
                 )
                 .unwrap();
 
@@ -691,6 +1124,7 @@ mod minimize_f64_cmaes_tests {
                     Some(6), // Small population
                     Some(1e-6),
                     Some(200),
+                    None,
                 )
                 .unwrap();
 
@@ -702,6 +1136,7 @@ mod minimize_f64_cmaes_tests {
                     Some(50), // Large population
                     Some(1e-6),
                     Some(100),
+                    None,
                 )
                 .unwrap();
 
@@ -728,6 +1163,7 @@ mod minimize_f64_cmaes_tests {
                     None,
                     Some(1e-6),
                     Some(300),
+                    None,
                 )
                 .unwrap();
 
@@ -740,6 +1176,7 @@ mod minimize_f64_cmaes_tests {
                     None,
                     Some(1e-6),
                     Some(300),
+                    None,
                 )
                 .unwrap();
 
@@ -764,6 +1201,7 @@ mod minimize_f64_cmaes_tests {
                     None,
                     Some(1e-3), // Loose tolerance
                     Some(1000),
+                    None,
                 )
                 .unwrap();
 
@@ -787,7 +1225,14 @@ mod minimize_f64_cmaes_tests {
             let mut cmaes = CmaEs::with_seed(objective, 42);
 
             let result = cmaes
-                .cma_es_with_restart(array![0.0, 0.0], Some(1.0), Some(2), Some(1e-8), Some(100))
+                .cma_es_with_restart(
+                    array![0.0, 0.0],
+                    Some(1.0),
+                    Some(2),
+                    Some(1e-8),
+                    Some(100),
+                    None,
+                )
                 .unwrap();
 
             assert!((result.xmin[0] - 3.0).abs() < 1e-2);
@@ -817,13 +1262,27 @@ mod minimize_f64_cmaes_tests {
             // Single run
             let mut cmaes1 = CmaEs::with_seed(objective.clone(), 42);
             let result1 = cmaes1
-                .cma_es(array![0.0, 0.0], Some(1.0), None, Some(1e-6), Some(200))
+                .cma_es(
+                    array![0.0, 0.0],
+                    Some(1.0),
+                    None,
+                    Some(1e-6),
+                    Some(200),
+                    None,
+                )
                 .unwrap();
 
             // With restarts
             let mut cmaes2 = CmaEs::with_seed(objective, 42);
             let result2 = cmaes2
-                .cma_es_with_restart(array![0.0, 0.0], Some(1.0), Some(3), Some(1e-6), Some(150))
+                .cma_es_with_restart(
+                    array![0.0, 0.0],
+                    Some(1.0),
+                    Some(3),
+                    Some(1e-6),
+                    Some(150),
+                    None,
+                )
                 .unwrap();
 
             // At least one should find a good solution
@@ -841,8 +1300,17 @@ mod minimize_f64_cmaes_tests {
             let func = |_: &Array1<f64>| 0.0;
             let objective = MultiDimFn::new(func);
             let mut cmaes = CmaEs::new(objective);
+            let options = Box::new(CmaEsOptions::new(
+                array![],
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            ));
 
-            let result = cmaes.minimize(array![]);
+            let result = cmaes.minimize(options);
             assert!(result.is_err());
             assert!(matches!(result, Err(MinimizerError::InvalidDimension)));
         }
@@ -854,12 +1322,12 @@ mod minimize_f64_cmaes_tests {
             let mut cmaes = CmaEs::new(objective);
 
             // Test zero sigma
-            let result = cmaes.cma_es(array![1.0], Some(0.0), None, None, None);
+            let result = cmaes.cma_es(array![1.0], Some(0.0), None, None, None, None);
             assert!(result.is_err());
             assert!(matches!(result, Err(MinimizerError::InvalidTolerance)));
 
             // Test negative sigma
-            let result = cmaes.cma_es(array![1.0], Some(-0.1), None, None, None);
+            let result = cmaes.cma_es(array![1.0], Some(-0.1), None, None, None, None);
             assert!(result.is_err());
             assert!(matches!(result, Err(MinimizerError::InvalidTolerance)));
         }
@@ -878,6 +1346,7 @@ mod minimize_f64_cmaes_tests {
                 Some(10),
                 Some(1e-6),
                 Some(50),
+                None,
             );
 
             // Should either succeed (if it escapes bad region) or fail with function error
@@ -906,6 +1375,7 @@ mod minimize_f64_cmaes_tests {
                 Some(20),
                 Some(1e-6),
                 Some(100),
+                None,
             );
 
             match result {
@@ -929,7 +1399,9 @@ mod minimize_f64_cmaes_tests {
             let objective = MultiDimFn::new(func);
             let mut cmaes = CmaEs::with_seed(objective, 42);
 
-            let result = cmaes.minimize(array![2.0, 2.0]).unwrap();
+            let result = cmaes
+                .cma_es(array![2.0, 2.0], None, None, None, None, None)
+                .unwrap();
 
             assert!(!result.history.is_empty());
             assert!(result.history[0] > result.fmin);
@@ -947,7 +1419,9 @@ mod minimize_f64_cmaes_tests {
             let objective = MultiDimFn::new(func);
             let mut cmaes = CmaEs::with_seed(objective, 42);
 
-            let result = cmaes.minimize(array![1.0, 1.0]).unwrap();
+            let result = cmaes
+                .cma_es(array![1.0, 1.0], None, None, None, None, None)
+                .unwrap();
 
             assert!(result.condition_number >= 1.0);
             assert!(result.final_sigma > 0.0);
@@ -968,6 +1442,7 @@ mod minimize_f64_cmaes_tests {
                     Some(10), // Small population for predictable count
                     Some(1e-8),
                     Some(50),
+                    None,
                 )
                 .unwrap();
 
@@ -991,7 +1466,14 @@ mod minimize_f64_cmaes_tests {
             let mut cmaes = CmaEs::with_seed(objective, 42);
 
             let result = cmaes
-                .cma_es(Array1::ones(5), Some(0.5), None, Some(1e-6), Some(200))
+                .cma_es(
+                    Array1::ones(5),
+                    Some(0.5),
+                    None,
+                    Some(1e-6),
+                    Some(200),
+                    None,
+                )
                 .unwrap();
 
             for &coord in &result.xmin {
@@ -1014,6 +1496,7 @@ mod minimize_f64_cmaes_tests {
                     Some(50),   // Larger population for higher dimensions
                     Some(1e-4), // Relaxed tolerance
                     Some(300),
+                    None,
                 )
                 .unwrap();
 
@@ -1032,7 +1515,14 @@ mod minimize_f64_cmaes_tests {
                 let mut cmaes = CmaEs::with_seed(objective, 42);
 
                 let result = cmaes
-                    .cma_es(Array1::ones(dim), Some(0.5), None, Some(1e-4), Some(200))
+                    .cma_es(
+                        Array1::ones(dim),
+                        Some(0.5),
+                        None,
+                        Some(1e-4),
+                        Some(200),
+                        None,
+                    )
                     .unwrap();
 
                 // Should find minimum regardless of dimension
@@ -1189,6 +1679,7 @@ mod minimize_f64_cmaes_tests {
                     Some(4 + (3.0 * (n as f64).ln()).floor() as usize),
                     Some(1e-10),
                     Some(1000),
+                    None,
                 )
                 .unwrap();
             for i in 0..10 {
@@ -1219,6 +1710,7 @@ mod minimize_f64_cmaes_tests {
                         Some(4 + (3.0 * (n as f64).ln()).floor() as usize),
                         Some(1e-10),
                         Some(1000),
+                        None,
                     )
                     .unwrap();
                 for i in 0..10 {
@@ -1250,6 +1742,7 @@ mod minimize_f64_cmaes_tests {
                         Some(4 + (3.0 * (n as f64).ln()).floor() as usize),
                         Some(1e-10),
                         Some(1000),
+                        None,
                     )
                     .unwrap();
                 for i in 0..10 {
@@ -1394,6 +1887,7 @@ mod minimize_f64_cmaes_tests {
                     Some(4 + (3.0 * (n as f64).ln()).floor() as usize),
                     Some(1e-10),
                     Some(1000),
+                    None,
                 )
                 .unwrap();
             for i in 0..10 {
@@ -1430,6 +1924,7 @@ mod minimize_f64_cmaes_tests {
                         Some(4 + (3.0 * (n as f64).ln()).floor() as usize),
                         Some(1e-10),
                         Some(1000),
+                        None,
                     )
                     .unwrap();
                 for i in 0..10 {
@@ -1467,6 +1962,7 @@ mod minimize_f64_cmaes_tests {
                         Some(4 + (3.0 * (n as f64).ln()).floor() as usize),
                         Some(1e-10),
                         Some(1000),
+                        None,
                     )
                     .unwrap();
                 for i in 0..10 {
@@ -1631,6 +2127,7 @@ mod minimize_f64_cmaes_tests {
                     Some(1e-10),
                     // Some(1e3 as usize * n.pow(2)),
                     Some(10000),
+                    None,
                 )
                 .unwrap();
             for i in 0..10 {
@@ -1778,6 +2275,7 @@ mod minimize_f64_cmaes_tests {
                     Some(4 + (3.0 * (n as f64).ln()).floor() as usize),
                     Some(1e-10),
                     Some(1000),
+                    None,
                 )
                 .unwrap();
             for i in 0..10 {
@@ -2277,7 +2775,14 @@ mod minimize_f64_cmaes_tests {
             let mut cmaes = CmaEs::with_seed(objective, 42);
 
             let result = cmaes
-                .cma_es_with_restart(array![1.0, 1.0], Some(2.0), Some(5), Some(1e-6), Some(500))
+                .cma_es_with_restart(
+                    array![1.0, 1.0],
+                    Some(2.0),
+                    Some(5),
+                    Some(1e-6),
+                    Some(500),
+                    None,
+                )
                 .unwrap();
 
             // Ackley has global minimum at (0,0) with value 0
@@ -2312,7 +2817,14 @@ mod minimize_f64_cmaes_tests {
             let mut cmaes = CmaEs::with_seed(objective, 123);
 
             let result = cmaes
-                .cma_es(array![0.0, 0.0], Some(1.0), Some(30), Some(1e-8), Some(200))
+                .cma_es(
+                    array![0.0, 0.0],
+                    Some(1.0),
+                    Some(30),
+                    Some(1e-8),
+                    Some(200),
+                    None,
+                )
                 .unwrap();
 
             // Should find one of the two minima
@@ -2344,7 +2856,14 @@ mod minimize_f64_cmaes_tests {
             let mut cmaes = CmaEs::with_seed(objective, 42);
 
             let result = cmaes
-                .cma_es_with_restart(array![1.0, 1.0], Some(1.0), Some(3), Some(1e-6), Some(300))
+                .cma_es_with_restart(
+                    array![1.0, 1.0],
+                    Some(1.0),
+                    Some(3),
+                    Some(1e-6),
+                    Some(300),
+                    None,
+                )
                 .unwrap();
 
             // Should be close to global minimum
@@ -2362,12 +2881,21 @@ mod minimize_f64_cmaes_tests {
             };
             let objective = MultiDimFn::new(booth);
             let mut cmaes = CmaEs::with_seed(objective, 42);
+            let options = Box::new(CmaEsOptions::new(
+                array![0.0, 0.0],
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            ));
 
-            let result = cmaes.minimize(array![0.0, 0.0]).unwrap();
+            let result = cmaes.minimize(options).unwrap();
 
-            assert!((result.xmin[0] - 1.0).abs() < 1e-3);
-            assert!((result.xmin[1] - 3.0).abs() < 1e-3);
-            assert!(result.fmin < 1e-5);
+            assert!((result.xmin()[0] - 1.0).abs() < 1e-3);
+            assert!((result.xmin()[1] - 3.0).abs() < 1e-3);
+            assert!(result.fmin() < 1e-5);
         }
     }
 
@@ -2395,6 +2923,7 @@ mod minimize_f64_cmaes_tests {
                     Some(50),   // Larger population for noisy functions
                     Some(1e-4), // Relaxed tolerance for noise
                     Some(200),
+                    None,
                 )
                 .unwrap();
 
@@ -2416,7 +2945,14 @@ mod minimize_f64_cmaes_tests {
             let mut cmaes = CmaEs::with_seed(objective, 42);
 
             let result = cmaes
-                .cma_es(array![0.1, 0.1], Some(0.1), None, Some(1e-8), Some(300))
+                .cma_es(
+                    array![0.1, 0.1],
+                    Some(0.1),
+                    None,
+                    Some(1e-8),
+                    Some(300),
+                    None,
+                )
                 .unwrap();
 
             // Should find the flat region
@@ -2436,7 +2972,14 @@ mod minimize_f64_cmaes_tests {
             let mut cmaes = CmaEs::with_seed(objective, 42);
 
             let result = cmaes
-                .cma_es(array![0.5, 0.5], Some(0.2), None, Some(1e-6), Some(200))
+                .cma_es(
+                    array![0.5, 0.5],
+                    Some(0.2),
+                    None,
+                    Some(1e-6),
+                    Some(200),
+                    None,
+                )
                 .unwrap();
 
             // Should still converge
@@ -2455,7 +2998,14 @@ mod minimize_f64_cmaes_tests {
             let mut cmaes = CmaEs::with_seed(objective, 42);
 
             let result = cmaes
-                .cma_es(array![1.0, 1.0], Some(1.0), None, Some(1e-6), Some(300))
+                .cma_es(
+                    array![1.0, 1.0],
+                    Some(1.0),
+                    None,
+                    Some(1e-6),
+                    Some(300),
+                    None,
+                )
                 .unwrap();
 
             // Should adapt to the asymmetry and find minimum
@@ -2477,6 +3027,15 @@ mod minimize_f64_cmaes_tests {
             let func = |x: &Array1<f64>| (x[0] - 2.0).powi(2) + (x[1] - 3.0).powi(2);
             let objective = MultiDimFn::new(func);
             let mut cmaes = CmaEs::with_seed(objective, 42);
+            let options = Box::new(CmaEsOptions::new(
+                array![0.0, 0.0],
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            ));
 
             // Before optimization
             let (initial_x, initial_f) = cmaes.get_best();
@@ -2484,11 +3043,11 @@ mod minimize_f64_cmaes_tests {
             assert_eq!(initial_f, f64::INFINITY);
 
             // After optimization
-            let result = cmaes.minimize(array![0.0, 0.0]).unwrap();
+            let result = cmaes.minimize(options).unwrap();
             let (best_x, best_f) = cmaes.get_best();
 
-            assert_eq!(best_x, result.xmin);
-            assert_eq!(best_f, result.fmin);
+            assert_eq!(best_x, result.xmin());
+            assert_eq!(best_f, result.fmin());
             assert!((best_x[0] - 2.0).abs() < 1e-3);
             assert!((best_x[1] - 3.0).abs() < 1e-3);
         }
@@ -2498,6 +3057,15 @@ mod minimize_f64_cmaes_tests {
             let func = |x: &Array1<f64>| x[0].powi(2);
             let objective = MultiDimFn::new(func);
             let mut cmaes = CmaEs::with_seed(objective, 42);
+            let options = Box::new(CmaEsOptions::new(
+                array![1.0],
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            ));
 
             // Test debug format before optimization
             let debug_str = format!("{:?}", cmaes);
@@ -2506,7 +3074,7 @@ mod minimize_f64_cmaes_tests {
             assert!(debug_str.contains("converged: false"));
 
             // Test debug format after optimization
-            let _result = cmaes.minimize(array![1.0]).unwrap();
+            let _result = cmaes.minimize(options).unwrap();
             let debug_str_after = format!("{:?}", cmaes);
             assert!(debug_str_after.contains("CmaEs"));
             assert!(debug_str_after.contains("generations:"));
@@ -2520,13 +3088,27 @@ mod minimize_f64_cmaes_tests {
             let objective1 = MultiDimFn::new(func);
             let mut cmaes1 = CmaEs::with_seed(objective1, 12345);
             let result1 = cmaes1
-                .cma_es(array![1.0, 1.0], Some(0.5), Some(20), Some(1e-8), Some(50))
+                .cma_es(
+                    array![1.0, 1.0],
+                    Some(0.5),
+                    Some(20),
+                    Some(1e-8),
+                    Some(50),
+                    None,
+                )
                 .unwrap();
 
             let objective2 = MultiDimFn::new(func);
             let mut cmaes2 = CmaEs::with_seed(objective2, 12345);
             let result2 = cmaes2
-                .cma_es(array![1.0, 1.0], Some(0.5), Some(20), Some(1e-8), Some(50))
+                .cma_es(
+                    array![1.0, 1.0],
+                    Some(0.5),
+                    Some(20),
+                    Some(1e-8),
+                    Some(50),
+                    None,
+                )
                 .unwrap();
 
             // Results should be identical (or very close due to floating point)
@@ -2543,22 +3125,31 @@ mod minimize_f64_cmaes_tests {
         fn test_constructor_variants() {
             let func = |x: &Array1<f64>| x[0].powi(2);
             let objective = MultiDimFn::new(func);
+            let options = Box::new(CmaEsOptions::new(
+                array![1.0],
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            ));
 
             // Test new()
             let mut cmaes1 = CmaEs::new(objective.clone());
-            let result1 = cmaes1.minimize(array![1.0]).unwrap();
-            assert!(result1.fmin < 1e-5);
+            let result1 = cmaes1.minimize(options.clone()).unwrap();
+            assert!(result1.fmin() < 1e-5);
 
             // Test new_boxed()
             let boxed_objective = Box::new(objective.clone());
             let mut cmaes2 = CmaEs::new_boxed(boxed_objective);
-            let result2 = cmaes2.minimize(array![1.0]).unwrap();
-            assert!(result2.fmin < 1e-5);
+            let result2 = cmaes2.minimize(options.clone()).unwrap();
+            assert!(result2.fmin() < 1e-5);
 
             // Test with_seed()
             let mut cmaes3 = CmaEs::with_seed(objective, 999);
-            let result3 = cmaes3.minimize(array![1.0]).unwrap();
-            assert!(result3.fmin < 1e-5);
+            let result3 = cmaes3.minimize(options).unwrap();
+            assert!(result3.fmin() < 1e-5);
         }
     }
 
@@ -2579,6 +3170,7 @@ mod minimize_f64_cmaes_tests {
                     None,
                     Some(1e-12), // Very tight tolerance
                     Some(5),     // Very few generations
+                    None,
                 )
                 .unwrap();
 
@@ -2607,6 +3199,7 @@ mod minimize_f64_cmaes_tests {
                     None,
                     Some(1e-20), // Extremely tight tolerance
                     Some(500),
+                    None,
                 )
                 .unwrap();
 
@@ -2628,6 +3221,7 @@ mod minimize_f64_cmaes_tests {
                     Some(100), // Large but reasonable population
                     Some(1e-6),
                     Some(100), // More generations for large population
+                    None,
                 )
                 .unwrap();
 
@@ -2661,6 +3255,7 @@ mod minimize_f64_cmaes_tests {
                 Some(5),    // Minimal but viable population for 1D (needs to be > dimension)
                 Some(1e-4), // Relaxed tolerance
                 Some(200),  // More generations for small population
+                None,
             );
 
             match result {

@@ -16,7 +16,10 @@ pub mod mlef;
 pub mod mlin;
 pub mod msub;
 pub mod port;
+pub mod q;
 pub mod resistor;
+pub mod short;
+pub mod transformer;
 
 pub use self::capacitor::{Capacitor, CapacitorBuilder};
 pub use self::ground::Ground;
@@ -26,7 +29,10 @@ pub use self::mlef::{Mlef, MlefBuilder};
 pub use self::mlin::{Mlin, MlinBuilder};
 pub use self::msub::{Msub, MsubBuilder};
 pub use self::port::{Port, PortBuilder};
+pub use self::q::{Q, QBuilder, QMode};
 pub use self::resistor::{Resistor, ResistorBuilder};
+pub use self::short::Short;
+pub use self::transformer::{Transformer, TransformerBuilder};
 
 #[derive(Copy, Clone, Debug, Default, PartialEq, Serialize)]
 pub enum ElemType {
@@ -41,6 +47,8 @@ pub enum ElemType {
     None,
     Port,
     Resistor,
+    Short,
+    Transformer,
 }
 
 impl ElemType {
@@ -57,6 +65,8 @@ impl ElemType {
             ElemType::None => "None",
             ElemType::Port => "Port",
             ElemType::Resistor => "Resistor",
+            ElemType::Short => "Short",
+            ElemType::Transformer => "Transformer",
         }
     }
 }
@@ -76,6 +86,8 @@ impl FromStr for ElemType {
             "none" | "None" => Ok(ElemType::None),
             "P" | "p" | "Port" | "port" => Ok(ElemType::Port),
             "R" | "r" | "Res" | "res" | "Resistor" | "resistor" => Ok(ElemType::Resistor),
+            "SHORT" | "Short" | "short" => Ok(ElemType::Short),
+            "Transformer" | "transformer" | "xfmr" => Ok(ElemType::Transformer),
             _ => Err("ElemType not recognized".to_string().into()),
         }
     }
@@ -94,11 +106,13 @@ impl fmt::Display for ElemType {
             ElemType::None => write!(f, "None"),
             ElemType::Port => write!(f, "Port"),
             ElemType::Resistor => write!(f, "Resistor"),
+            ElemType::Short => write!(f, "Short"),
+            ElemType::Transformer => write!(f, "Transformer"),
         }
     }
 }
 
-macro_rules! define_element_impl {
+macro_rules! define_elem_impl {
     (variants: [$($variant:ident),+ $(,)?]) => {
         impl Elem for Element {
             fn c(&self, freq: &Frequency) -> Point<Complex64> {
@@ -236,11 +250,25 @@ pub enum Element {
     Mlin(Mlin),
     Port(Port),
     Resistor(Resistor),
+    Short(Short),
+    Transformer(Transformer),
 }
 
-define_element_impl!(
-    variants: [Capacitor, Ground, Inductor, Mbend, Mlef, Mlin, Port, Resistor]
+impl Element {
+    pub fn val(&self) -> f64 {
+        match self {
+            Element::Capacitor(elem) => elem.val(),
+            Element::Inductor(elem) => elem.val(),
+            Element::Resistor(elem) => elem.val(),
+            _ => 0.0,
+        }
+    }
+}
+
+define_elem_impl!(
+    variants: [Capacitor, Ground, Inductor, Mbend, Mlef, Mlin, Port, Resistor, Short, Transformer]
 );
+
 /// Builder design pattern for Element
 ///
 /// ## Example
@@ -248,7 +276,7 @@ define_element_impl!(
 /// use ndarray::prelude::*;
 /// use rfkit::prelude::*;
 ///
-/// let elem1 = ElementBuilder::new().id("L1").val_scaled(1.0, Scale::Nano).nodes(vec![1,2]).build();
+/// let elem1 = ElementBuilder::new().id("L1").unitval_val_scaled(1.0, Scale::Nano).nodes(vec![1,2]).build();
 ///
 /// let elem2 = ElementBuilder::new().id("P1").z(50_f64.into()).nodes(vec![1]).build();
 /// ```
@@ -256,6 +284,8 @@ define_element_impl!(
 pub struct ElementBuilder {
     id: String,
     unitval: UnitVal,
+    val: f64,
+    q: Option<Q>,
     width: UnitVal,
     length: UnitVal,
     gamma: Complex64,
@@ -276,6 +306,8 @@ impl ElementBuilder {
         ElementBuilder {
             id: "".to_string(),
             unitval: UnitVal::default(),
+            val: 1.0,
+            q: None,
             width: *UnitVal::default().set_unit(Unit::Meter),
             length: *UnitVal::default().set_unit(Unit::Meter),
             gamma: Complex64::ZERO,
@@ -305,13 +337,13 @@ impl ElementBuilder {
     }
 
     /// Provide element value in base unit
-    pub fn val(mut self, val: f64) -> Self {
+    pub fn unitval_val(mut self, val: f64) -> Self {
         self.unitval.set_val(val);
         self
     }
 
     /// Provide element value in scaled unit
-    pub fn val_scaled(mut self, val: f64, unit: Scale) -> Self {
+    pub fn unitval_val_scaled(mut self, val: f64, unit: Scale) -> Self {
         self.unitval.set_scale(unit);
         self.unitval.set_val_scaled(val);
         self
@@ -320,6 +352,18 @@ impl ElementBuilder {
     /// Provide element UnitVal
     pub fn unitval(mut self, val: UnitVal) -> Self {
         self.unitval = val;
+        self
+    }
+
+    /// Provide element value
+    pub fn val(mut self, val: f64) -> Self {
+        self.val = val;
+        self
+    }
+
+    /// Provide element Q
+    pub fn q(mut self, val: Q) -> Self {
+        self.q = Some(val);
         self
     }
 
@@ -454,6 +498,7 @@ impl ElementBuilder {
                 InductorBuilder::new()
                     .id(self.id.as_str())
                     .ind(self.unitval)
+                    .q(self.q)
                     .nodes(self.nodes.try_into().unwrap())
                     .z0(self.z0)
                     .build(),
@@ -496,6 +541,19 @@ impl ElementBuilder {
                 ResistorBuilder::new()
                     .id(self.id.as_str())
                     .res(self.unitval)
+                    .nodes(self.nodes.try_into().unwrap())
+                    .z0(self.z0)
+                    .build(),
+            )),
+            ElemType::Short => Some(Element::Short(Short::new(
+                self.id,
+                self.nodes.try_into().unwrap(),
+                self.z0,
+            ))),
+            ElemType::Transformer => Some(Element::Transformer(
+                TransformerBuilder::new()
+                    .id(self.id.as_str())
+                    .val(self.val)
                     .nodes(self.nodes.try_into().unwrap())
                     .z0(self.z0)
                     .build(),

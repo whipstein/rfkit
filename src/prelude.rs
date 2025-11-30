@@ -15,15 +15,19 @@ pub use crate::file::read_touchstone;
 pub use crate::frequency::{Frequency, FrequencyBuilder};
 
 #[doc(no_inline)]
+pub use crate::circuit::Circuit;
+#[doc(no_inline)]
 pub use crate::element::capacitor::{Capacitor, CapacitorBuilder};
 #[doc(no_inline)]
 pub use crate::element::inductor::{Inductor, InductorBuilder};
 #[doc(no_inline)]
 pub use crate::element::port::{Port, PortBuilder};
 #[doc(no_inline)]
+pub use crate::element::q::{Q, QBuilder, QMode};
+#[doc(no_inline)]
 pub use crate::element::resistor::{Resistor, ResistorBuilder};
 #[doc(no_inline)]
-pub use crate::element::{Element, ElementBuilder};
+pub use crate::element::{Elem, ElemType, Element, ElementBuilder};
 
 #[doc(no_inline)]
 pub use crate::impedance::{

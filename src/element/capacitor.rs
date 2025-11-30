@@ -1,4 +1,4 @@
-use crate::element::{Elem, ElemType, Lumped};
+use crate::element::{Elem, ElemType, Lumped, Q, QMode};
 use crate::frequency::Frequency;
 use crate::point;
 use crate::point::Point;
@@ -7,22 +7,29 @@ use crate::scale::Scale;
 use crate::unit::{Unit, UnitVal, Unitized};
 use ndarray::prelude::*;
 use num::complex::{Complex64, c64};
-use std::f64::consts::PI;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Capacitor {
     id: String,
     cap: UnitVal,
+    q: Option<Q>,
     nodes: [usize; 2],
     c: Point<Complex64>,
     z0: Complex64,
 }
 
 impl Capacitor {
-    pub fn new(id: String, cap: UnitVal, nodes: [usize; 2], z0: Complex64) -> Capacitor {
+    pub fn new(
+        id: String,
+        cap: UnitVal,
+        q: Option<Q>,
+        nodes: [usize; 2],
+        z0: Complex64,
+    ) -> Capacitor {
         Capacitor {
             id: id,
             cap: cap,
+            q,
             nodes: nodes,
             c: point![
                 Complex64,
@@ -36,6 +43,14 @@ impl Capacitor {
     fn z0(&self) -> Complex64 {
         self.z0
     }
+
+    pub fn q(&self) -> Option<Q> {
+        self.q.clone()
+    }
+
+    pub fn set_q(&mut self, val: Option<Q>) {
+        self.q = val;
+    }
 }
 
 impl Default for Capacitor {
@@ -43,6 +58,7 @@ impl Default for Capacitor {
         Self {
             id: "C0".to_string(),
             cap: UnitVal::default(),
+            q: None,
             nodes: [1, 2],
             c: point![
                 Complex64,
@@ -88,8 +104,36 @@ impl Elem for Capacitor {
     }
 
     fn z(&self, freq: &Frequency) -> Complex64 {
-        let out = 1.0 / (Complex64::I * 2.0 * PI * freq.freq(0) * self.cap.val());
-        out
+        let w = freq.w_pt(0);
+        match self.q.clone() {
+            Some(q) => {
+                let wq = q.wq_pt(0);
+                let cap = self.cap.val();
+                let (r, x) = match q.mode() {
+                    QMode::ProportionalToFreq => {
+                        let qt = q.q() * freq.freq(0) / q.fq().freq(0);
+                        (qt / (wq * cap), 1.0 / (w * cap))
+                    }
+                    QMode::ProportionalToSqrtFreq => {
+                        let qt = q.q() * (freq.freq(0) / q.fq().freq(0)).sqrt();
+                        (qt / (wq * cap), 1.0 / (w * cap))
+                    }
+                    QMode::Constant => (
+                        q.q() / (wq * cap) * q.fq().freq(0) / freq.freq(0),
+                        1.0 / (w * cap),
+                    ),
+                    QMode::ProportionalToExp => {
+                        let qt = q.q() * (freq.freq(0) / q.fq().freq(0)).powf(q.alpha());
+                        (
+                            qt / (wq * cap) * (q.fq().freq(0) / freq.freq(0)).powf(1.0 - q.alpha()),
+                            1.0 / (w * cap),
+                        )
+                    }
+                };
+                r + Complex64::I * x
+            }
+            _ => 1.0 / (Complex64::I * w * self.cap.val()),
+        }
     }
 
     fn z_at(&self, freq: &Frequency, i: usize) -> Complex64 {
@@ -150,6 +194,7 @@ impl Unitized for Capacitor {
 pub struct CapacitorBuilder {
     id: String,
     cap: UnitVal,
+    q: Option<Q>,
     nodes: [usize; 2],
     z0: Complex64,
 }
@@ -180,6 +225,11 @@ impl CapacitorBuilder {
         self
     }
 
+    pub fn q(mut self, q: Option<Q>) -> Self {
+        self.q = q;
+        self
+    }
+
     pub fn nodes(mut self, nodes: [usize; 2]) -> Self {
         self.nodes = nodes;
         self
@@ -194,6 +244,7 @@ impl CapacitorBuilder {
         Capacitor {
             id: self.id,
             cap: self.cap,
+            q: self.q,
             nodes: self.nodes,
             c: point![
                 Complex64,
@@ -210,6 +261,7 @@ impl Default for CapacitorBuilder {
         Self {
             id: "C0".to_string(),
             cap: *UnitVal::default().set_unit(Unit::Farad),
+            q: None,
             nodes: [1, 2],
             z0: c64(50.0, 0.0),
         }
@@ -222,6 +274,7 @@ mod element_capacitor_tests {
     use crate::unit::UnitValBuilder;
     use crate::util::{comp_c64, comp_point_c64};
     use float_cmp::*;
+    use std::f64::consts::PI;
 
     const DEFAULT_MARGIN: F64Margin = F64Margin {
         epsilon: 1e-10,
@@ -246,6 +299,7 @@ mod element_capacitor_tests {
         let exemplar = Capacitor {
             id: "C1".to_string(),
             cap: unitval,
+            q: None,
             nodes: [1, 2],
             c: point![
                 Complex64,

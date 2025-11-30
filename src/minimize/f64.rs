@@ -18,7 +18,7 @@ pub mod quasi_newton;
 pub mod simplex;
 pub mod simulated_annealing;
 
-pub use self::bracket::Bracket;
+pub use self::bracket::{Bracket, BracketOptions, BracketResult};
 pub use self::brent::Brent;
 pub use self::cma_es::CmaEs;
 pub use self::conjugate_gradient::ConjGrad;

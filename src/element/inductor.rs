@@ -1,4 +1,4 @@
-use crate::element::{Elem, ElemType, Lumped};
+use crate::element::{Elem, ElemType, Lumped, Q, QMode};
 use crate::frequency::Frequency;
 use crate::point;
 use crate::point::Point;
@@ -7,22 +7,29 @@ use crate::scale::Scale;
 use crate::unit::{Unit, UnitVal, Unitized};
 use ndarray::prelude::*;
 use num::complex::{Complex, Complex64, c64};
-use std::f64::consts::PI;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Inductor {
     id: String,
     ind: UnitVal,
+    q: Option<Q>,
     nodes: [usize; 2],
     c: Point<Complex64>,
     z0: Complex64,
 }
 
 impl Inductor {
-    pub fn new(id: String, ind: UnitVal, nodes: [usize; 2], z0: Complex64) -> Inductor {
+    pub fn new(
+        id: String,
+        ind: UnitVal,
+        q: Option<Q>,
+        nodes: [usize; 2],
+        z0: Complex64,
+    ) -> Inductor {
         Inductor {
             id: id,
             ind: ind,
+            q,
             nodes: nodes,
             c: point![
                 Complex64,
@@ -33,8 +40,16 @@ impl Inductor {
         }
     }
 
-    fn z0(&self) -> Complex64 {
+    pub fn z0(&self) -> Complex64 {
         self.z0
+    }
+
+    pub fn q(&self) -> Option<Q> {
+        self.q.clone()
+    }
+
+    pub fn set_q(&mut self, val: Option<Q>) {
+        self.q = val;
     }
 }
 
@@ -42,7 +57,8 @@ impl Default for Inductor {
     fn default() -> Self {
         Self {
             id: "L0".to_string(),
-            ind: UnitVal::default(),
+            ind: *UnitVal::default().set_unit(Unit::Henry),
+            q: None,
             nodes: [1, 2],
             c: point![
                 Complex64,
@@ -88,7 +104,47 @@ impl Elem for Inductor {
     }
 
     fn z(&self, freq: &Frequency) -> Complex<f64> {
-        Complex64::I * 2.0 * PI * freq.freq(0) * self.ind.val()
+        let w = freq.w_pt(0);
+        match self.q.clone() {
+            Some(q) => {
+                let wq = q.wq_pt(0);
+                let rdc = q.rdc().val();
+                let ind = self.ind.val();
+                let (r, x) = match q.mode() {
+                    QMode::ProportionalToFreq => {
+                        // let rdcp = rdc.max(0.05 * wq * ind / q.q());
+                        // let rq1 = wq * ind / q.q();
+                        // let r1 = if rdcp > rq1 {
+                        //     rdcp
+                        // } else {
+                        //     let rq2 = (rq1.powi(2) - rdcp.powi(2)).sqrt();
+                        //     let qt = wq * ind / rq2;
+                        //     let rac = w * ind / qt;
+                        //     (rdcp.powi(2) + rac.powi(2)).sqrt()
+                        // };
+                        // (r1, w * ind)
+                        (wq * ind / q.q() + rdc, w * ind)
+                    }
+                    QMode::ProportionalToSqrtFreq => {
+                        let rt1 = wq * ind / q.q() - rdc;
+                        let qt1 = wq * ind / rt1;
+                        let rac = (w * wq).sqrt() * ind / qt1;
+                        (rdc + rac, rac + w * ind * (1.0 - 1.0 / qt1))
+                    }
+                    QMode::Constant => {
+                        let ra = 2.0 * std::f64::consts::PI / q.q() - rdc / freq.freq(0);
+                        let xa = freq.freq(0) - rdc / ra;
+                        (ra * xa + rdc, w * ind)
+                    }
+                    QMode::ProportionalToExp => {
+                        let qf = q.q() * (freq.freq(0) / q.fq().freq(0)).powf(q.alpha());
+                        (w * ind / qf, w * ind)
+                    }
+                };
+                r + Complex64::I * x
+            }
+            _ => Complex64::I * w * self.ind.val(),
+        }
     }
 
     fn z_at(&self, freq: &Frequency, i: usize) -> Complex64 {
@@ -149,6 +205,7 @@ impl Unitized for Inductor {
 pub struct InductorBuilder {
     id: String,
     ind: UnitVal,
+    q: Option<Q>,
     nodes: [usize; 2],
     z0: Complex64,
 }
@@ -179,6 +236,11 @@ impl InductorBuilder {
         self
     }
 
+    pub fn q(mut self, q: Option<Q>) -> Self {
+        self.q = q;
+        self
+    }
+
     pub fn nodes(mut self, nodes: [usize; 2]) -> Self {
         self.nodes = nodes;
         self
@@ -193,6 +255,7 @@ impl InductorBuilder {
         Inductor {
             id: self.id,
             ind: self.ind,
+            q: self.q,
             nodes: self.nodes,
             c: point![
                 Complex64,
@@ -209,6 +272,7 @@ impl Default for InductorBuilder {
         Self {
             id: "L0".to_string(),
             ind: *UnitVal::default().set_unit(Unit::Henry),
+            q: None,
             nodes: [1, 2],
             z0: c64(50.0, 0.0),
         }
@@ -221,6 +285,7 @@ mod element_inductor_tests {
     use crate::unit::UnitValBuilder;
     use crate::util::{comp_c64, comp_point_c64};
     use float_cmp::*;
+    use std::f64::consts::PI;
 
     const DEFAULT_MARGIN: F64Margin = F64Margin {
         epsilon: 1e-10,
@@ -242,6 +307,7 @@ mod element_inductor_tests {
         let exemplar = Inductor {
             id: "L1".to_string(),
             ind: unitval,
+            q: None,
             nodes: [1, 2],
             c: point![
                 Complex64,

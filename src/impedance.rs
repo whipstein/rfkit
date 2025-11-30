@@ -1,7 +1,7 @@
 use crate::math::*;
 use crate::scale::Scale;
 use crate::unit::{Unit, UnitVal, UnitValBuilder};
-use num::complex::{c64, Complex64};
+use num::complex::{Complex64, c64};
 use serde::Serialize;
 use std::f64::consts::PI;
 use std::fmt;
@@ -279,7 +279,7 @@ impl Default for Impedance {
     }
 }
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct ImpedanceBuilder {
     kind: ImpedanceType,
     category: Option<ComplexNumberType>,
@@ -505,7 +505,7 @@ impl ImpedanceBuilder {
         self
     }
 
-    pub fn build(self) -> Impedance {
+    pub fn build(mut self) -> Impedance {
         match self.kind {
             ImpedanceType::Gamma => {
                 let g = match (self.category, self.mag, self.ang) {
@@ -517,6 +517,7 @@ impl ImpedanceBuilder {
                     _ => self.ri,
                 };
                 let z = gamma_to_z(g, self.z0);
+                self = self.c_scale(Scale::Femto);
                 let (rp, cp) = z_to_rpcp(z, &self.freq);
                 let (rs, cs) = z_to_rscs(z, &self.freq);
                 Impedance {
@@ -534,6 +535,7 @@ impl ImpedanceBuilder {
             }
             ImpedanceType::Y => {
                 let z = 1.0 / self.ri;
+                self = self.c_scale(Scale::Femto);
                 let (rp, cp) = z_to_rpcp(z, &self.freq);
                 let (rs, cs) = z_to_rscs(z, &self.freq);
                 Impedance {
@@ -550,6 +552,7 @@ impl ImpedanceBuilder {
                 }
             }
             ImpedanceType::Z => {
+                self = self.c_scale(Scale::Femto);
                 let (rp, cp) = z_to_rpcp(self.ri, &self.freq);
                 let (rs, cs) = z_to_rscs(self.ri, &self.freq);
                 Impedance {
@@ -568,11 +571,12 @@ impl ImpedanceBuilder {
             ImpedanceType::Rpcp => {
                 let z = rpcp_to_z(self.rp.val(), self.cp.val(), &self.freq);
                 let (rs, cs) = z_to_rscs(z, &self.freq);
+                let g = z_to_gamma(z, self.z0);
                 Impedance {
                     mode: self.mode,
                     y: 1.0 / z,
                     z,
-                    g: z_to_gamma(z, self.z0),
+                    g,
                     rp: self.rp,
                     cp: self.cp,
                     rs: UnitValBuilder::new().val(rs).scale(self.rp.scale()).build(),
@@ -597,6 +601,25 @@ impl ImpedanceBuilder {
                     freq: self.freq,
                 }
             }
+        }
+    }
+}
+
+impl Default for ImpedanceBuilder {
+    fn default() -> Self {
+        Self {
+            kind: ImpedanceType::Gamma,
+            category: None,
+            mode: ImpedanceMode::Se,
+            ri: c64(0.0, 0.0),
+            mag: None,
+            ang: None,
+            rp: UnitVal::new(50.0, Scale::Base, Unit::Ohm),
+            cp: UnitVal::new_scaled(0.0, Scale::Base, Unit::Farad),
+            rs: UnitVal::new(50.0, Scale::Base, Unit::Ohm),
+            cs: UnitVal::new_scaled(0.0, Scale::Base, Unit::Farad),
+            freq: UnitVal::new_scaled(1.0, Scale::Giga, Unit::Hz),
+            z0: 50.0,
         }
     }
 }

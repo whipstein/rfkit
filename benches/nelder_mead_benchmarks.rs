@@ -5,7 +5,8 @@ use ndarray::prelude::*;
 use std::time::Duration;
 
 // Import your crate modules - adjust the crate name as needed
-use rfkit_base::prelude::*;
+use rfkit::minimize::f64::{F1dim, MultiDimFn, NelderMead, NelderMeadBounded};
+use rfkit::prelude::*;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum TestType {
@@ -33,7 +34,7 @@ impl TestType {
 #[derive(Clone)]
 struct TestProblem {
     name: String,
-    function: fn(Array1<MyFloat>) -> MyFloat,
+    function: F1dim,
     x0: Array1<f64>,
     scale: Array1<f64>,
     lb: Array1<f64>,
@@ -43,69 +44,79 @@ struct TestProblem {
 }
 
 // Test Functions
-fn sphere_function(x: Array1<MyFloat>) -> MyFloat {
-    x.iter().map(|xi| xi * xi).sum()
+fn sphere_function() -> F1dim {
+    F1dim::new(MultiDimFn::new(move |x: &Array1<f64>| {
+        x.iter().map(|xi| xi * xi).sum()
+    }))
 }
 
-fn rosenbrock_function(x: Array1<MyFloat>) -> MyFloat {
-    if x.len() < 2 {
-        return MyFloat::new(0.0);
-    }
-
-    let mut sum = MyFloat::new(0.0);
-    for i in 0..x.len() - 1 {
-        let term1 = MyFloat::new(100.0) * (&x[i + 1] - &x[i] * &x[i]) * (&x[i + 1] - &x[i] * &x[i]);
-        let term2 = (MyFloat::new(1.0) - &x[i]) * (MyFloat::new(1.0) - &x[i]);
-        sum += term1 + term2;
-    }
-    sum
-}
-
-fn rastrigin_function(x: Array1<MyFloat>) -> MyFloat {
-    let a = MyFloat::new(10.0);
-    let n = MyFloat::new(x.len() as f64);
-    let pi = MyFloat::new(std::f64::consts::PI);
-
-    let mut sum = MyFloat::new(0.0);
-    for xi in x.iter() {
-        sum += xi * xi - &a * (2.0 * &pi * xi).cos();
-    }
-    &a * &n + sum
-}
-
-fn ackley_function(x: Array1<MyFloat>) -> MyFloat {
-    let a = MyFloat::new(20.0);
-    let b = MyFloat::new(0.2);
-    let c = MyFloat::new(2.0 * std::f64::consts::PI);
-    let n = MyFloat::new(x.len() as f64);
-    let e = MyFloat::new(std::f64::consts::E);
-
-    let sum1: MyFloat = x.iter().map(|xi| xi * xi).sum();
-    let sum2: MyFloat = x.iter().map(|xi| (&c * xi).cos()).sum();
-
-    -&a * (-&b * (sum1 / &n).sqrt()).exp() - (sum2 / &n).exp() + &a + e
-}
-
-fn himmelblau_function(x: Array1<MyFloat>) -> MyFloat {
-    if x.len() != 2 {
-        // Extend to n-dimensions by summing pairs
-        let mut result = MyFloat::new(0.0);
-        let mut i = 0;
-        while i < x.len() - 1 {
-            if i + 1 < x.len() {
-                let term1 = (&x[i] * &x[i] + &x[i + 1] - 11.0) * (&x[i] * &x[i] + &x[i + 1] - 11.0);
-                let term2 =
-                    (&x[i] + &x[i + 1] * &x[i + 1] - 7.0) * (&x[i] + &x[i + 1] * &x[i + 1] - 7.0);
-                result += term1 + term2;
-            }
-            i += 2;
+fn rosenbrock_function() -> F1dim {
+    F1dim::new(MultiDimFn::new(|x: &Array1<f64>| {
+        if x.len() < 2 {
+            return 0.0;
         }
-        result
-    } else {
-        let term1 = (&x[0] * &x[0] + &x[1] - 11.0) * (&x[0] * &x[0] + &x[1] - 11.0);
-        let term2 = (&x[0] + &x[1] * &x[1] - 7.0) * (&x[0] + &x[1] * &x[1] - 7.0);
-        term1 + term2
-    }
+
+        let mut sum = 0.0;
+        for i in 0..x.len() - 1 {
+            let term1 = 100.0 * (x[i + 1] - x[i] * x[i]) * (x[i + 1] - x[i] * x[i]);
+            let term2 = (1.0 - x[i]) * (1.0 - x[i]);
+            sum += term1 + term2;
+        }
+        sum
+    }))
+}
+
+fn rastrigin_function() -> F1dim {
+    F1dim::new(MultiDimFn::new(|x: &Array1<f64>| {
+        let a = 10.0;
+        let n = x.len() as f64;
+        let pi = std::f64::consts::PI;
+
+        let mut sum = 0.0;
+        for xi in x.iter() {
+            sum += xi * xi - a * (2.0 * pi * xi).cos();
+        }
+        a * n + sum
+    }))
+}
+
+fn ackley_function() -> F1dim {
+    F1dim::new(MultiDimFn::new(|x: &Array1<f64>| {
+        let a = 20.0;
+        let b = 0.2;
+        let c = 2.0 * std::f64::consts::PI;
+        let n = x.len() as f64;
+        let e = std::f64::consts::E;
+
+        let sum1: f64 = x.iter().map(|&xi| xi * xi).sum();
+        let sum2: f64 = x.iter().map(|&xi| (c * xi).cos()).sum();
+
+        -a * (-b * (sum1 / n).sqrt()).exp() - (sum2 / n).exp() + a + e
+    }))
+}
+
+fn himmelblau_function() -> F1dim {
+    F1dim::new(MultiDimFn::new(|x: &Array1<f64>| {
+        if x.len() != 2 {
+            // Extend to n-dimensions by summing pairs
+            let mut result = 0.0;
+            let mut i = 0;
+            while i < x.len() - 1 {
+                if i + 1 < x.len() {
+                    let term1 = (x[i] * x[i] + x[i + 1] - 11.0) * (x[i] * x[i] + x[i + 1] - 11.0);
+                    let term2 =
+                        (x[i] + x[i + 1] * x[i + 1] - 7.0) * (x[i] + x[i + 1] * x[i + 1] - 7.0);
+                    result += term1 + term2;
+                }
+                i += 2;
+            }
+            result
+        } else {
+            let term1 = (x[0] * x[0] + x[1] - 11.0) * (x[0] * x[0] + x[1] - 11.0);
+            let term2 = (x[0] + x[1] * x[1] - 7.0) * (x[0] + x[1] * x[1] - 7.0);
+            term1 + term2
+        }
+    }))
 }
 
 fn setup_test_problems() -> Vec<TestProblem> {
@@ -113,7 +124,7 @@ fn setup_test_problems() -> Vec<TestProblem> {
         // 2D Problems
         TestProblem {
             name: "sphere_2d".to_string(),
-            function: sphere_function,
+            function: sphere_function(),
             x0: array![1.5, 1.5],
             scale: array![1.0, 1.0],
             lb: array![-5.0, -5.0],
@@ -123,7 +134,7 @@ fn setup_test_problems() -> Vec<TestProblem> {
         },
         TestProblem {
             name: "rosenbrock_2d".to_string(),
-            function: rosenbrock_function,
+            function: rosenbrock_function(),
             x0: array![-1.2, 1.0],
             scale: array![1.0, 1.0],
             lb: array![-2.0, -2.0],
@@ -133,7 +144,7 @@ fn setup_test_problems() -> Vec<TestProblem> {
         },
         TestProblem {
             name: "himmelblau_2d".to_string(),
-            function: himmelblau_function,
+            function: himmelblau_function(),
             x0: array![0.0, 0.0],
             scale: array![1.0, 1.0],
             lb: array![-5.0, -5.0],
@@ -144,7 +155,7 @@ fn setup_test_problems() -> Vec<TestProblem> {
         // 3D Problems
         TestProblem {
             name: "sphere_3d".to_string(),
-            function: sphere_function,
+            function: sphere_function(),
             x0: Array1::from_elem(3, 0.5),
             scale: Array1::ones(3),
             lb: Array1::from_elem(3, -3.0),
@@ -155,7 +166,7 @@ fn setup_test_problems() -> Vec<TestProblem> {
         // 4D Problems
         TestProblem {
             name: "sphere_4d".to_string(),
-            function: sphere_function,
+            function: sphere_function(),
             x0: Array1::from_elem(4, 0.5),
             scale: Array1::ones(4),
             lb: Array1::from_elem(4, -3.0),
@@ -166,7 +177,7 @@ fn setup_test_problems() -> Vec<TestProblem> {
         // 5D Problems
         TestProblem {
             name: "sphere_5d".to_string(),
-            function: sphere_function,
+            function: sphere_function(),
             x0: Array1::from_elem(5, 0.5),
             scale: Array1::ones(5),
             lb: Array1::from_elem(5, -3.0),
@@ -176,7 +187,7 @@ fn setup_test_problems() -> Vec<TestProblem> {
         },
         TestProblem {
             name: "rastrigin_5d".to_string(),
-            function: rastrigin_function,
+            function: rastrigin_function(),
             x0: Array1::from_elem(5, 0.1),
             scale: Array1::ones(5),
             lb: Array1::from_elem(5, -5.12),
@@ -187,7 +198,7 @@ fn setup_test_problems() -> Vec<TestProblem> {
         // 6D Problems
         TestProblem {
             name: "sphere_6d".to_string(),
-            function: sphere_function,
+            function: sphere_function(),
             x0: Array1::from_elem(6, 0.5),
             scale: Array1::ones(6),
             lb: Array1::from_elem(6, -3.0),
@@ -198,7 +209,7 @@ fn setup_test_problems() -> Vec<TestProblem> {
         // 7D Problems
         TestProblem {
             name: "sphere_7d".to_string(),
-            function: sphere_function,
+            function: sphere_function(),
             x0: Array1::from_elem(7, 0.5),
             scale: Array1::ones(7),
             lb: Array1::from_elem(7, -3.0),
@@ -209,7 +220,7 @@ fn setup_test_problems() -> Vec<TestProblem> {
         // 8D Problems
         TestProblem {
             name: "sphere_8d".to_string(),
-            function: sphere_function,
+            function: sphere_function(),
             x0: Array1::from_elem(8, 0.5),
             scale: Array1::ones(8),
             lb: Array1::from_elem(8, -3.0),
@@ -220,7 +231,7 @@ fn setup_test_problems() -> Vec<TestProblem> {
         // 9D Problems
         TestProblem {
             name: "sphere_9d".to_string(),
-            function: sphere_function,
+            function: sphere_function(),
             x0: Array1::from_elem(9, 0.5),
             scale: Array1::ones(9),
             lb: Array1::from_elem(9, -3.0),
@@ -231,7 +242,7 @@ fn setup_test_problems() -> Vec<TestProblem> {
         // 10D Problems
         TestProblem {
             name: "sphere_10d".to_string(),
-            function: sphere_function,
+            function: sphere_function(),
             x0: Array1::from_elem(10, 0.3),
             scale: Array1::ones(10),
             lb: Array1::from_elem(10, -2.0),
@@ -241,7 +252,7 @@ fn setup_test_problems() -> Vec<TestProblem> {
         },
         TestProblem {
             name: "ackley_10d".to_string(),
-            function: ackley_function,
+            function: ackley_function(),
             x0: Array1::from_elem(10, 0.1),
             scale: Array1::ones(10),
             lb: Array1::from_elem(10, -32.768),
@@ -256,7 +267,7 @@ fn run_optimization_benchmark(
     problem: &TestProblem,
     category: TestType,
     iterations: usize,
-) -> (f64, f64, usize, Option<f64>) {
+) -> (f64, f64, usize, f64) {
     // Add small random perturbation to starting point
     let mut x_start = problem.x0.clone();
     for i in 0..x_start.len() {
@@ -266,29 +277,27 @@ fn run_optimization_benchmark(
     }
 
     // Create boxed optimizer for dynamic dispatch
-    let mut solver: Box<dyn Minimizer> = match category {
+    let mut solver: Box<dyn Minimizer<Array1<f64>, f64>> = match category {
         TestType::NelderMead => Box::new(NelderMead::new(
             x_start,
             problem.scale.clone(),
-            problem.function,
+            problem.function.clone(),
         )),
         TestType::NelderMeadBounded => Box::new(NelderMeadBounded::new(
             x_start,
             problem.scale.clone(),
             problem.lb.clone(),
             problem.ub.clone(),
-            problem.function,
+            problem.function.clone(),
         )),
     };
 
-    solver.solve(iterations);
+    let result = solver.minimize(Some(iterations));
 
     // Calculate final function value
-    let x_myfloat = Array1::from_shape_fn(solver.x().len(), |i| MyFloat::new(solver.x()[i]));
-    let final_value = (problem.function)(x_myfloat).to_f64();
-    let error = (final_value - problem.expected_min).abs();
+    let error = (result.xmin()[0] - problem.expected_min).abs();
 
-    (final_value, error, solver.iterations(), solver.tolerance())
+    (result.xmin()[0], error, result.iters(), result.tolerance())
 }
 
 // Benchmark functions for each iteration count
@@ -515,7 +524,7 @@ fn bench_dimension_scaling(c: &mut Criterion) {
         for &dim in &[2, 5, 10, 20] {
             let problem = TestProblem {
                 name: format!("sphere_{}d", dim),
-                function: sphere_function,
+                function: sphere_function(),
                 x0: Array1::from_elem(dim, 0.5),
                 scale: Array1::ones(dim),
                 lb: Array1::from_elem(dim, -3.0),
