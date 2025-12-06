@@ -12,6 +12,9 @@
 pub use crate::file::read_touchstone;
 
 #[doc(no_inline)]
+pub use crate::float::{RFComplex, RFFloat};
+
+#[doc(no_inline)]
 pub use crate::frequency::{Frequency, FrequencyBuilder};
 
 #[doc(no_inline)]
@@ -47,7 +50,7 @@ pub use num::ToPrimitive;
 
 #[doc(no_inline)]
 pub use crate::network::{
-    Network, NetworkBuilder, NetworkPoint, NetworkPortPoints, PortPoints, PortPointsf64, PortVal,
+    Network, NetworkBuilder, NetworkPoint, NetworkPortPoints, PortPoints, PortVal,
 };
 
 #[doc(no_inline)]

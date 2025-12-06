@@ -1,35 +1,38 @@
 #![allow(unused_assignments)]
 #![allow(unused_variables)]
-use crate::myfloat::MyFloat;
 use crate::{
     error::MinimizerError,
-    minimize::{Minimizer, MinimizerOptions, MinimizerResult, myfloat::ObjFn},
+    float::RFFloat,
+    minimize::{Minimizer, MinimizerOptions, MinimizerResult, ObjFn},
 };
 use ndarray::prelude::*;
 
 /// Result of Nelder-Mead optimization
 #[derive(Debug, Clone)]
-pub struct NelderMeadBoundedResult {
-    pub xmin: Array1<MyFloat>,
-    pub fmin: MyFloat,
-    pub tolerance: MyFloat,
+pub struct NelderMeadBoundedResult<T> {
+    pub xmin: Array1<T>,
+    pub fmin: T,
+    pub tolerance: T,
     pub iters: usize,
     pub fn_evals: usize,
     pub converged: bool,
-    pub final_simplex_size: MyFloat,
-    pub history: Array1<MyFloat>,
+    pub final_simplex_size: T,
+    pub history: Array1<T>,
 }
 
-impl MinimizerResult<Array1<MyFloat>, MyFloat> for NelderMeadBoundedResult {
+impl<T> MinimizerResult<Array1<T>, T> for NelderMeadBoundedResult<T>
+where
+    T: RFFloat,
+{
     fn converged(&self) -> bool {
         self.converged
     }
 
-    fn fmin(&self) -> MyFloat {
+    fn fmin(&self) -> T {
         self.fmin.clone()
     }
 
-    fn tolerance(&self) -> MyFloat {
+    fn tolerance(&self) -> T {
         self.tolerance.clone()
     }
 
@@ -41,26 +44,26 @@ impl MinimizerResult<Array1<MyFloat>, MyFloat> for NelderMeadBoundedResult {
         self.iters
     }
 
-    fn xmin(&self) -> Array1<MyFloat> {
+    fn xmin(&self) -> Array1<T> {
         self.xmin.clone()
     }
 
-    fn history(&self) -> Array1<MyFloat> {
+    fn history(&self) -> Array1<T> {
         self.history.clone()
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct NelderMeadBoundedOptions {
-    initial_point: Array1<MyFloat>,
-    scale: Array1<MyFloat>,
+pub struct NelderMeadBoundedOptions<T> {
+    initial_point: Array1<T>,
+    scale: Array1<T>,
     max_iterations: usize,
-    tolerance: MyFloat,
-    alpha: MyFloat, // Reflection coefficient
-    beta: MyFloat,  // Contraction coefficient
-    gamma: MyFloat, // Expansion coefficient
-    rho: MyFloat,   // Scaling coefficient
-    mu: MyFloat,
+    tolerance: T,
+    alpha: T, // Reflection coefficient
+    beta: T,  // Contraction coefficient
+    gamma: T, // Expansion coefficient
+    rho: T,   // Scaling coefficient
+    mu: T,
     use_random_restart: bool,    // Enable random restarts when stuck
     use_adaptive_simplex: bool,  // Use adaptive initial simplex sizing
     stagnation_iters: usize,     // Counter for detecting stagnation
@@ -68,17 +71,20 @@ pub struct NelderMeadBoundedOptions {
     verbosity: usize,
 }
 
-impl NelderMeadBoundedOptions {
+impl<T> NelderMeadBoundedOptions<T>
+where
+    T: RFFloat,
+{
     pub fn new(
-        init: Array1<MyFloat>,
-        scale: Option<Array1<MyFloat>>,
+        init: Array1<T>,
+        scale: Option<Array1<T>>,
         max_iters: Option<usize>,
-        tol: Option<MyFloat>,
-        alpha: Option<MyFloat>,
-        beta: Option<MyFloat>,
-        gamma: Option<MyFloat>,
-        rho: Option<MyFloat>,
-        mu: Option<MyFloat>,
+        tol: Option<T>,
+        alpha: Option<T>,
+        beta: Option<T>,
+        gamma: Option<T>,
+        rho: Option<T>,
+        mu: Option<T>,
         verbosity: Option<usize>,
     ) -> Self {
         let n = init.len();
@@ -86,12 +92,12 @@ impl NelderMeadBoundedOptions {
             initial_point: init,
             scale: scale.unwrap_or(Array1::ones(n)),
             max_iterations: max_iters.unwrap_or(1000),
-            tolerance: tol.unwrap_or(MyFloat::new(0.0)),
-            alpha: alpha.unwrap_or(MyFloat::new(1.0)),
-            beta: beta.unwrap_or(MyFloat::new(0.5)),
-            gamma: gamma.unwrap_or(MyFloat::new(2.0)),
-            rho: rho.unwrap_or(MyFloat::new(0.5)),
-            mu: mu.unwrap_or(MyFloat::new(10.0)),
+            tolerance: tol.unwrap_or(T::from_f64(0.0)),
+            alpha: alpha.unwrap_or(T::from_f64(1.0)),
+            beta: beta.unwrap_or(T::from_f64(0.5)),
+            gamma: gamma.unwrap_or(T::from_f64(2.0)),
+            rho: rho.unwrap_or(T::from_f64(0.5)),
+            mu: mu.unwrap_or(T::from_f64(10.0)),
             use_random_restart: true,
             use_adaptive_simplex: true,
             stagnation_iters: 0,
@@ -100,11 +106,11 @@ impl NelderMeadBoundedOptions {
         }
     }
 
-    pub fn set_initial_point(&mut self, init: Array1<MyFloat>) {
+    pub fn set_initial_point(&mut self, init: Array1<T>) {
         self.initial_point = init;
     }
 
-    pub fn set_scale(&mut self, scale: Array1<MyFloat>) {
+    pub fn set_scale(&mut self, scale: Array1<T>) {
         self.scale = scale;
     }
 
@@ -112,27 +118,27 @@ impl NelderMeadBoundedOptions {
         self.max_iterations = iters;
     }
 
-    pub fn set_tolerance(&mut self, tol: MyFloat) {
+    pub fn set_tolerance(&mut self, tol: T) {
         self.tolerance = tol;
     }
 
-    pub fn set_alpha(&mut self, alpha: MyFloat) {
+    pub fn set_alpha(&mut self, alpha: T) {
         self.alpha = alpha;
     }
 
-    pub fn set_beta(&mut self, beta: MyFloat) {
+    pub fn set_beta(&mut self, beta: T) {
         self.beta = beta;
     }
 
-    pub fn set_gamma(&mut self, gamma: MyFloat) {
+    pub fn set_gamma(&mut self, gamma: T) {
         self.gamma = gamma;
     }
 
-    pub fn set_rho(&mut self, rho: MyFloat) {
+    pub fn set_rho(&mut self, rho: T) {
         self.rho = rho;
     }
 
-    pub fn set_mu(&mut self, mu: MyFloat) {
+    pub fn set_mu(&mut self, mu: T) {
         self.mu = mu;
     }
 
@@ -157,12 +163,15 @@ impl NelderMeadBoundedOptions {
     }
 }
 
-impl MinimizerOptions<Array1<MyFloat>, MyFloat> for NelderMeadBoundedOptions {
-    fn initial_point(&self) -> Array1<MyFloat> {
+impl<T> MinimizerOptions<Array1<T>, T> for NelderMeadBoundedOptions<T>
+where
+    T: RFFloat,
+{
+    fn initial_point(&self) -> Array1<T> {
         self.initial_point.clone()
     }
 
-    fn scale(&self) -> Array1<MyFloat> {
+    fn scale(&self) -> Array1<T> {
         self.scale.clone()
     }
 
@@ -170,7 +179,7 @@ impl MinimizerOptions<Array1<MyFloat>, MyFloat> for NelderMeadBoundedOptions {
         self.max_iterations
     }
 
-    fn tolerance(&self) -> MyFloat {
+    fn tolerance(&self) -> T {
         self.tolerance.clone()
     }
 
@@ -179,49 +188,46 @@ impl MinimizerOptions<Array1<MyFloat>, MyFloat> for NelderMeadBoundedOptions {
     }
 }
 
-pub struct NelderMeadBounded {
-    scale: Array1<MyFloat>,
-    x: Array1<MyFloat>,
-    x_scaled: Array1<MyFloat>,
-    lb: Array1<MyFloat>,
-    lb_vec: Vec<MyFloat>,
-    ub: Array1<MyFloat>,
-    ub_vec: Vec<MyFloat>,
-    res: Option<Array1<MyFloat>>,
-    simplex: Option<Array2<MyFloat>>,
-    f: Box<dyn ObjFn<MyFloat>>,
+pub struct NelderMeadBounded<T> {
+    scale: Array1<T>,
+    x: Array1<T>,
+    x_scaled: Array1<T>,
+    lb: Array1<T>,
+    lb_vec: Vec<T>,
+    ub: Array1<T>,
+    ub_vec: Vec<T>,
+    res: Option<Array1<T>>,
+    simplex: Option<Array2<T>>,
+    f: Box<dyn ObjFn<T>>,
     n: usize,
     iters: usize,
     max_iters: usize, // Maximum iterations
-    tol: Option<MyFloat>,
-    target_tol: MyFloat, // Convergent tolerance
-    alpha: MyFloat,      // Reflection coefficient
-    beta: MyFloat,       // Contraction coefficient
-    gamma: MyFloat,      // Expansion coefficient
-    rho: MyFloat,        // Scaling coefficient
-    mu: MyFloat,
+    tol: Option<T>,
+    target_tol: T, // Convergent tolerance
+    alpha: T,      // Reflection coefficient
+    beta: T,       // Contraction coefficient
+    gamma: T,      // Expansion coefficient
+    rho: T,        // Scaling coefficient
+    mu: T,
     verbosity: u32,
 }
 
-impl NelderMeadBounded {
-    pub fn new<F>(
-        x: Array1<MyFloat>,
-        scale: Array1<MyFloat>,
-        lb: Array1<MyFloat>,
-        ub: Array1<MyFloat>,
-        f: F,
-    ) -> Self
+impl<T> NelderMeadBounded<T>
+where
+    T: RFFloat,
+{
+    pub fn new<F>(x: Array1<T>, scale: Array1<T>, lb: Array1<T>, ub: Array1<T>, f: F) -> Self
     where
-        F: ObjFn<MyFloat> + 'static,
+        F: ObjFn<T> + 'static,
     {
-        let mut lb_vec: Vec<MyFloat> = vec![];
-        let mut ub_vec: Vec<MyFloat> = vec![];
+        let mut lb_vec: Vec<T> = vec![];
+        let mut ub_vec: Vec<T> = vec![];
         for i in 0..x.len() {
             lb_vec.push(lb[i].clone());
             ub_vec.push(ub[i].clone());
         }
         NelderMeadBounded {
-            x_scaled: Array1::from_shape_fn(x.len(), |i| &x[i] * &scale[i]),
+            x_scaled: Array1::from_shape_fn(x.len(), |i| x[i].clone() * scale[i].clone()),
             x: x.clone(),
             lb_vec,
             ub_vec,
@@ -235,52 +241,53 @@ impl NelderMeadBounded {
             iters: 0,
             max_iters: 1,
             tol: None,
-            target_tol: 1e-12.into(),
-            alpha: 1.0.into(),
-            beta: 0.5.into(),
-            gamma: 2.0.into(),
-            rho: 0.5.into(),
-            mu: 10.0.into(),
+            target_tol: T::from_f64(1e-12),
+            alpha: T::from_f64(1.0),
+            beta: T::from_f64(0.5),
+            gamma: T::from_f64(2.0),
+            rho: T::from_f64(0.5),
+            mu: T::from_f64(10.0),
             verbosity: 0,
         }
     }
 
-    fn check_bounds(&self, x: &MyFloat, lb: &MyFloat, ub: &MyFloat, scale: &MyFloat) -> MyFloat {
-        if *x < (lb * scale) {
-            return (1.0 + 0.05 / self.iters as f64) * lb * scale;
-        } else if *x > (ub * scale) {
-            return (1.0 - 0.05 / self.iters as f64) * ub * scale;
+    fn check_bounds(&self, x: &T, lb: &T, ub: &T, scale: &T) -> T {
+        if *x < (lb.clone() * scale.clone()) {
+            return T::from_f64(1.0 + 0.05 / self.iters as f64) * lb.clone() * scale.clone();
+        } else if *x > (ub.clone() * scale.clone()) {
+            return T::from_f64(1.0 - 0.05 / self.iters as f64) * ub.clone() * scale.clone();
         }
         x.clone()
     }
 
-    fn res_all(&self) -> Option<Array1<MyFloat>> {
+    fn res_all(&self) -> Option<Array1<T>> {
         self.res.clone()
     }
 
-    fn x_scaled(&self) -> Array1<MyFloat> {
+    fn x_scaled(&self) -> Array1<T> {
         self.x_scaled.clone()
     }
 
-    fn simplex(&self) -> Option<Array2<MyFloat>> {
+    fn simplex(&self) -> Option<Array2<T>> {
         self.simplex.clone()
     }
 
-    pub fn get_mu(&self) -> MyFloat {
+    pub fn get_mu(&self) -> T {
         self.mu.clone()
     }
 
-    pub fn set_mu(&mut self, mu: &MyFloat) {
+    pub fn set_mu(&mut self, mu: &T) {
         self.mu = mu.clone();
     }
 
-    pub fn set_target_tolerance(&mut self, tol: &MyFloat) {
+    pub fn set_target_tolerance(&mut self, tol: &T) {
         self.target_tol = tol.clone();
     }
 
-    pub fn set_x(&mut self, x: &Array1<MyFloat>) {
+    pub fn set_x(&mut self, x: &Array1<T>) {
         self.x = x.clone();
-        self.x_scaled = Array1::from_shape_fn(self.x.len(), |i| &self.x[i] * &self.scale[i]);
+        self.x_scaled =
+            Array1::from_shape_fn(self.x.len(), |i| self.x[i].clone() * self.scale[i].clone());
         self.res = None;
         self.simplex = None;
         self.tol = None;
@@ -290,23 +297,24 @@ impl NelderMeadBounded {
         self.verbosity = verbose;
     }
 
-    pub fn calc_obj(&mut self, x: &Array1<MyFloat>) -> MyFloat {
-        let mut sum = MyFloat::new(0.0);
+    pub fn calc_obj(&mut self, x: &Array1<T>) -> T {
+        let mut sum = T::from_f64(0.0);
         for i in 0..x.len() {
-            sum += (&self.ub[i] - &x[i]).ln() + (&x[i] - &self.lb[i]).ln();
+            sum +=
+                (self.ub[i].clone() - x[i].clone()).ln() + (x[i].clone() - self.lb[i].clone()).ln();
         }
-        &self.f.call(x) - &self.mu * &sum
+        self.f.call(x) - self.mu.clone() * sum
     }
 
-    pub fn x(&self) -> &Array1<MyFloat> {
+    pub fn x(&self) -> &Array1<T> {
         &self.x
     }
 
-    pub fn final_value(&self) -> Option<MyFloat> {
+    pub fn final_value(&self) -> Option<T> {
         self.res.as_ref().map(|x| x[0].clone())
     }
 
-    pub fn tolerance(&self) -> Option<MyFloat> {
+    pub fn tolerance(&self) -> Option<T> {
         self.tol.clone()
     }
 
@@ -319,7 +327,10 @@ impl NelderMeadBounded {
     }
 
     /// Solve using Nelder-Mead algorithm
-    fn minimize_opt(&mut self, opt: Box<NelderMeadBoundedOptions>) -> Box<NelderMeadBoundedResult> {
+    fn minimize_opt(
+        &mut self,
+        opt: Box<NelderMeadBoundedOptions<T>>,
+    ) -> Box<NelderMeadBoundedResult<T>> {
         self.scale = opt.scale.clone();
         self.target_tol = opt.tolerance.clone();
         self.set_x(&opt.initial_point);
@@ -327,22 +338,23 @@ impl NelderMeadBounded {
         self.iters = 0;
 
         // Generate initial simplex veritces
-        let c = MyFloat::new(1.0);
-        let b = &c / (self.n as f64 * 2f64.sqrt()) * ((self.n as f64 + 1.0).sqrt() - 1.0);
-        let a = &c / 2f64.sqrt();
+        let c = T::from_f64(1.0);
+        let b = c.clone()
+            / T::from_f64((self.n as f64 * 2f64.sqrt()) * ((self.n as f64 + 1.0).sqrt() - 1.0));
+        let a = c.clone() / T::from_f64(2f64.sqrt());
         let _ncols = self.n;
         let nrows = self.n + 1;
         let mut simplex = Array2::from_shape_fn((self.n + 1, self.n), |(i, j)| {
             if i == j && i < self.n {
                 self.check_bounds(
-                    &(&self.x_scaled[j] + &a + &b),
+                    &(self.x_scaled[j].clone() + a.clone() + b.clone()),
                     &self.lb[j],
                     &self.ub[j],
                     &self.scale[j],
                 )
             } else if i < self.n {
                 self.check_bounds(
-                    &(&self.x_scaled[j] + &b),
+                    &(self.x_scaled[j].clone() + b.clone()),
                     &self.lb[j],
                     &self.ub[j],
                     &self.scale[j],
@@ -353,12 +365,16 @@ impl NelderMeadBounded {
         });
 
         // Evaluate function at simplex vertices
-        let mut res: Array1<MyFloat> = simplex
+        let mut res: Array1<T> = simplex
             .rows()
             .into_iter()
-            .map(|x| self.calc_obj(&Array1::from_shape_fn(self.n, |i| &x[i] / &self.scale[i])))
+            .map(|x| {
+                self.calc_obj(&Array1::from_shape_fn(self.n, |i| {
+                    x[i].clone() / self.scale[i].clone()
+                }))
+            })
             .collect();
-        let mut prev_tol = MyFloat::new(1.0);
+        let mut prev_tol = T::from_f64(1.0);
 
         while self.iters < self.max_iters {
             if self.verbosity > 1 {
@@ -366,7 +382,7 @@ impl NelderMeadBounded {
                     "iteration: {}\terr: {}\ttol: {}",
                     self.iters,
                     res[0],
-                    self.tol.clone().unwrap_or(1.0.into())
+                    self.tol.clone().unwrap_or(T::from_f64(1.0))
                 );
             }
             self.iters += 1;
@@ -395,8 +411,8 @@ impl NelderMeadBounded {
             }));
 
             // Determine if convergence criteria met
-            let tol = 2.0 * (&res[res.len() - 1] - &res[0]).abs()
-                / (res[res.len() - 1].abs() + res[0].abs() + 1e-10);
+            let tol = T::from_f64(2.0) * (res[res.len() - 1].clone() - res[0].clone()).abs()
+                / (res[res.len() - 1].abs() + res[0].abs() + T::from_f64(1e-10));
             // if tol.to_f64() < self.target_tol || (&prev_tol - &tol).abs().to_f64() < 1e-15 {
             //     break;
             // }
@@ -415,25 +431,27 @@ impl NelderMeadBounded {
             let x_w = Array1::from_shape_fn(self.n, |i| simplex[(nrows - 1, i)].clone()); // Worst point
 
             // Calculate the average of the n best points
-            let mut x_avg = Array1::<MyFloat>::zeros(self.n);
+            let mut x_avg = Array1::<T>::zeros(self.n);
             for i in 0..self.n {
-                let mut sum = MyFloat::new(0.0);
+                let mut sum = T::from_f64(0.0);
                 for j in 0..self.n {
-                    sum += &simplex[(j, i)].clone();
+                    sum += simplex[(j, i)].clone();
                 }
-                x_avg[i] = 1.0 / self.n as f64 * &sum;
+                x_avg[i] = T::from_f64(1.0 / self.n as f64) * sum;
             }
 
             // Calculate reflection point
             let x_r = Array1::from_shape_fn(self.n, |i| {
                 self.check_bounds(
-                    &(&x_avg[i] + &self.alpha * (&x_avg[i] - &x_w[i])),
+                    &(x_avg[i].clone() + self.alpha.clone() * (x_avg[i].clone() - x_w[i].clone())),
                     &self.lb[i],
                     &self.ub[i],
                     &self.scale[i],
                 )
             });
-            let f_r = self.calc_obj(&Array1::from_shape_fn(self.n, |i| &x_r[i] / &self.scale[i]));
+            let f_r = self.calc_obj(&Array1::from_shape_fn(self.n, |i| {
+                x_r[i].clone() / self.scale[i].clone()
+            }));
 
             //
             // Determine simplex adjustment
@@ -445,14 +463,16 @@ impl NelderMeadBounded {
                 }
                 let x_e = Array1::from_shape_fn(self.n, |i| {
                     self.check_bounds(
-                        &(&x_r[i] + &self.gamma * (&x_r[i] - &x_avg[i])),
+                        &(x_r[i].clone()
+                            + self.gamma.clone() * (x_r[i].clone() - x_avg[i].clone())),
                         &self.lb[i],
                         &self.ub[i],
                         &self.scale[i],
                     )
                 });
-                let f_e =
-                    self.calc_obj(&Array1::from_shape_fn(self.n, |i| &x_e[i] / &self.scale[i]));
+                let f_e = self.calc_obj(&Array1::from_shape_fn(self.n, |i| {
+                    x_e[i].clone() / self.scale[i].clone()
+                }));
                 if f_e < res[0] {
                     for i in 0..self.n {
                         simplex[(nrows - 1, i)] = x_e[i].clone();
@@ -471,14 +491,15 @@ impl NelderMeadBounded {
                 }
                 let x_ic = Array1::from_shape_fn(self.n, |i| {
                     self.check_bounds(
-                        &(&x_avg[i] - &self.beta * (&x_avg[i] - &x_w[i])),
+                        &(x_avg[i].clone()
+                            - self.beta.clone() * (x_avg[i].clone() - x_w[i].clone())),
                         &self.lb[i],
                         &self.ub[i],
                         &self.scale[i],
                     )
                 });
                 let f_ic = self.calc_obj(&Array1::from_shape_fn(self.n, |i| {
-                    &x_ic[i] / &self.scale[i]
+                    x_ic[i].clone() / self.scale[i].clone()
                 }));
                 if f_ic > res[nrows - 1] {
                     // Shrink simplex
@@ -488,7 +509,9 @@ impl NelderMeadBounded {
                     for i in 0..self.n {
                         for j in 0..self.n {
                             simplex[(i + 1, j)] = self.check_bounds(
-                                &(&x_b[j] + &self.rho * (&simplex[(i + 1, j)] - &x_b[j])),
+                                &(x_b[j].clone()
+                                    + self.rho.clone()
+                                        * (simplex[(i + 1, j)].clone() - x_b[j].clone())),
                                 &self.lb[j],
                                 &self.ub[j],
                                 &self.scale[j],
@@ -496,7 +519,7 @@ impl NelderMeadBounded {
                         }
 
                         res[i + 1] = self.calc_obj(&Array1::from_shape_fn(self.n, |j| {
-                            &simplex[(i + 1, j)] / &self.scale[j]
+                            simplex[(i + 1, j)].clone() / self.scale[j].clone()
                         }));
                     }
                 } else {
@@ -512,14 +535,15 @@ impl NelderMeadBounded {
                 }
                 let x_oc = Array1::from_shape_fn(self.n, |i| {
                     self.check_bounds(
-                        &(&x_avg[i] + &self.beta * (&x_avg[i] - &x_w[i])),
+                        &(x_avg[i].clone()
+                            + self.beta.clone() * (x_avg[i].clone() - x_w[i].clone())),
                         &self.lb[i],
                         &self.ub[i],
                         &self.scale[i],
                     )
                 });
                 let f_oc = self.calc_obj(&Array1::from_shape_fn(self.n, |i| {
-                    &x_oc[i] / &self.scale[i]
+                    x_oc[i].clone() / self.scale[i].clone()
                 }));
                 if f_oc > f_r {
                     // Shrink simplex
@@ -529,14 +553,16 @@ impl NelderMeadBounded {
                     for i in 0..self.n {
                         for j in 0..self.n {
                             simplex[(i + 1, j)] = self.check_bounds(
-                                &(&x_b[j] + &self.rho * (&simplex[(i + 1, j)] - &x_b[j])),
+                                &(x_b[j].clone()
+                                    + self.rho.clone()
+                                        * (simplex[(i + 1, j)].clone() - x_b[j].clone())),
                                 &self.lb[j],
                                 &self.ub[j],
                                 &self.scale[j],
                             );
                         }
                         res[i + 1] = self.calc_obj(&Array1::from_shape_fn(self.n, |j| {
-                            &simplex[(i + 1, j)] / &self.scale[j]
+                            simplex[(i + 1, j)].clone() / self.scale[j].clone()
                         }));
                     }
                 } else {
@@ -563,7 +589,8 @@ impl NelderMeadBounded {
             simplex[(i, j)].clone()
         }));
         self.x_scaled = Array1::from_shape_fn(simplex.ncols(), |i| simplex[(0, i)].clone());
-        self.x = Array1::from_shape_fn(self.n, |i| &self.x_scaled[i] / &self.scale[i]);
+        self.x =
+            Array1::from_shape_fn(self.n, |i| self.x_scaled[i].clone() / self.scale[i].clone());
         // self.res = Some(res);
         self.res = Some(Array1::from_shape_fn(res.len(), |i| res[i].clone()));
 
@@ -579,22 +606,25 @@ impl NelderMeadBounded {
             fmin: self.calc_obj(&self.x.clone()),
             tolerance: match self.tol.clone() {
                 Some(x) => x,
-                _ => MyFloat::new(0.0),
+                _ => T::from_f64(0.0),
             },
             iters: 0,
             fn_evals: 0,
             converged: true,
-            final_simplex_size: 0.0.into(),
+            final_simplex_size: T::from_f64(0.0),
             history: array![],
         })
     }
 }
 
-impl Minimizer<Array1<MyFloat>, MyFloat> for NelderMeadBounded {
+impl<T> Minimizer<Array1<T>, T> for NelderMeadBounded<T>
+where
+    T: RFFloat + 'static,
+{
     fn minimize(
         &mut self,
-        opt: Box<dyn MinimizerOptions<Array1<MyFloat>, MyFloat>>,
-    ) -> Result<Box<dyn MinimizerResult<Array1<MyFloat>, MyFloat>>, MinimizerError> {
+        opt: Box<dyn MinimizerOptions<Array1<T>, T>>,
+    ) -> Result<Box<dyn MinimizerResult<Array1<T>, T>>, MinimizerError> {
         // Extract values from the trait object
         let initial_point = opt.initial_point();
         let scale = opt.scale();
@@ -618,13 +648,13 @@ impl Minimizer<Array1<MyFloat>, MyFloat> for NelderMeadBounded {
 
         // Call minimize_opt and cast result to trait object
         let result = self.minimize_opt(concrete_opt);
-        Ok(result as Box<dyn MinimizerResult<Array1<MyFloat>, MyFloat>>)
+        Ok(result as Box<dyn MinimizerResult<Array1<T>, T>>)
     }
     // /// Solve using Nelder-Mead algorithm
     // fn minimize(
     //     &mut self,
     //     max_iters: Option<usize>,
-    // ) -> Box<dyn MinimizerResult<Array1<MyFloat>, MyFloat>> {
+    // ) -> Box<dyn MinimizerResult<Array1<T>, T>> {
     //     self.max_iters = match max_iters {
     //         Some(x) => x,
     //         _ => 1000,
@@ -632,7 +662,7 @@ impl Minimizer<Array1<MyFloat>, MyFloat> for NelderMeadBounded {
     //     self.iters = 0;
 
     //     // Generate initial simplex veritces
-    //     let c = MyFloat::new(1.0);
+    //     let c = T::new(1.0);
     //     let b = &c / (self.n as f64 * 2f64.sqrt()) * ((self.n as f64 + 1.0).sqrt() - 1.0);
     //     let a = &c / 2f64.sqrt();
     //     let _ncols = self.n;
@@ -658,12 +688,12 @@ impl Minimizer<Array1<MyFloat>, MyFloat> for NelderMeadBounded {
     //     });
 
     //     // Evaluate function at simplex vertices
-    //     let mut res: Array1<MyFloat> = simplex
+    //     let mut res: Array1<T> = simplex
     //         .rows()
     //         .into_iter()
     //         .map(|x| self.calc_obj(&Array1::from_shape_fn(self.n, |i| &x[i] / &self.scale[i])))
     //         .collect();
-    //     let mut prev_tol = MyFloat::new(1.0);
+    //     let mut prev_tol = T::new(1.0);
 
     //     while self.iters < self.max_iters {
     //         if self.verbosity > 1 {
@@ -671,7 +701,7 @@ impl Minimizer<Array1<MyFloat>, MyFloat> for NelderMeadBounded {
     //                 "iteration: {}\terr: {}\ttol: {}",
     //                 self.iters,
     //                 res[0],
-    //                 self.tol.clone().unwrap_or(1.0.into())
+    //                 self.tol.clone().unwrap_or(T::from_f64(1.0))
     //             );
     //         }
     //         self.iters += 1;
@@ -715,9 +745,9 @@ impl Minimizer<Array1<MyFloat>, MyFloat> for NelderMeadBounded {
     //         let x_w = Array1::from_shape_fn(self.n, |i| simplex[(nrows - 1, i)].clone()); // Worst point
 
     //         // Calculate the average of the n best points
-    //         let mut x_avg = Array1::<MyFloat>::zeros(self.n);
+    //         let mut x_avg = Array1::<T>::zeros(self.n);
     //         for i in 0..self.n {
-    //             let mut sum = MyFloat::new(0.0);
+    //             let mut sum = T::new(0.0);
     //             for j in 0..self.n {
     //                 sum += &simplex[(j, i)].clone();
     //             }
@@ -874,31 +904,35 @@ impl Minimizer<Array1<MyFloat>, MyFloat> for NelderMeadBounded {
     //         println!("tol: {:?}", self.tolerance().unwrap());
     //     }
 
-    //     Box::new(NelderMeadBoundedResult {
+    //     Box::new(NelderMeadBoundedResult<T> {
     //         xmin: self.x.clone(),
     //         fmin: self.calc_obj(&self.x.clone()),
     //         tolerance: match self.tol.clone() {
     //             Some(x) => x,
-    //             _ => MyFloat::new(0.0),
+    //             _ => T::new(0.0),
     //         },
     //         iters: 0,
     //         fn_evals: 0,
     //         converged: true,
-    //         final_simplex_size: 0.0.into(),
+    //         final_simplex_size: T::from_f64(0.0),
     //         history: array![],
     //     })
     // }
 }
 
 #[cfg(test)]
-mod minimize_myfloat_neldermeadbounded_tests {
+mod minimize_neldermeadbounded_tests {
     use super::*;
-    use crate::file::read_touchstone;
-    use crate::frequency::*;
-    use crate::mycomplex::MyComplex;
-    use crate::network::{Network, NetworkBuilder};
-    use crate::points::{Points, Pts};
-    use crate::util::*;
+    use crate::{
+        file::read_touchstone,
+        frequency::*,
+        minimize::MultiDimFn,
+        mycomplex::MyComplex,
+        myfloat::MyFloat,
+        network::{Network, NetworkBuilder},
+        points::{Points, Pts},
+        util::*,
+    };
     use float_cmp::F64Margin;
 
     fn calc_feed_y(freq: Frequency, x: &Array1<MyFloat>) -> Array3<MyComplex> {
@@ -1092,24 +1126,24 @@ mod minimize_myfloat_neldermeadbounded_tests {
             1e-12.into()
         ];
         let exemplar_res = array![
-            MyFloat::new(272695.2468393795),
-            326794.52891594684.into(),
-            342207.96817168326.into(),
-            342220.223907122.into(),
-            343582.48617426824.into(),
-            344033.75696385157.into(),
-            416206.242967765.into(),
-            2403422.1818864923.into(),
-            1206556.0229802025.into()
+            MyFloat::new(34472.62826006022),
+            38483.43015651799.into(),
+            41372.522571978014.into(),
+            41378.9459201732.into(),
+            43347.204418114095.into(),
+            43450.74945866097.into(),
+            70738.75601950094.into(),
+            2222749.170091806.into(),
+            582197.2281772306.into()
         ];
         let exemplar_tol = f64::NAN.into();
         let exemplar_x = array![
             MyFloat::new(1.0883883476483184e-11),
-            1.7777669529663687e-01.into(),
+            0.04519417382415922.into(),
             2.7677669529663682e-13.into(),
-            1.7677769529663687e-01.into(),
+            0.04419517382415922.into(),
             1.1767766952966369e-15.into(),
-            1.0001767766952967e+03.into(),
+            1000.0441941738242.into(),
             1.1767766952966369e-15.into(),
             1.1767766952966369e-15.into()
         ];
@@ -1128,10 +1162,13 @@ mod minimize_myfloat_neldermeadbounded_tests {
             None,
             None,
         ));
-        let mut test =
-            NelderMeadBounded::new(x.clone(), scale, lb, ub, move |x: &Array1<MyFloat>| {
-                eval_f_simplex(x, &net)
-            });
+        let mut test = NelderMeadBounded::new(
+            x.clone(),
+            scale,
+            lb,
+            ub,
+            MultiDimFn::new(move |x: &Array1<MyFloat>| eval_f_simplex(x, &net)),
+        );
         _ = test.minimize(options);
 
         let margin = MARGIN;
@@ -1194,24 +1231,24 @@ mod minimize_myfloat_neldermeadbounded_tests {
             1e-12.into()
         ];
         let exemplar_res = array![
-            272695.2468393795.into(),
-            326794.52891594684.into(),
-            342207.96817168326.into(),
-            342220.223907122.into(),
-            343582.48617426824.into(),
-            344033.75696385157.into(),
-            416206.242967765.into(),
-            1206556.0229802025.into(),
-            6972.801065944916.into()
+            34472.62826006022.into(),
+            38483.43015651799.into(),
+            41372.522571978014.into(),
+            41378.9459201732.into(),
+            43347.204418114095.into(),
+            43450.74945866097.into(),
+            70738.75601950094.into(),
+            582197.2281772306.into(),
+            6696.610974817988.into()
         ];
-        let exemplar_tol = 1.5924016727932413.into();
+        let exemplar_tol = 1.938911402884323.into();
         let exemplar_x = array![
             1.0883883476483184e-11.into(),
-            1.7777669529663687e-01.into(),
+            0.04519417382415922.into(),
             2.7677669529663682e-13.into(),
-            1.7677769529663687e-01.into(),
+            0.04419517382415922.into(),
             1.1767766952966369e-15.into(),
-            1.0001767766952967e+03.into(),
+            1000.0441941738242.into(),
             1.1767766952966369e-15.into(),
             1.1767766952966369e-15.into()
         ];
@@ -1230,10 +1267,13 @@ mod minimize_myfloat_neldermeadbounded_tests {
             None,
             None,
         ));
-        let mut test =
-            NelderMeadBounded::new(x.clone(), scale, lb, ub, move |x: &Array1<MyFloat>| {
-                eval_f_simplex(x, &net)
-            });
+        let mut test = NelderMeadBounded::new(
+            x.clone(),
+            scale,
+            lb,
+            ub,
+            MultiDimFn::new(move |x: &Array1<MyFloat>| eval_f_simplex(x, &net)),
+        );
         _ = test.minimize(options);
 
         let margin = MARGIN;
@@ -1296,24 +1336,24 @@ mod minimize_myfloat_neldermeadbounded_tests {
             1e-12.into()
         ];
         let exemplar_res = array![
-            4827.569008555878.into(),
-            6491.027837932648.into(),
-            6870.00113002921.into(),
-            6972.801065944916.into(),
-            7474.561087533056.into(),
-            22859.74949460588.into(),
-            57889.9701887297.into(),
-            103373.76960471414.into(),
-            4890.356172590547.into()
+            4661.545515813834.into(),
+            5505.196136761653.into(),
+            6081.625223914001.into(),
+            6116.822531002638.into(),
+            6696.610974817988.into(),
+            7577.93497452239.into(),
+            8960.382934958692.into(),
+            12576.764010367328.into(),
+            4846.708605585247.into()
         ];
-        let exemplar_tol = 1.9304191405840867.into();
+        let exemplar_tol = 1.523531985879034.into();
         let exemplar_x = array![
             1.2361669322101397e-11.into(),
             1.0055555555555556e-06.into(),
             5.849383897826444e-13.into(),
-            1.0055555555555556e-06.into(),
+            0.9916666666666667.into(),
             1.9006085977366987e-15.into(),
-            1.0008701159555326e+03.into(),
+            998.5403838293637.into(),
             1.4565740713168557e-15.into(),
             2.5661741932665137e-15.into()
         ];
@@ -1332,10 +1372,13 @@ mod minimize_myfloat_neldermeadbounded_tests {
             None,
             None,
         ));
-        let mut test =
-            NelderMeadBounded::new(x.clone(), scale, lb, ub, move |x: &Array1<MyFloat>| {
-                eval_f_simplex(x, &net)
-            });
+        let mut test = NelderMeadBounded::new(
+            x.clone(),
+            scale,
+            lb,
+            ub,
+            MultiDimFn::new(move |x: &Array1<MyFloat>| eval_f_simplex(x, &net)),
+        );
         _ = test.minimize(options);
 
         let margin = MARGIN;
@@ -1398,24 +1441,24 @@ mod minimize_myfloat_neldermeadbounded_tests {
             1e-12.into()
         ];
         let exemplar_res = array![
-            3444.854217601127.into(),
-            3445.6419507426426.into(),
-            3446.992313419479.into(),
-            3447.1629865763994.into(),
-            3447.6709128994753.into(),
-            3448.537541981722.into(),
-            3449.1735500221007.into(),
-            3449.6304958773794.into(),
-            3446.6718686755007.into()
+            3425.6196627417.into(),
+            3426.9294925346976.into(),
+            3427.1583551128997.into(),
+            3427.2281799174566.into(),
+            3427.2353930328595.into(),
+            3427.6816934631543.into(),
+            3428.0395457254826.into(),
+            3428.2925608812147.into(),
+            3426.7925753080654.into()
         ];
-        let exemplar_tol = 0.0014246249880836607.into();
+        let exemplar_tol = 0.0009633892025137282.into();
         let exemplar_x = array![
             2.3804481112658933e-11.into(),
             1.0059277453279175e-6.into(),
             7.013163931317152e-13.into(),
-            0.7061273333553028.into(),
+            0.5593096729128388.into(),
             4.947616036977013e-15.into(),
-            1003.4892444833454.into(),
+            977.8167045688951.into(),
             5.401451482867253e-16.into(),
             1.1334435942547104e-14.into()
         ];
@@ -1434,10 +1477,13 @@ mod minimize_myfloat_neldermeadbounded_tests {
             None,
             None,
         ));
-        let mut test =
-            NelderMeadBounded::new(x.clone(), scale, lb, ub, move |x: &Array1<MyFloat>| {
-                eval_f_simplex(x, &net)
-            });
+        let mut test = NelderMeadBounded::new(
+            x.clone(),
+            scale,
+            lb,
+            ub,
+            MultiDimFn::new(move |x: &Array1<MyFloat>| eval_f_simplex(x, &net)),
+        );
         _ = test.minimize(options);
 
         let margin = MARGIN;

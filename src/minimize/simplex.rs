@@ -1,98 +1,112 @@
 #![allow(dead_code)]
 #![allow(unused_assignments)]
-use crate::error::MinimizerError;
-use crate::minimize::{ObjFn, myfloat::Vertex};
-use crate::myfloat::MyFloat;
+use crate::{
+    error::MinimizerError,
+    float::RFFloat,
+    minimize::{ObjFn, Vertex},
+};
 use ndarray::prelude::*;
 use std::fmt;
 
 /// Result of downhill simplex optimization
 #[derive(Debug, Clone)]
-pub struct SimplexResult {
-    pub xmin: Array1<MyFloat>,
-    pub fmin: MyFloat,
+pub struct SimplexResult<T> {
+    pub xmin: Array1<T>,
+    pub fmin: T,
     pub iters: usize,
     pub fn_evals: usize,
     pub converged: bool,
-    pub final_simplex_size: MyFloat,
-    pub history: Array1<MyFloat>,
+    pub final_simplex_size: T,
+    pub history: Array1<T>,
 }
 
-#[derive(Clone)]
-pub struct Simplex {
-    xmin: Array1<MyFloat>,
-    fmin: MyFloat,
-    f: Box<dyn ObjFn<MyFloat>>,
+pub struct Simplex<T> {
+    xmin: Array1<T>,
+    fmin: T,
+    f: Box<dyn ObjFn<T>>,
     iters: usize,
     converged: bool,
 }
 
-impl Simplex {
+impl<T> Clone for Simplex<T>
+where
+    T: Clone,
+{
+    fn clone(&self) -> Self {
+        Self {
+            xmin: self.xmin.clone(),
+            fmin: self.fmin.clone(),
+            f: dyn_clone::clone_box(&*self.f),
+            iters: self.iters,
+            converged: self.converged,
+        }
+    }
+}
+
+impl<T> Simplex<T>
+where
+    T: RFFloat,
+{
     pub fn new<F>(f: F) -> Self
     where
-        F: ObjFn<MyFloat> + 'static,
+        F: ObjFn<T> + 'static,
     {
         Simplex {
             xmin: array![],
-            fmin: 0.0.into(),
+            fmin: T::zero(),
             f: Box::new(f),
             iters: 0,
             converged: false,
         }
     }
 
-    pub fn new_boxed(f: Box<dyn ObjFn<MyFloat>>) -> Self {
+    pub fn new_boxed(f: Box<dyn ObjFn<T>>) -> Self {
         Simplex {
             xmin: array![],
-            fmin: 0.0.into(),
+            fmin: T::zero(),
             f: f,
             iters: 0,
             converged: false,
         }
     }
 
-    fn reflect_point(
-        &self,
-        worst: &Array1<MyFloat>,
-        centroid: &Array1<MyFloat>,
-        coeff: &MyFloat,
-    ) -> Array1<MyFloat> {
+    fn reflect_point(&self, worst: &Array1<T>, centroid: &Array1<T>, coeff: &T) -> Array1<T> {
         worst
             .iter()
             .zip(centroid.iter())
-            .map(|(w, c)| c + coeff * (c - w))
+            .map(|(w, c)| c.clone() + coeff.clone() * (c.clone() - w.clone()))
             .collect()
     }
 
-    fn calculate_centroid(&self, vertices: &[Vertex]) -> Array1<MyFloat> {
+    fn calculate_centroid(&self, vertices: &[Vertex<T>]) -> Array1<T> {
         let n = vertices[0].point.len();
-        let mut centroid = vec![0.0.into(); n];
+        let mut centroid = vec![T::zero(); n];
 
         for vertex in vertices {
             for (i, coord) in vertex.point.iter().enumerate() {
-                centroid[i] += coord;
+                centroid[i] += coord.clone();
             }
         }
 
         for coord in &mut centroid {
-            *coord /= vertices.len() as f64;
+            *coord /= T::from_f64(vertices.len() as f64);
         }
 
         Array1::from_vec(centroid)
     }
 
-    fn calculate_simplex_size(&self, simplex: &[Vertex]) -> MyFloat {
+    fn calculate_simplex_size(&self, simplex: &[Vertex<T>]) -> T {
         let n = simplex[0].point.len();
-        let mut max_distance = MyFloat::new(0.0);
+        let mut max_distance = T::zero();
 
         for i in 0..n {
             for j in i + 1..=n {
-                let distance: MyFloat = simplex[i]
+                let distance = simplex[i]
                     .point
                     .iter()
                     .zip(simplex[j].point.iter())
-                    .map(|(a, b)| (a - b).powi(2))
-                    .sum::<MyFloat>()
+                    .map(|(a, b)| (a.clone() - b.clone()).powi(2))
+                    .sum::<T>()
                     .sqrt();
 
                 max_distance = max_distance.max(&distance);
@@ -104,10 +118,10 @@ impl Simplex {
 
     fn run_simplex_algorithm(
         &mut self,
-        mut simplex: Vec<Vertex>,
-        tol: &MyFloat,
+        mut simplex: Vec<Vertex<T>>,
+        tol: &T,
         max_iters: usize,
-    ) -> Result<SimplexResult, MinimizerError> {
+    ) -> Result<SimplexResult<T>, MinimizerError> {
         let n = simplex[0].point.len();
         let mut fn_evals = simplex.len();
         self.iters = 0;
@@ -115,10 +129,10 @@ impl Simplex {
         self.converged = false;
 
         // Standard Nelder-Mead coefficients
-        let alpha = MyFloat::new(1.0);
-        let gamma = MyFloat::new(2.0);
-        let rho = MyFloat::new(0.5);
-        let sigma = MyFloat::new(0.5);
+        let alpha = T::one();
+        let gamma = T::from_f64(2.0);
+        let rho = T::from_f64(0.5);
+        let sigma = T::from_f64(0.5);
 
         while self.iters < max_iters {
             self.iters += 1;
@@ -164,7 +178,8 @@ impl Simplex {
                     value: f_reflected,
                 };
             } else if f_reflected < best.value {
-                let expanded = self.reflect_point(&worst.point, &centroid, &(&alpha * &gamma));
+                let expanded =
+                    self.reflect_point(&worst.point, &centroid, &(alpha.clone() * gamma.clone()));
                 let f_expanded = self.f.call(&expanded);
                 fn_evals += 1;
 
@@ -185,7 +200,8 @@ impl Simplex {
                 }
             } else {
                 let (contracted, f_contracted) = if f_reflected < worst.value {
-                    let point = self.reflect_point(&worst.point, &centroid, &(&alpha * &rho));
+                    let point =
+                        self.reflect_point(&worst.point, &centroid, &(alpha.clone() * rho.clone()));
                     let value = self.f.call(&point);
                     (point, value)
                 } else {
@@ -209,8 +225,9 @@ impl Simplex {
                     for i in 1..=n {
                         let mut new_point = Array1::zeros(n);
                         for j in 0..n {
-                            new_point[j] =
-                                &best_point[j] + &sigma * (&simplex[i].point[j] - &best_point[j]);
+                            new_point[j] = best_point[j].clone()
+                                + sigma.clone()
+                                    * (simplex[i].point[j].clone() - best_point[j].clone());
                         }
                         let new_value = self.f.call(&new_point);
                         fn_evals += 1;
@@ -261,30 +278,30 @@ impl Simplex {
     /// * `SimplexResult` containing the minimum point and convergence information
     pub fn downhill_simplex(
         &mut self,
-        initial_point: &Array1<MyFloat>,
-        initial_step: Option<MyFloat>,
-        tol: Option<MyFloat>,
+        initial_point: &Array1<T>,
+        initial_step: Option<T>,
+        tol: Option<T>,
         max_iters: Option<usize>,
-    ) -> Result<SimplexResult, MinimizerError> {
+    ) -> Result<SimplexResult<T>, MinimizerError> {
         self.converged = false;
         let n = initial_point.len();
         if n == 0 {
             return Err(MinimizerError::InvalidDimension);
         }
 
-        let step = initial_step.unwrap_or(1.0.into());
-        let tol = tol.unwrap_or(1e-8.into());
+        let step = initial_step.unwrap_or(T::one());
+        let tol = tol.unwrap_or(T::from_f64(1e-8));
         let max_iter = max_iters.unwrap_or(1000);
 
-        if tol <= 0.0 {
+        if tol <= T::zero() {
             return Err(MinimizerError::InvalidTolerance);
         }
 
         // Nelder-Mead coefficients
-        let alpha = MyFloat::new(1.0); // Reflection coefficient
-        let gamma = MyFloat::new(2.0); // Expansion coefficient
-        let rho = MyFloat::new(0.5); // Contraction coefficient
-        let sigma = MyFloat::new(0.5); // Shrink coefficient
+        let alpha = T::one(); // Reflection coefficient
+        let gamma = T::from_f64(2.0); // Expansion coefficient
+        let rho = T::from_f64(0.5); // Contraction coefficient
+        let sigma = T::from_f64(0.5); // Shrink coefficient
 
         // Initialize simplex with n+1 vertices
         let mut simplex = Vec::with_capacity(n + 1);
@@ -295,7 +312,7 @@ impl Simplex {
         // Create additional vertices by perturbing each coordinate
         for i in 0..n {
             let mut point = initial_point.clone();
-            point[i] += &step;
+            point[i] += step.clone();
             simplex.push(Vertex::new_boxed(point, self.f.clone())?);
         }
 
@@ -352,7 +369,8 @@ impl Simplex {
                 };
             } else if f_reflected < best.value {
                 // Try expansion
-                let expanded = self.reflect_point(&worst.point, &centroid, &(&alpha * &gamma));
+                let expanded =
+                    self.reflect_point(&worst.point, &centroid, &(alpha.clone() * gamma.clone()));
                 let f_expanded = self.f.call(&expanded);
                 fn_evals += 1;
 
@@ -377,7 +395,8 @@ impl Simplex {
                 // Try contraction
                 let (contracted, f_contracted) = if f_reflected < worst.value {
                     // Outside contraction
-                    let point = self.reflect_point(&worst.point, &centroid, &(&alpha * &rho));
+                    let point =
+                        self.reflect_point(&worst.point, &centroid, &(alpha.clone() * rho.clone()));
                     let value = self.f.call(&point);
                     fn_evals += 1;
                     (point, value)
@@ -405,8 +424,9 @@ impl Simplex {
                     for i in 1..=n {
                         let mut new_point = Array1::zeros(n);
                         for j in 0..n {
-                            new_point[j] =
-                                &best_point[j] + &sigma * (&simplex[i].point[j] - &best_point[j]);
+                            new_point[j] = best_point[j].clone()
+                                + sigma.clone()
+                                    * (simplex[i].point[j].clone() - best_point[j].clone());
                         }
                         let new_value = self.f.call(&new_point);
                         fn_evals += 1;
@@ -447,43 +467,44 @@ impl Simplex {
     /// characteristics for improved performance.
     pub fn adaptive_downhill_simplex(
         &mut self,
-        initial_point: &Array1<MyFloat>,
-        initial_step: Option<MyFloat>,
-        tol: Option<MyFloat>,
+        initial_point: &Array1<T>,
+        initial_step: Option<T>,
+        tol: Option<T>,
         max_iters: Option<usize>,
-    ) -> Result<SimplexResult, MinimizerError> {
+    ) -> Result<SimplexResult<T>, MinimizerError> {
         self.converged = false;
         let n = initial_point.len();
         if n == 0 {
             return Err(MinimizerError::InvalidDimension);
         }
 
-        let step = initial_step.unwrap_or(1.0.into());
-        let tol = tol.unwrap_or(1e-8.into());
+        let step = initial_step.unwrap_or(T::one());
+        let tol = tol.unwrap_or(T::from_f64(1e-8));
         let max_iter = max_iters.unwrap_or(1000);
 
         // Adaptive coefficients (from recent research)
-        let alpha = MyFloat::new(1.0); // Reflection
-        let gamma = MyFloat::new(1.0 + 2.0 / n as f64); // Expansion (dimension-dependent)
-        let rho = MyFloat::new(0.75 - 1.0 / (2.0 * n as f64)); // Contraction
-        let sigma = MyFloat::new(1.0 - 1.0 / n as f64); // Shrink
+        let alpha = T::one(); // Reflection
+        let gamma = T::from_f64(1.0 + 2.0 / n as f64); // Expansion (dimension-dependent)
+        let rho = T::from_f64(0.75 - 1.0 / (2.0 * n as f64)); // Contraction
+        let sigma = T::from_f64(1.0 - 1.0 / n as f64); // Shrink
 
         // Initialize simplex using regular simplex construction
         let mut simplex = Vec::with_capacity(n + 1);
         simplex.push(Vertex::new_boxed(initial_point.clone(), self.f.clone())?);
 
         // Use right-angled simplex construction for better performance
-        let delta_usual =
-            &step * (((n + 1) as f64).sqrt() + (n - 1) as f64) / (n as f64 * 2.0_f64.sqrt());
-        let delta_zero = &step * (((n + 1) as f64).sqrt() - 1.0) / (n as f64 * 2.0_f64.sqrt());
+        let delta_usual = step.clone()
+            * T::from_f64((((n + 1) as f64).sqrt() + (n - 1) as f64) / (n as f64 * 2.0_f64.sqrt()));
+        let delta_zero = step.clone()
+            * T::from_f64((((n + 1) as f64).sqrt() - 1.0) / (n as f64 * 2.0_f64.sqrt()));
 
         for i in 0..n {
             let mut point = initial_point.clone();
             for j in 0..n {
                 if i == j {
-                    point[j] += &delta_usual;
+                    point[j] += delta_usual.clone();
                 } else {
-                    point[j] += &delta_zero;
+                    point[j] += delta_zero.clone();
                 }
             }
             simplex.push(Vertex::new_boxed(point, self.f.clone())?);
@@ -491,7 +512,7 @@ impl Simplex {
 
         let mut fn_evals = n + 1;
         self.iters = 0;
-        let mut history = vec![];
+        let mut history: Vec<T> = vec![];
         let mut no_improvement_count = 0;
 
         while self.iters < max_iter {
@@ -506,8 +527,8 @@ impl Simplex {
 
             // Track convergence
             if !history.is_empty() {
-                let improvement: MyFloat = history.last().unwrap() - &best.value;
-                if improvement.abs() < &tol * 0.01 {
+                let improvement = history.last().unwrap().clone() - best.value.clone();
+                if improvement.abs() < tol.clone() * T::from_f64(0.01) {
                     no_improvement_count += 1;
                 } else {
                     no_improvement_count = 0;
@@ -552,8 +573,11 @@ impl Simplex {
                 };
             } else if f_reflected < best.value {
                 // Expansion
-                let expanded =
-                    self.reflect_point(&worst.point, &centroid, &(&alpha + (&gamma - &alpha)));
+                let expanded = self.reflect_point(
+                    &worst.point,
+                    &centroid,
+                    &(alpha.clone() + (gamma.clone() - alpha.clone())),
+                );
                 let f_expanded = self.f.call(&expanded);
                 fn_evals += 1;
 
@@ -575,7 +599,8 @@ impl Simplex {
             } else {
                 // Contraction
                 let (contracted, f_contracted) = if f_reflected < worst.value {
-                    let point = self.reflect_point(&worst.point, &centroid, &(&alpha * &rho));
+                    let point =
+                        self.reflect_point(&worst.point, &centroid, &(alpha.clone() * rho.clone()));
                     let value = self.f.call(&point);
                     (point, value)
                 } else {
@@ -600,8 +625,9 @@ impl Simplex {
                     for i in 1..=n {
                         let mut new_point = Array1::zeros(n);
                         for j in 0..n {
-                            new_point[j] =
-                                &best_point[j] + &sigma * (&simplex[i].point[j] - &best_point[j]);
+                            new_point[j] = best_point[j].clone()
+                                + sigma.clone()
+                                    * (simplex[i].point[j].clone() - best_point[j].clone());
                         }
                         let new_value = self.f.call(&new_point);
                         fn_evals += 1;
@@ -638,20 +664,20 @@ impl Simplex {
     /// Convenience function with default parameters
     pub fn minimize(
         &mut self,
-        initial_point: &Array1<MyFloat>,
-        initial_step: Option<MyFloat>,
-        tol: Option<MyFloat>,
+        initial_point: &Array1<T>,
+        initial_step: Option<T>,
+        tol: Option<T>,
         max_iters: Option<usize>,
-    ) -> Result<SimplexResult, MinimizerError> {
+    ) -> Result<SimplexResult<T>, MinimizerError> {
         self.downhill_simplex(initial_point, initial_step, tol, max_iters)
     }
 
     /// Create initial simplex with custom step sizes for each dimension
     pub fn minimize_with_steps(
         &mut self,
-        initial_point: &Array1<MyFloat>,
-        step_sizes: &Array1<MyFloat>,
-    ) -> Result<SimplexResult, MinimizerError> {
+        initial_point: &Array1<T>,
+        step_sizes: &Array1<T>,
+    ) -> Result<SimplexResult<T>, MinimizerError> {
         let n = initial_point.len();
         if step_sizes.len() != n {
             return Err(MinimizerError::InvalidInitialSimplex);
@@ -663,16 +689,19 @@ impl Simplex {
 
         for i in 0..n {
             let mut point = initial_point.clone();
-            point[i] += &step_sizes[i];
+            point[i] += step_sizes[i].clone();
             simplex.push(Vertex::new_boxed(point, self.f.clone())?);
         }
 
         // Continue with standard algorithm
-        self.run_simplex_algorithm(simplex, &1e-8.into(), 1000)
+        self.run_simplex_algorithm(simplex, &T::from_f64(1e-8), 1000)
     }
 }
 
-impl fmt::Debug for Simplex {
+impl<T> fmt::Debug for Simplex<T>
+where
+    T: RFFloat,
+{
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
@@ -683,9 +712,12 @@ impl fmt::Debug for Simplex {
 }
 
 #[cfg(test)]
-mod minimize_myfloat_simplex_tests {
+mod minimize_simplex_tests {
     use super::*;
-    use crate::minimize::myfloat::{F1dim, MultiDimFn};
+    use crate::{
+        minimize::{F1dim, MultiDimFn},
+        myfloat::MyFloat,
+    };
     use float_cmp::F64Margin;
     use std::f64::consts::{E, PI};
     use std::vec;
@@ -696,7 +728,7 @@ mod minimize_myfloat_simplex_tests {
     };
 
     // Helper function to create Ackley
-    fn ackley(bias: f64) -> F1dim {
+    fn ackley(bias: f64) -> F1dim<MyFloat> {
         F1dim::new(MultiDimFn::new(move |x: &Array1<MyFloat>| {
             let n = x.len() as f64;
             let t1 = x.iter().map(|val| val.powi(2)).sum::<MyFloat>();
@@ -706,7 +738,7 @@ mod minimize_myfloat_simplex_tests {
     }
 
     // Helper function to create Elliptic
-    fn elliptic(bias: f64) -> F1dim {
+    fn elliptic(bias: f64) -> F1dim<MyFloat> {
         F1dim::new(MultiDimFn::new(move |x: &Array1<MyFloat>| {
             let sum: MyFloat = x
                 .iter()
@@ -718,7 +750,7 @@ mod minimize_myfloat_simplex_tests {
     }
 
     // Helper function to create Griewank
-    fn griewank(bias: f64) -> F1dim {
+    fn griewank(bias: f64) -> F1dim<MyFloat> {
         F1dim::new(MultiDimFn::new(move |x: &Array1<MyFloat>| {
             let t1 = x.iter().map(|val| val.powi(2)).sum::<MyFloat>() / 4000.0;
             let t2 = x
@@ -731,7 +763,7 @@ mod minimize_myfloat_simplex_tests {
     }
 
     // Helper function to create Rosenbrock
-    fn rosenbrock(shift: Array1<MyFloat>, bias: f64) -> F1dim {
+    fn rosenbrock(shift: Array1<MyFloat>, bias: f64) -> F1dim<MyFloat> {
         F1dim::new(MultiDimFn::new(move |x: &Array1<MyFloat>| {
             let x_new = x - &shift + 1.0;
             let sum: MyFloat = x_new
@@ -1755,7 +1787,7 @@ mod minimize_myfloat_simplex_tests {
 
     mod cec2005_tests {
         use super::*;
-        use crate::minimize::myfloat::dot_1d_2d;
+        use crate::minimize::dot_1d_2d;
         use rand::Rng;
 
         const TEST_30D: bool = false;

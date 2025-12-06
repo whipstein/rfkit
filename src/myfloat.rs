@@ -1,5 +1,5 @@
 use core::f64;
-use num_traits::{Num, One, Zero};
+use num_traits::{Num, One, Signed, Zero};
 use rug::Float;
 use rug::ops::{Pow, PowAssign};
 use std::fmt;
@@ -1016,6 +1016,43 @@ impl Num for MyFloat {
     }
 }
 
+// Implement Signed trait
+impl Signed for MyFloat {
+    fn abs(&self) -> Self {
+        let mut temp = self.0.clone();
+        temp.abs_mut();
+        MyFloat(temp)
+    }
+
+    fn abs_sub(&self, other: &Self) -> Self {
+        if self > other {
+            self - other
+        } else {
+            MyFloat::zero()
+        }
+    }
+
+    fn signum(&self) -> Self {
+        if self.0.is_nan() {
+            MyFloat::nan()
+        } else if self.0.is_zero() {
+            MyFloat::zero()
+        } else if self.0.is_sign_positive() {
+            MyFloat::one()
+        } else {
+            -MyFloat::one()
+        }
+    }
+
+    fn is_positive(&self) -> bool {
+        self.0.is_sign_positive() && !self.0.is_zero()
+    }
+
+    fn is_negative(&self) -> bool {
+        self.0.is_sign_negative()
+    }
+}
+
 // Implement Clone
 impl Clone for MyFloat {
     fn clone(&self) -> Self {
@@ -1033,14 +1070,16 @@ impl Default for MyFloat {
 // Implement Display for pretty printing
 impl fmt::Display for MyFloat {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
+        // write!(f, "{}", self.0)
+        write!(f, "{}", self.to_f64())
     }
 }
 
 // Implement Debug
 impl fmt::Debug for MyFloat {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "MyFloat({})", self.0)
+        // write!(f, "MyFloat({})", self.0)
+        write!(f, "{}", self.to_f64())
     }
 }
 
@@ -1654,5 +1693,45 @@ mod myfloat_tests {
         let borrowed = MyFloat::new(3.14);
         let not_borrowed = !&borrowed;
         assert_eq!(not_borrowed.to_f64(), 0.0);
+    }
+
+    #[test]
+    fn test_signed_trait() {
+        use num_traits::Signed;
+
+        let positive = MyFloat::new(5.0);
+        let negative = MyFloat::new(-3.0);
+        let zero = MyFloat::zero();
+
+        // Test abs
+        assert_eq!(positive.abs().to_f64(), 5.0);
+        assert_eq!(negative.abs().to_f64(), 3.0);
+        assert_eq!(zero.abs().to_f64(), 0.0);
+
+        // Test signum
+        assert_eq!(positive.signum().to_f64(), 1.0);
+        assert_eq!(negative.signum().to_f64(), -1.0);
+        assert_eq!(zero.signum().to_f64(), 0.0);
+
+        // Test is_positive
+        assert!(positive.is_positive());
+        assert!(!negative.is_positive());
+        assert!(!zero.is_positive());
+
+        // Test is_negative
+        assert!(!positive.is_negative());
+        assert!(negative.is_negative());
+        assert!(!zero.is_negative());
+
+        // Test abs_sub
+        let a = MyFloat::new(10.0);
+        let b = MyFloat::new(3.0);
+        let abs_sub_result = a.abs_sub(&b);
+        assert_eq!(abs_sub_result.to_f64(), 7.0);
+
+        let c = MyFloat::new(2.0);
+        let d = MyFloat::new(8.0);
+        let abs_sub_result2 = c.abs_sub(&d);
+        assert_eq!(abs_sub_result2.to_f64(), 0.0);
     }
 }

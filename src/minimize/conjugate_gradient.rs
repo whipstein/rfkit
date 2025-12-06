@@ -1,26 +1,25 @@
 #![allow(dead_code)]
 #![allow(unused_assignments)]
-use crate::error::MinimizerError;
-use crate::minimize::{
-    ObjGradFn,
-    myfloat::{LineSearchResult, WolfeParams},
+use crate::{
+    error::MinimizerError,
+    float::RFFloat,
+    minimize::{LineSearchResult, ObjGradFn, WolfeParams},
 };
-use crate::myfloat::MyFloat;
 use ndarray::prelude::*;
 use std::fmt;
 
 /// Result of conjugate gradient optimization
 #[derive(Debug, Clone)]
-pub struct ConjGradResult {
-    pub xmin: Array1<MyFloat>,
-    pub fmin: MyFloat,
-    pub gradient_norm: MyFloat,
+pub struct ConjGradResult<T> {
+    pub xmin: Array1<T>,
+    pub fmin: T,
+    pub gradient_norm: T,
     pub iters: usize,
     pub fn_evals: usize,
     pub g_evals: usize,
     pub converged: bool,
-    pub convergence_history: Array1<MyFloat>,
-    pub gradient_norm_history: Array1<MyFloat>,
+    pub convergence_history: Array1<T>,
+    pub gradient_norm_history: Array1<T>,
     pub restart_count: usize,
     pub method_used: String,
 }
@@ -47,34 +46,51 @@ impl fmt::Display for ConjGradMethod {
     }
 }
 
-#[derive(Clone)]
-pub struct ConjGrad {
-    xmin: Array1<MyFloat>,
-    fmin: MyFloat,
-    f: Box<dyn ObjGradFn<MyFloat>>,
+pub struct ConjGrad<T> {
+    xmin: Array1<T>,
+    fmin: T,
+    f: Box<dyn ObjGradFn<T>>,
     iters: usize,
     converged: bool,
 }
 
-impl ConjGrad {
+impl<T> Clone for ConjGrad<T>
+where
+    T: Clone,
+{
+    fn clone(&self) -> Self {
+        Self {
+            xmin: self.xmin.clone(),
+            fmin: self.fmin.clone(),
+            f: dyn_clone::clone_box(&*self.f),
+            iters: self.iters,
+            converged: self.converged,
+        }
+    }
+}
+
+impl<T> ConjGrad<T>
+where
+    T: RFFloat,
+{
     pub fn new<F>(f: F) -> Self
     where
-        F: ObjGradFn<MyFloat> + Clone + 'static,
+        F: ObjGradFn<T> + Clone + 'static,
     {
         let boxed = Box::new(f);
         ConjGrad {
             xmin: array![],
-            fmin: 0.0.into(),
+            fmin: T::from_f64(0.0),
             f: boxed,
             iters: 0,
             converged: false,
         }
     }
 
-    pub fn new_boxed(f: Box<dyn ObjGradFn<MyFloat>>) -> Self {
+    pub fn new_boxed(f: Box<dyn ObjGradFn<T>>) -> Self {
         ConjGrad {
             xmin: array![],
-            fmin: 0.0.into(),
+            fmin: T::from_f64(0.0),
             f: f,
             iters: 0,
             converged: false,
@@ -84,22 +100,22 @@ impl ConjGrad {
     /// Line search using strong Wolfe conditions
     fn wolfe_line_search(
         &mut self,
-        x: &Array1<MyFloat>,
-        direction: &Array1<MyFloat>,
-        f_current: &MyFloat,
-        grad_current: &Array1<MyFloat>,
-        initial_step: &MyFloat,
-        wolfe_params: &WolfeParams,
+        x: &Array1<T>,
+        direction: &Array1<T>,
+        f_current: &T,
+        grad_current: &Array1<T>,
+        initial_step: &T,
+        wolfe_params: &WolfeParams<T>,
         max_evaluations: usize,
-    ) -> Result<LineSearchResult, MinimizerError> {
+    ) -> Result<LineSearchResult<T>, MinimizerError> {
         let n = x.len();
-        let directional_derivative: MyFloat = grad_current
+        let directional_derivative = grad_current
             .iter()
             .zip(direction.iter())
-            .map(|(g, d)| g * d)
-            .sum();
+            .map(|(g, d)| g.clone() * d.clone())
+            .sum::<T>();
 
-        if directional_derivative >= 0.0 {
+        if directional_derivative >= T::zero() {
             return Err(MinimizerError::LinearSearchFailed);
         }
 
@@ -110,7 +126,7 @@ impl ConjGrad {
         let mut zoom_iterations = 0;
 
         // Initial bracketing phase
-        let mut alpha_prev = MyFloat::new(0.0);
+        let mut alpha_prev = T::zero();
         let mut f_prev = f_current.clone();
 
         loop {
@@ -119,10 +135,10 @@ impl ConjGrad {
             }
 
             // Evaluate function at current alpha
-            let x_new: Array1<MyFloat> = x
+            let x_new: Array1<T> = x
                 .iter()
                 .zip(direction.iter())
-                .map(|(xi, di)| xi + &alpha * di)
+                .map(|(xi, di)| xi.clone() + alpha.clone() * di.clone())
                 .collect();
 
             let f_new = self.f.call(&x_new);
@@ -133,7 +149,9 @@ impl ConjGrad {
             }
 
             // Check Armijo condition
-            if f_new > f_current + &wolfe_params.c1 * &alpha * &directional_derivative
+            if f_new
+                > f_current.clone()
+                    + wolfe_params.c1.clone() * alpha.clone() * directional_derivative.clone()
                 || (evaluations > 1 && f_new >= f_prev)
             {
                 return self
@@ -161,14 +179,15 @@ impl ConjGrad {
                 return Err(MinimizerError::GradientEvaluationError);
             }
 
-            let new_directional_derivative: MyFloat = grad_new
+            let new_directional_derivative = grad_new
                 .iter()
                 .zip(direction.iter())
-                .map(|(g, d)| g * d)
-                .sum();
+                .map(|(g, d)| g.clone() * d.clone())
+                .sum::<T>();
 
             // Check curvature condition
-            if new_directional_derivative.abs() <= -1.0 * &wolfe_params.c2 * &directional_derivative
+            if new_directional_derivative.abs()
+                <= T::from_f64(-1.0) * wolfe_params.c2.clone() * directional_derivative.clone()
             {
                 return Ok(LineSearchResult {
                     alpha,
@@ -178,7 +197,7 @@ impl ConjGrad {
                 });
             }
 
-            if new_directional_derivative >= 0.0 {
+            if new_directional_derivative >= T::zero() {
                 return self
                     .zoom_phase(
                         x,
@@ -199,10 +218,10 @@ impl ConjGrad {
             // Expand step size
             alpha_prev = alpha.clone();
             f_prev = f_new.clone();
-            alpha *= 2.0;
+            alpha *= T::from_f64(2.0);
             zoom_iterations += 1;
 
-            if alpha > 1e6 {
+            if alpha > T::from_f64(1e6) {
                 break;
             }
         }
@@ -219,22 +238,22 @@ impl ConjGrad {
     /// Zoom phase for Wolfe line search
     fn zoom_phase(
         &mut self,
-        x: &Array1<MyFloat>,
-        direction: &Array1<MyFloat>,
-        f_current: &MyFloat,
-        grad_current: &Array1<MyFloat>,
-        al_low: &MyFloat,
-        al_high: &MyFloat,
-        wolfe_params: &WolfeParams,
+        x: &Array1<T>,
+        direction: &Array1<T>,
+        f_current: &T,
+        grad_current: &Array1<T>,
+        al_low: &T,
+        al_high: &T,
+        wolfe_params: &WolfeParams<T>,
         max_evaluations: usize,
-    ) -> Result<LineSearchResult, MinimizerError> {
+    ) -> Result<LineSearchResult<T>, MinimizerError> {
         let mut alpha_low = al_low.clone();
         let mut alpha_high = al_high.clone();
-        let directional_derivative: MyFloat = grad_current
+        let directional_derivative = grad_current
             .iter()
             .zip(direction.iter())
-            .map(|(g, d)| g * d)
-            .sum();
+            .map(|(g, d)| g.clone() * d.clone())
+            .sum::<T>();
 
         let mut evaluations = 0;
 
@@ -246,15 +265,15 @@ impl ConjGrad {
 
             // Interpolate to find new alpha
             let alpha = if alpha_high.is_finite() {
-                (&alpha_low + &alpha_high) / 2.0
+                (alpha_low.clone() + alpha_high.clone()) / T::from_f64(2.0)
             } else {
-                &alpha_low * 2.0
+                alpha_low.clone() * T::from_f64(2.0)
             };
 
-            let x_new: Array1<MyFloat> = x
+            let x_new: Array1<T> = x
                 .iter()
                 .zip(direction.iter())
-                .map(|(xi, di)| xi + &alpha * di)
+                .map(|(xi, di)| xi.clone() + alpha.clone() * di.clone())
                 .collect();
 
             let f_new = self.f.call(&x_new);
@@ -266,7 +285,10 @@ impl ConjGrad {
             }
 
             // Check Armijo condition
-            if f_new > f_current + &wolfe_params.c1 * &alpha * &directional_derivative {
+            if f_new
+                > f_current.clone()
+                    + wolfe_params.c1.clone() * alpha.clone() * directional_derivative.clone()
+            {
                 alpha_high = alpha.clone();
                 continue;
             }
@@ -274,14 +296,15 @@ impl ConjGrad {
             let grad_new = self.f.grad(&x_new);
             evaluations += 1;
 
-            let new_directional_derivative: MyFloat = grad_new
+            let new_directional_derivative = grad_new
                 .iter()
                 .zip(direction.iter())
-                .map(|(g, d)| g * d)
-                .sum();
+                .map(|(g, d)| g.clone() * d.clone())
+                .sum::<T>();
 
             // Check curvature condition
-            if new_directional_derivative.abs() <= -1.0 * &wolfe_params.c2 * &directional_derivative
+            if new_directional_derivative.abs()
+                <= T::from_f64(-1.0) * wolfe_params.c2.clone() * directional_derivative.clone()
             {
                 return Ok(LineSearchResult {
                     alpha,
@@ -291,7 +314,9 @@ impl ConjGrad {
                 });
             }
 
-            if &new_directional_derivative * (&alpha_high - &alpha_low) >= 0.0 {
+            if new_directional_derivative.clone() * (alpha_high.clone() - alpha_low.clone())
+                >= T::zero()
+            {
                 alpha_high = alpha_low.clone();
             }
 
@@ -299,11 +324,11 @@ impl ConjGrad {
         }
 
         // Return best alpha found
-        let alpha = alpha_low;
-        let x_new: Array1<MyFloat> = x
+        let alpha = alpha_low.clone();
+        let x_new: Array1<T> = x
             .iter()
             .zip(direction.iter())
-            .map(|(xi, di)| xi + &alpha * di)
+            .map(|(xi, di)| xi.clone() + alpha.clone() * di.clone())
             .collect();
 
         Ok(LineSearchResult {
@@ -329,26 +354,26 @@ impl ConjGrad {
     /// * `restart_period` - Restart every n iterations (default: n)
     ///
     /// # Returns
-    /// * `ConjGradResult` containing the minimum and convergence info
+    /// * `ConjGradResult<T>` containing the minimum and convergence info
     pub fn conjugate_gradient(
         &mut self,
-        initial_point: &Array1<MyFloat>,
+        initial_point: &Array1<T>,
         method: ConjGradMethod,
-        tol: Option<MyFloat>,
+        tol: Option<T>,
         max_iters: Option<usize>,
         restart_period: Option<usize>,
-    ) -> Result<ConjGradResult, MinimizerError> {
+    ) -> Result<ConjGradResult<T>, MinimizerError> {
         self.converged = false;
         let n = initial_point.len();
         if n == 0 {
             return Err(MinimizerError::InvalidDimension);
         }
 
-        let tol = tol.unwrap_or(1e-6.into());
+        let tol = tol.unwrap_or(T::from_f64(1e-6));
         let max_iter = max_iters.unwrap_or(n * 10);
         let restart_freq = restart_period.unwrap_or(n);
 
-        if tol <= 0.0 {
+        if tol <= T::zero() {
             return Err(MinimizerError::InvalidTolerance);
         }
 
@@ -373,8 +398,12 @@ impl ConjGrad {
         let mut restart_count = 0;
 
         // Initial search direction is negative gradient
-        let mut search_direction: Array1<MyFloat> = grad_current.iter().map(|g| -g).collect();
-        let mut grad_norm = grad_current.iter().map(|g| g * g).sum::<MyFloat>().sqrt();
+        let mut search_direction: Array1<T> = grad_current.iter().map(|g| -g.clone()).collect();
+        let mut grad_norm = grad_current
+            .iter()
+            .map(|g| g.clone() * g.clone())
+            .sum::<T>()
+            .sqrt();
         gradient_norm_history.push(grad_norm.clone());
 
         while self.iters < max_iter && grad_norm > tol {
@@ -386,7 +415,7 @@ impl ConjGrad {
                 &search_direction,
                 &f_current,
                 &grad_current,
-                &1.0.into(), // Initial step size
+                &T::from_f64(1.0), // Initial step size
                 &wolfe_params,
                 100,
             )?;
@@ -396,7 +425,7 @@ impl ConjGrad {
 
             // Update position
             for i in 0..n {
-                x[i] += &line_result.alpha * &search_direction[i];
+                x[i] += line_result.alpha.clone() * search_direction[i].clone();
             }
 
             f_current = line_result.f_new.clone();
@@ -408,7 +437,11 @@ impl ConjGrad {
                 return Err(MinimizerError::GradientEvaluationError);
             }
 
-            grad_norm = grad_current.iter().map(|g| g * g).sum::<MyFloat>().sqrt();
+            grad_norm = grad_current
+                .iter()
+                .map(|g| g.clone() * g.clone())
+                .sum::<T>()
+                .sqrt();
             convergence_history.push(f_current.clone());
             gradient_norm_history.push(grad_norm.clone());
 
@@ -419,7 +452,7 @@ impl ConjGrad {
 
             // Restart condition - use steepest descent
             if self.iters % restart_freq == 0 {
-                search_direction = grad_current.iter().map(|g| -g).collect();
+                search_direction = grad_current.iter().map(|g| -g.clone()).collect();
                 restart_count += 1;
                 continue;
             }
@@ -427,137 +460,146 @@ impl ConjGrad {
             // Compute beta using the specified method
             let beta = match method {
                 ConjGradMethod::FletcherReeves => {
-                    let grad_new_norm_sq = grad_current.iter().map(|g| g * g).sum::<MyFloat>();
-                    let grad_old_norm_sq = grad_old.iter().map(|g| g * g).sum::<MyFloat>();
+                    let grad_new_norm_sq = grad_current
+                        .iter()
+                        .map(|g| g.clone() * g.clone())
+                        .sum::<T>();
+                    let grad_old_norm_sq =
+                        grad_old.iter().map(|g| g.clone() * g.clone()).sum::<T>();
 
-                    if grad_old_norm_sq < 1e-12 {
-                        0.0.into()
+                    if grad_old_norm_sq < T::from_f64(1e-12) {
+                        T::from_f64(0.0)
                     } else {
-                        &grad_new_norm_sq / &grad_old_norm_sq
+                        grad_new_norm_sq.clone() / grad_old_norm_sq.clone()
                     }
                 }
 
                 ConjGradMethod::PolakRibiere => {
-                    let grad_diff: Array1<MyFloat> = grad_current
+                    let grad_diff: Array1<T> = grad_current
                         .iter()
                         .zip(grad_old.iter())
-                        .map(|(g_new, g_old)| g_new - g_old)
+                        .map(|(g_new, g_old)| g_new.clone() - g_old.clone())
                         .collect();
 
-                    let numerator: MyFloat = grad_current
+                    let numerator = grad_current
                         .iter()
                         .zip(grad_diff.iter())
-                        .map(|(g, diff)| g * diff)
-                        .sum();
+                        .map(|(g, diff)| g.clone() * diff.clone())
+                        .sum::<T>();
 
-                    let denominator: MyFloat = grad_old.iter().map(|g| g * g).sum();
+                    let denominator = grad_old.iter().map(|g| g.clone() * g.clone()).sum::<T>();
 
-                    if denominator < 1e-12 {
-                        0.0.into()
+                    if denominator < T::from_f64(1e-12) {
+                        T::from_f64(0.0)
                     } else {
-                        (&numerator / &denominator).max(&0.0.into()) // Non-negative variant
+                        (numerator.clone() / denominator.clone()).max(&T::from_f64(0.0)) // Non-negative variant
                     }
                 }
 
                 ConjGradMethod::HestenesStiefel => {
-                    let grad_diff: Array1<MyFloat> = grad_current
+                    let grad_diff: Array1<T> = grad_current
                         .iter()
                         .zip(grad_old.iter())
-                        .map(|(g_new, g_old)| g_new - g_old)
+                        .map(|(g_new, g_old)| g_new.clone() - g_old.clone())
                         .collect();
 
-                    let numerator: MyFloat = grad_current
+                    let numerator = grad_current
                         .iter()
                         .zip(grad_diff.iter())
-                        .map(|(g, diff)| g * diff)
-                        .sum();
+                        .map(|(g, diff)| g.clone() * diff.clone())
+                        .sum::<T>();
 
-                    let denominator: MyFloat = search_direction
+                    let denominator = search_direction
                         .iter()
                         .zip(grad_diff.iter())
-                        .map(|(h, diff)| h * diff)
-                        .sum();
+                        .map(|(h, diff)| h.clone() * diff.clone())
+                        .sum::<T>();
 
-                    if denominator.abs() < 1e-12 {
-                        0.0.into()
+                    if denominator.abs() < T::from_f64(1e-12) {
+                        T::from_f64(0.0)
                     } else {
-                        &numerator / &denominator
+                        numerator.clone() / denominator.clone()
                     }
                 }
 
                 ConjGradMethod::DaiYuan => {
-                    let grad_diff: Array1<MyFloat> = grad_current
+                    let grad_diff: Array1<T> = grad_current
                         .iter()
                         .zip(grad_old.iter())
-                        .map(|(g_new, g_old)| g_new - g_old)
+                        .map(|(g_new, g_old)| g_new.clone() - g_old.clone())
                         .collect();
 
-                    let numerator: MyFloat = grad_current.iter().map(|g| g * g).sum();
+                    let numerator = grad_current
+                        .iter()
+                        .map(|g| g.clone() * g.clone())
+                        .sum::<T>();
 
-                    let denominator: MyFloat = search_direction
+                    let denominator = search_direction
                         .iter()
                         .zip(grad_diff.iter())
-                        .map(|(h, diff)| h * diff)
-                        .sum();
+                        .map(|(h, diff)| h.clone() * diff.clone())
+                        .sum::<T>();
 
-                    if denominator.abs() < 1e-12 {
-                        0.0.into()
+                    if denominator.abs() < T::from_f64(1e-12) {
+                        T::from_f64(0.0)
                     } else {
-                        &numerator / &denominator
+                        numerator.clone() / denominator.clone()
                     }
                 }
 
                 ConjGradMethod::HagerZhang => {
-                    let grad_diff: Array1<MyFloat> = grad_current
+                    let grad_diff: Array1<T> = grad_current
                         .iter()
                         .zip(grad_old.iter())
-                        .map(|(g_new, g_old)| g_new - g_old)
+                        .map(|(g_new, g_old)| g_new.clone() - g_old.clone())
                         .collect();
 
                     let hd_dot = search_direction
                         .iter()
                         .zip(grad_diff.iter())
-                        .map(|(h, diff)| h * diff)
-                        .sum::<MyFloat>();
+                        .map(|(h, diff)| h.clone() * diff.clone())
+                        .sum::<T>();
 
-                    if hd_dot.abs() < 1e-12 {
-                        0.0.into()
+                    if hd_dot.abs() < T::from_f64(1e-12) {
+                        T::from_f64(0.0)
                     } else {
-                        let grad_diff_norm_sq: MyFloat = grad_diff.iter().map(|d| d * d).sum();
-                        let scaling = 2.0 * &grad_diff_norm_sq / &hd_dot;
+                        let grad_diff_norm_sq =
+                            grad_diff.iter().map(|d| d.clone() * d.clone()).sum::<T>();
+                        let scaling = T::from_f64(2.0) * grad_diff_norm_sq.clone() / hd_dot.clone();
 
-                        let adjusted_diff: Array1<MyFloat> = grad_diff
+                        let adjusted_diff: Array1<T> = grad_diff
                             .iter()
                             .zip(search_direction.iter())
-                            .map(|(diff, h)| diff - &scaling * h)
+                            .map(|(diff, h)| diff.clone() - scaling.clone() * h.clone())
                             .collect();
 
-                        let numerator: MyFloat = adjusted_diff
+                        let numerator = adjusted_diff
                             .iter()
                             .zip(grad_current.iter())
-                            .map(|(adj, g)| adj * g)
-                            .sum();
+                            .map(|(adj, g)| adj.clone() * g.clone())
+                            .sum::<T>();
 
-                        &numerator / &hd_dot
+                        numerator.clone() / hd_dot.clone()
                     }
                 }
             };
 
             // Update search direction
             for i in 0..n {
-                search_direction[i] = -&grad_current[i] + &beta * &search_direction[i];
+                search_direction[i] =
+                    -grad_current[i].clone() + beta.clone() * search_direction[i].clone();
             }
 
             // Check if direction is still descent direction
-            let directional_derivative: MyFloat = search_direction
+            let directional_derivative = search_direction
                 .iter()
                 .zip(grad_current.iter())
-                .map(|(d, g)| d * g)
-                .sum();
+                .map(|(d, g)| d.clone() * g.clone())
+                .sum::<T>();
 
-            if directional_derivative >= 0.0 {
+            if directional_derivative >= T::zero() {
                 // Not a descent direction, restart with steepest descent
-                search_direction = grad_current.iter().map(|g| -g).collect();
+                search_direction = grad_current.iter().map(|g| -g.clone()).collect();
                 restart_count += 1;
             }
         }
@@ -583,8 +625,8 @@ impl ConjGrad {
     /// Convenience function using Polak-Ribiere method (generally robust)
     pub fn minimize(
         &mut self,
-        initial_point: &Array1<MyFloat>,
-    ) -> Result<ConjGradResult, MinimizerError> {
+        initial_point: &Array1<T>,
+    ) -> Result<ConjGradResult<T>, MinimizerError> {
         self.conjugate_gradient(
             initial_point,
             ConjGradMethod::PolakRibiere,
@@ -597,10 +639,10 @@ impl ConjGrad {
     /// Compare different CG methods on the same problem
     pub fn compare_cg_methods(
         &mut self,
-        initial_point: &Array1<MyFloat>,
-        tol: Option<MyFloat>,
+        initial_point: &Array1<T>,
+        tol: Option<T>,
         max_iters: Option<usize>,
-    ) -> Vec<(ConjGradMethod, Result<ConjGradResult, MinimizerError>)> {
+    ) -> Vec<(ConjGradMethod, Result<ConjGradResult<T>, MinimizerError>)> {
         let methods = [
             ConjGradMethod::FletcherReeves,
             ConjGradMethod::PolakRibiere,
@@ -620,7 +662,10 @@ impl ConjGrad {
     }
 }
 
-impl fmt::Debug for ConjGrad {
+impl<T> fmt::Debug for ConjGrad<T>
+where
+    T: RFFloat,
+{
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
@@ -631,9 +676,12 @@ impl fmt::Debug for ConjGrad {
 }
 
 #[cfg(test)]
-mod minimize_myfloat_conjgrad_tests {
+mod minimize_conjgrad_tests {
     use super::*;
-    use crate::minimize::myfloat::{GF1dim, MultiDimGradFn, MultiDimNumGradFn};
+    use crate::{
+        minimize::{GF1dim, MultiDimGradFn, MultiDimNumGradFn},
+        myfloat::MyFloat,
+    };
     use float_cmp::F64Margin;
     use std::vec;
 
@@ -984,13 +1032,13 @@ mod minimize_myfloat_conjgrad_tests {
     }
 
     // Helper functions for common test functions
-    fn simple_quadratic() -> GF1dim {
+    fn simple_quadratic() -> GF1dim<MyFloat> {
         let func = |x: &Array1<MyFloat>| x.iter().map(|xi| xi.powi(2)).sum::<MyFloat>();
         let grad = |x: &Array1<MyFloat>| x.iter().map(|xi| 2.0 * xi).collect();
         GF1dim::new(MultiDimGradFn::new(func, grad))
     }
 
-    fn shifted_quadratic(center: &Array1<MyFloat>) -> GF1dim {
+    fn shifted_quadratic(center: &Array1<MyFloat>) -> GF1dim<MyFloat> {
         let center_func = center.clone();
         let func = move |x: &Array1<MyFloat>| {
             x.iter()
@@ -1008,7 +1056,7 @@ mod minimize_myfloat_conjgrad_tests {
         GF1dim::new(MultiDimGradFn::new(func, grad))
     }
 
-    fn rosenbrock_2d() -> GF1dim {
+    fn rosenbrock_2d() -> GF1dim<MyFloat> {
         let func =
             |x: &Array1<MyFloat>| (1.0 - &x[0]).powi(2) + 100.0 * (&x[1] - x[0].powi(2)).powi(2);
         let grad = |x: &Array1<MyFloat>| {

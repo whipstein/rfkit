@@ -1,8 +1,6 @@
 #![allow(dead_code)]
 #![allow(unused_assignments)]
-use crate::error::MinimizerError;
-use crate::minimize::myfloat::ObjFn;
-use crate::myfloat::MyFloat;
+use crate::{error::MinimizerError, float::RFFloat, minimize::ObjFn};
 use ndarray::prelude::*;
 use rand::prelude::*;
 use rand_distr::{Distribution, Normal};
@@ -10,35 +8,53 @@ use std::fmt;
 
 /// Result of CMA-ES optimization
 #[derive(Debug, Clone)]
-pub struct CmaEsResult {
-    pub xmin: Array1<MyFloat>,
-    pub fmin: MyFloat,
+pub struct CmaEsResult<T> {
+    pub xmin: Array1<T>,
+    pub fmin: T,
     pub generations: usize,
     pub fn_evals: usize,
     pub converged: bool,
-    pub final_sigma: MyFloat,
-    pub condition_number: MyFloat,
-    pub history: Vec<MyFloat>,
+    pub final_sigma: T,
+    pub condition_number: T,
+    pub history: Vec<T>,
 }
 
-#[derive(Clone)]
-pub struct CmaEs {
-    xmin: Array1<MyFloat>,
-    fmin: MyFloat,
-    f: Box<dyn ObjFn<MyFloat>>,
+pub struct CmaEs<T> {
+    xmin: Array1<T>,
+    fmin: T,
+    f: Box<dyn ObjFn<T>>,
     generations: usize,
     converged: bool,
     rng: StdRng,
 }
 
-impl CmaEs {
+impl<T> Clone for CmaEs<T>
+where
+    T: Clone,
+{
+    fn clone(&self) -> Self {
+        Self {
+            xmin: self.xmin.clone(),
+            fmin: self.fmin.clone(),
+            f: dyn_clone::clone_box(&*self.f),
+            generations: self.generations,
+            converged: self.converged,
+            rng: self.rng.clone(),
+        }
+    }
+}
+
+impl<T> CmaEs<T>
+where
+    T: RFFloat,
+{
     pub fn new<F>(f: F) -> Self
     where
-        F: ObjFn<MyFloat> + 'static,
+        F: ObjFn<T> + 'static,
     {
         CmaEs {
             xmin: array![],
-            fmin: f64::INFINITY.into(),
+            fmin: T::infinity(),
             f: Box::new(f),
             generations: 0,
             converged: false,
@@ -46,10 +62,10 @@ impl CmaEs {
         }
     }
 
-    pub fn new_boxed(f: Box<dyn ObjFn<MyFloat>>) -> Self {
+    pub fn new_boxed(f: Box<dyn ObjFn<T>>) -> Self {
         CmaEs {
             xmin: array![],
-            fmin: f64::INFINITY.into(),
+            fmin: T::infinity(),
             f: f,
             generations: 0,
             converged: false,
@@ -59,11 +75,11 @@ impl CmaEs {
 
     pub fn with_seed<F>(f: F, seed: u64) -> Self
     where
-        F: ObjFn<MyFloat> + 'static,
+        F: ObjFn<T> + 'static,
     {
         CmaEs {
             xmin: array![],
-            fmin: f64::INFINITY.into(),
+            fmin: T::infinity(),
             f: Box::new(f),
             generations: 0,
             converged: false,
@@ -72,17 +88,17 @@ impl CmaEs {
     }
 
     /// Compute eigendecomposition of a symmetric matrix using Jacobi method
-    fn eigen_decomposition(&self, matrix: &Array2<MyFloat>) -> (Array1<MyFloat>, Array2<MyFloat>) {
+    fn eigen_decomposition(&self, matrix: &Array2<T>) -> (Array1<T>, Array2<T>) {
         let n = matrix.nrows();
         let mut a = matrix.clone();
-        let mut v = Array2::<MyFloat>::eye(n);
+        let mut v = Array2::<T>::eye(n);
 
         let max_iter = 50;
-        let tolerance = 1e-12;
+        let tolerance = T::from_f64(1e-12);
 
         for _ in 0..max_iter {
             // Find largest off-diagonal element
-            let mut max_val = MyFloat::new(0.0);
+            let mut max_val = T::from_f64(0.0);
             let (mut p, mut q) = (0, 1);
 
             for i in 0..n {
@@ -100,10 +116,13 @@ impl CmaEs {
             }
 
             // Compute rotation angle
-            let theta = if (&a[[q, q]] - &a[[p, p]]).abs() < 1e-10 {
-                MyFloat::new(std::f64::consts::PI / 4.0)
+            let theta = if (a[[q, q]].clone() - a[[p, p]].clone()).abs() < T::from_f64(1e-10) {
+                T::from_f64(std::f64::consts::PI / 4.0)
             } else {
-                0.5 * (2.0 * &a[[p, q]] / (&a[[q, q]] - &a[[p, p]])).atan()
+                T::from_f64(0.5)
+                    * (T::from_f64(2.0) * a[[p, q]].clone()
+                        / (a[[q, q]].clone() - a[[p, p]].clone()))
+                    .atan()
             };
 
             let cos_theta = theta.cos();
@@ -114,34 +133,34 @@ impl CmaEs {
             let aqq = a[[q, q]].clone();
             let apq = a[[p, q]].clone();
 
-            a[[p, p]] = &cos_theta * &cos_theta * &app + &sin_theta * &sin_theta * &aqq
-                - 2.0 * &cos_theta * &sin_theta * &apq;
-            a[[q, q]] = &sin_theta * &sin_theta * &app
-                + &cos_theta * &cos_theta * &aqq
-                + 2.0 * &cos_theta * &sin_theta * &apq;
-            a[[p, q]] = 0.0.into();
-            a[[q, p]] = 0.0.into();
+            a[[p, p]] = cos_theta.clone() * cos_theta.clone() * app.clone()
+                + sin_theta.clone() * sin_theta.clone() * aqq.clone()
+                - T::from_f64(2.0) * cos_theta.clone() * sin_theta.clone() * apq.clone();
+            a[[q, q]] = sin_theta.clone() * sin_theta.clone() * app.clone()
+                + cos_theta.clone() * cos_theta.clone() * aqq.clone()
+                + T::from_f64(2.0) * cos_theta.clone() * sin_theta.clone() * apq.clone();
+            a[[p, q]] = T::from_f64(0.0);
+            a[[q, p]] = T::from_f64(0.0);
 
             for i in 0..n {
                 if i != p && i != q {
                     let aip = a[[i, p]].clone();
                     let aiq = a[[i, q]].clone();
-                    a[[i, p]] = &cos_theta * &aip - &sin_theta * &aiq;
+                    a[[i, p]] = cos_theta.clone() * aip.clone() - sin_theta.clone() * aiq.clone();
                     a[[p, i]] = a[[i, p]].clone();
-                    a[[i, q]] = &sin_theta * &aip + &cos_theta * &aiq;
+                    a[[i, q]] = sin_theta.clone() * aip.clone() + cos_theta.clone() * aiq.clone();
                     a[[q, i]] = a[[i, q]].clone();
                 }
 
                 let vip = v[[i, p]].clone();
                 let viq = v[[i, q]].clone();
-                v[[i, p]] = &cos_theta * &vip - &sin_theta * &viq;
-                v[[i, q]] = &sin_theta * &vip + &cos_theta * &viq;
+                v[[i, p]] = cos_theta.clone() * vip.clone() - sin_theta.clone() * viq.clone();
+                v[[i, q]] = sin_theta.clone() * vip.clone() + cos_theta.clone() * viq.clone();
             }
         }
 
         // Extract eigenvalues and sort
-        let eigenvalues: Array1<MyFloat> =
-            Array1::from_vec((0..n).map(|i| a[[i, i]].clone()).collect());
+        let eigenvalues: Array1<T> = Array1::from_vec((0..n).map(|i| a[[i, i]].clone()).collect());
         let mut indices: Vec<usize> = (0..n).collect();
 
         // Sort by eigenvalue magnitude (descending)
@@ -152,7 +171,7 @@ impl CmaEs {
                 .unwrap()
         });
 
-        let sorted_eigenvalues: Array1<MyFloat> =
+        let sorted_eigenvalues: Array1<T> =
             indices.iter().map(|&i| eigenvalues[i].clone()).collect();
         let sorted_eigenvectors =
             Array2::from_shape_fn((indices.len(), n), |(i, j)| v[[j, indices[i]]].clone());
@@ -161,76 +180,80 @@ impl CmaEs {
     }
 
     /// Compute condition number of covariance matrix
-    fn condition_number(&self, eigenvalues: &Array1<MyFloat>) -> MyFloat {
-        let max_eig: MyFloat = eigenvalues
+    fn condition_number(&self, eigenvalues: &Array1<T>) -> T {
+        let max_eig = eigenvalues
             .iter()
-            .fold(0.0, |acc: f64, x: &MyFloat| acc.max(x.abs().to_f64()))
-            .into();
-        let min_eig: MyFloat = eigenvalues
+            .fold(T::zero(), |acc, x| acc.max(&x.abs()));
+        let min_eig = eigenvalues
             .iter()
-            .fold(f64::INFINITY, |acc: f64, x| acc.min(x.abs().to_f64()))
-            .into();
-        if min_eig > 1e-14 {
-            &max_eig / &min_eig
+            .fold(T::infinity(), |acc, x| acc.min(&x.abs()));
+        if min_eig > T::from_f64(1e-14) {
+            max_eig.clone() / min_eig.clone()
         } else {
-            f64::INFINITY.into()
+            T::infinity()
         }
     }
 
     /// Standard CMA-ES algorithm
     pub fn cma_es(
         &mut self,
-        initial_point: &Array1<MyFloat>,
-        initial_sigma: Option<MyFloat>,
+        initial_point: &Array1<T>,
+        initial_sigma: Option<T>,
         population_size: Option<usize>,
-        tol: Option<MyFloat>,
+        tol: Option<T>,
         max_generations: Option<usize>,
-    ) -> Result<CmaEsResult, MinimizerError> {
+    ) -> Result<CmaEsResult<T>, MinimizerError> {
         self.converged = false;
         let n = initial_point.len();
         if n == 0 {
             return Err(MinimizerError::InvalidDimension);
         }
 
-        let sigma = initial_sigma.unwrap_or(0.3.into());
+        let sigma = initial_sigma.unwrap_or(T::from_f64(0.3));
         let lambda = population_size.unwrap_or(4 + (3.0 * (n as f64).ln()) as usize);
         let mu = lambda / 2;
-        let tol = tol.unwrap_or(1e-11.into());
+        let tol = tol.unwrap_or(T::from_f64(1e-11));
         let max_gen = max_generations.unwrap_or(1000);
 
-        if sigma <= 0.0 {
+        if sigma <= T::zero() {
             return Err(MinimizerError::InvalidTolerance);
         }
 
         // Strategy parameters
-        let cc = (4.0 + mu as f64 / n as f64) / (n as f64 + 4.0 + 2.0 * mu as f64 / n as f64);
-        let cs = (mu as f64 + 2.0) / (n as f64 + mu as f64 + 5.0);
-        let c1 = 2.0 / ((n as f64 + 1.3).powi(2) + mu as f64);
-        let cmu = 2_f64.min(1.0 - c1) * (mu as f64 - 2.0 + 1.0 / mu as f64)
-            / ((n as f64 + 2.0).powi(2) + mu as f64);
-        let damps = 1.0 + 2.0 * (0.0_f64).max((mu as f64 - 1.0) / (n as f64 + 1.0) - 1.0) + cs;
+        let cc = T::from_f64(
+            (4.0 + mu as f64 / n as f64) / (n as f64 + 4.0 + 2.0 * mu as f64 / n as f64),
+        );
+        let cs = T::from_f64((mu as f64 + 2.0) / (n as f64 + mu as f64 + 5.0));
+        let c1 = T::from_f64(2.0 / ((n as f64 + 1.3).powi(2) + mu as f64));
+        let cmu = T::from_f64(2.0).min(&(T::one() - c1.clone()))
+            * T::from_f64(mu as f64 - 2.0 + 1.0 / mu as f64)
+            / T::from_f64((n as f64 + 2.0).powi(2) + mu as f64);
+        let damps =
+            T::from_f64(1.0 + 2.0 * (0.0_f64).max((mu as f64 - 1.0) / (n as f64 + 1.0) - 1.0))
+                + cs.clone();
 
         // Expectation of ||N(0,I)||
-        let chi_n =
-            (n as f64).sqrt() * (1.0 - 1.0 / (4.0 * n as f64) + 1.0 / (21.0 * (n as f64).powi(2)));
+        let chi_n = T::from_f64(
+            (n as f64).sqrt() * (1.0 - 1.0 / (4.0 * n as f64) + 1.0 / (21.0 * (n as f64).powi(2))),
+        );
 
         // Weights for recombination
-        let mut weights = Array1::<MyFloat>::zeros(mu);
+        let mut weights = Array1::<T>::zeros(mu);
         for i in 0..mu {
             weights[i] =
-                MyFloat::new((mu as f64 + 1.0) / 2.0).ln() - MyFloat::new((i + 1) as f64).ln();
+                T::from_f64((mu as f64 + 1.0) / 2.0).ln() - T::from_f64((i + 1) as f64).ln();
         }
-        let sum_weights: MyFloat = weights.iter().sum();
+        let sum_weights = weights.iter().sum::<T>();
         for w in &mut weights {
-            *w /= &sum_weights;
+            *w /= sum_weights.clone();
         }
-        let mueff = 1.0 / weights.iter().map(|w| w.powi(2)).sum::<MyFloat>();
+        let mueff = T::from_f64(1.0) / weights.iter().map(|w| w.powi(2)).sum::<T>();
 
         // Initialize evolution paths and covariance matrix
         let mut xmean = initial_point.clone();
         let mut sigma = sigma;
-        let mut pc = Array1::<MyFloat>::zeros(n);
-        let mut ps = Array1::<MyFloat>::zeros(n);
+        let mut pc = Array1::<T>::zeros(n);
+        let mut ps = Array1::<T>::zeros(n);
         let mut c = Array2::eye(n);
 
         let mut fn_evals = 0;
@@ -242,8 +265,8 @@ impl CmaEs {
 
             // Generate and evaluate population
             let (eigenvalues, eigenvectors) = self.eigen_decomposition(&c);
-            let sqrt_eigenvalues: Array1<MyFloat> = Array1::from_shape_fn(eigenvalues.len(), |i| {
-                eigenvalues[i].max(&0.0.into()).sqrt()
+            let sqrt_eigenvalues: Array1<T> = Array1::from_shape_fn(eigenvalues.len(), |i| {
+                eigenvalues[i].max(&T::from_f64(0.0)).sqrt()
             });
 
             let mut population = Vec::with_capacity(lambda);
@@ -251,22 +274,26 @@ impl CmaEs {
 
             for _ in 0..lambda {
                 // Sample from N(0,I)
-                let mut z = Array1::<MyFloat>::zeros(n);
+                let mut z = Array1::<T>::zeros(n);
                 for i in 0..n {
                     let normal = Normal::new(0.0, 1.0).unwrap();
-                    z[i] = normal.sample(&mut self.rng).into();
+                    z[i] = T::from_f64(normal.sample(&mut self.rng));
                 }
 
                 // Transform: y = B * D * z (where B=eigenvectors, D=sqrt(eigenvalues))
-                let mut y = Array1::<MyFloat>::zeros(n);
+                let mut y = Array1::<T>::zeros(n);
                 for i in 0..n {
                     for j in 0..n {
-                        y[i] += &eigenvectors[[j, i]] * &sqrt_eigenvalues[j] * &z[j];
+                        y[i] += eigenvectors[[j, i]].clone()
+                            * sqrt_eigenvalues[j].clone()
+                            * z[j].clone();
                     }
                 }
 
                 // x = xmean + sigma * y
-                let x = Array1::from_shape_fn(xmean.len(), |i| &xmean[i] + &sigma * &y[i]);
+                let x = Array1::from_shape_fn(xmean.len(), |i| {
+                    xmean[i].clone() + sigma.clone() * y[i].clone()
+                });
 
                 let f_val = self.f.call(&x);
                 fn_evals += 1;
@@ -308,61 +335,78 @@ impl CmaEs {
             for i in 0..mu {
                 let idx = indices[i];
                 for j in 0..n {
-                    xmean[j] += &weights[i] * &population[idx].0[j];
+                    xmean[j] += weights[i].clone() * population[idx].0[j].clone();
                 }
             }
 
             // Update evolution paths
-            let mut ymean = Array1::<MyFloat>::zeros(n);
-            let mut zmean = Array1::<MyFloat>::zeros(n);
+            let mut ymean = Array1::<T>::zeros(n);
+            let mut zmean = Array1::<T>::zeros(n);
             for i in 0..mu {
                 let idx = indices[i];
                 for j in 0..n {
-                    ymean[j] += &weights[i] * &population[idx].1[j];
-                    zmean[j] += &weights[i] * &population[idx].2[j];
+                    ymean[j] += weights[i].clone() * population[idx].1[j].clone();
+                    zmean[j] += weights[i].clone() * population[idx].2[j].clone();
                 }
             }
 
             // Update ps (evolution path for sigma)
             for i in 0..n {
-                ps[i] = (1.0 - cs) * &ps[i] + (cs * (2.0 - cs) * &mueff).sqrt() * &zmean[i];
+                ps[i] = (T::from_f64(1.0) - cs.clone()) * ps[i].clone()
+                    + (cs.clone() * (T::from_f64(2.0) - cs.clone()) * mueff.clone()).sqrt()
+                        * zmean[i].clone();
             }
 
-            let ps_norm = ps.iter().map(|x| x.powi(2)).sum::<MyFloat>().sqrt();
-            let hsig = if &ps_norm / (1.0 - (1.0 - cs).powi(2 * self.generations as i32)).sqrt()
-                < (1.4 + 2.0 / (n as f64 + 1.0)) * chi_n
+            let ps_norm = ps.iter().map(|x| x.powi(2)).sum::<T>().sqrt();
+            let hsig = if ps_norm.clone()
+                / (T::from_f64(1.0)
+                    - (T::from_f64(1.0) - cs.clone()).powi(2 * self.generations as i32))
+                .sqrt()
+                < T::from_f64(1.4 + 2.0 / (n as f64 + 1.0)) * chi_n.clone()
             {
-                MyFloat::new(1.0)
+                T::from_f64(1.0)
             } else {
-                0.0.into()
+                T::from_f64(0.0)
             };
 
             // Update pc (evolution path for covariance)
             for i in 0..n {
-                pc[i] = (1.0 - cc) * &pc[i] + &hsig * (cc * (2.0 - cc) * &mueff).sqrt() * &ymean[i];
+                pc[i] = (T::from_f64(1.0) - cc.clone()) * pc[i].clone()
+                    + hsig.clone()
+                        * (cc.clone() * (T::from_f64(2.0) - cc.clone()) * mueff.clone()).sqrt()
+                        * ymean[i].clone();
             }
 
             // Update covariance matrix c
-            let c1a = c1 * (1.0 - (1.0 - hsig.powi(2)) * cc * (2.0 - cc));
+            let c1a = c1.clone()
+                * (T::from_f64(1.0)
+                    - (T::from_f64(1.0) - hsig.powi(2))
+                        * cc.clone()
+                        * (T::from_f64(2.0) - cc.clone()));
 
             for i in 0..n {
                 for j in 0..n {
-                    c[[i, j]] = (1.0 - &c1a - cmu) * &c[[i, j]] + c1 * &pc[i] * &pc[j];
+                    c[[i, j]] = (T::from_f64(1.0) - c1a.clone() - cmu.clone()) * c[[i, j]].clone()
+                        + c1.clone() * pc[i].clone() * pc[j].clone();
 
                     // Add rank-mu update
                     for k in 0..mu {
                         let idx = indices[k];
-                        c[[i, j]] +=
-                            cmu * &weights[k] * &population[idx].1[i] * &population[idx].1[j];
+                        c[[i, j]] += cmu.clone()
+                            * weights[k].clone()
+                            * population[idx].1[i].clone()
+                            * population[idx].1[j].clone();
                     }
                 }
             }
 
             // Update sigma
-            sigma *= (cs / damps * (ps_norm / chi_n - 1.0)).exp();
+            sigma *= (cs.clone() / damps.clone()
+                * (ps_norm.clone() / chi_n.clone() - T::from_f64(1.0)))
+            .exp();
 
             // Limit sigma
-            sigma = sigma.min(&1e10.into()).max(&1e-10.into());
+            sigma = sigma.min(&T::from_f64(1e10)).max(&T::from_f64(1e-10));
         }
 
         // Final result
@@ -373,26 +417,30 @@ impl CmaEs {
         let mut fitness = Vec::with_capacity(lambda);
 
         let (eigenvalues_final, eigenvectors_final) = self.eigen_decomposition(&c);
-        let sqrt_eigenvalues_final: Array1<MyFloat> = eigenvalues_final
+        let sqrt_eigenvalues_final: Array1<T> = eigenvalues_final
             .iter()
-            .map(|x| x.max(&0.0.into()).sqrt())
+            .map(|x| x.max(&T::from_f64(0.0)).sqrt())
             .collect();
 
         for _ in 0..lambda {
-            let mut z = Array1::<MyFloat>::zeros(n);
+            let mut z = Array1::<T>::zeros(n);
             for i in 0..n {
                 let normal = Normal::new(0.0, 1.0).unwrap();
-                z[i] = normal.sample(&mut self.rng).into();
+                z[i] = T::from_f64(normal.sample(&mut self.rng));
             }
 
-            let mut y = Array1::<MyFloat>::zeros(n);
+            let mut y = Array1::<T>::zeros(n);
             for i in 0..n {
                 for j in 0..n {
-                    y[i] += &eigenvectors_final[[j, i]] * &sqrt_eigenvalues_final[j] * &z[j];
+                    y[i] += eigenvectors_final[[j, i]].clone()
+                        * sqrt_eigenvalues_final[j].clone()
+                        * z[j].clone();
                 }
             }
 
-            let x = Array1::from_shape_fn(xmean.len(), |i| &xmean[i] + &sigma * &y[i]);
+            let x = Array1::from_shape_fn(xmean.len(), |i| {
+                xmean[i].clone() + sigma.clone() * y[i].clone()
+            });
             let f_val = self.f.call(&x);
             fn_evals += 1;
 
@@ -422,26 +470,26 @@ impl CmaEs {
     /// Simplified CMA-ES with default parameters
     pub fn minimize(
         &mut self,
-        initial_point: &Array1<MyFloat>,
-    ) -> Result<CmaEsResult, MinimizerError> {
+        initial_point: &Array1<T>,
+    ) -> Result<CmaEsResult<T>, MinimizerError> {
         self.cma_es(initial_point, None, None, None, None)
     }
 
     /// CMA-ES with restart strategy for better global optimization
     pub fn cma_es_with_restart(
         &mut self,
-        initial_point: &Array1<MyFloat>,
-        initial_sigma: Option<MyFloat>,
+        initial_point: &Array1<T>,
+        initial_sigma: Option<T>,
         max_restarts: Option<usize>,
-        tol: Option<MyFloat>,
+        tol: Option<T>,
         max_generations_per_run: Option<usize>,
-    ) -> Result<CmaEsResult, MinimizerError> {
+    ) -> Result<CmaEsResult<T>, MinimizerError> {
         let max_restarts = max_restarts.unwrap_or(3);
         let max_gen_per_run = max_generations_per_run.unwrap_or(1000);
-        let tol = tol.unwrap_or(1e-11.into());
-        let initial_sigma = initial_sigma.clone().unwrap_or(0.3.into());
+        let tol = tol.unwrap_or(T::from_f64(1e-11));
+        let initial_sigma = initial_sigma.clone().unwrap_or(T::from_f64(0.3));
 
-        let mut best_result: Option<CmaEsResult> = None;
+        let mut best_result: Option<CmaEsResult<T>> = None;
         let mut total_fn_evals = 0;
         let mut total_generations = 0;
         let mut combined_history = Vec::new();
@@ -450,7 +498,8 @@ impl CmaEs {
             // Perturb initial point for restarts
             let mut start_point = initial_point.clone();
             if restart > 0 {
-                let sigma_perturbation = &initial_sigma * (1.0 + restart as f64 * 0.5);
+                let sigma_perturbation =
+                    initial_sigma.clone() * T::from_f64(1.0 + restart as f64 * 0.5);
                 for x in &mut start_point {
                     let normal = Normal::new(0.0, sigma_perturbation.to_f64()).unwrap();
                     *x += normal.sample(&mut self.rng);
@@ -504,12 +553,15 @@ impl CmaEs {
     }
 
     /// Get current best point
-    pub fn get_best(&self) -> (Array1<MyFloat>, MyFloat) {
+    pub fn get_best(&self) -> (Array1<T>, T) {
         (self.xmin.clone(), self.fmin.clone())
     }
 }
 
-impl fmt::Debug for CmaEs {
+impl<T> fmt::Debug for CmaEs<T>
+where
+    T: RFFloat,
+{
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
@@ -520,13 +572,16 @@ impl fmt::Debug for CmaEs {
 }
 
 #[cfg(test)]
-mod minimize_myfloat_cmaes_tests {
+mod minimize_cmaes_tests {
     use super::*;
-    use crate::minimize::myfloat::{F1dim, MultiDimFn};
+    use crate::{
+        minimize::{F1dim, MultiDimFn},
+        myfloat::MyFloat,
+    };
     use std::f64::consts::{E, PI};
 
     // Helper function to create Ackley
-    fn ackley(bias: &MyFloat) -> F1dim {
+    fn ackley(bias: &MyFloat) -> F1dim<MyFloat> {
         let b = bias.clone();
         F1dim::new(MultiDimFn::new(move |x: &Array1<MyFloat>| {
             let n = x.len() as f64;
@@ -537,7 +592,7 @@ mod minimize_myfloat_cmaes_tests {
     }
 
     // Helper function to create Elliptic
-    fn elliptic(bias: &MyFloat) -> F1dim {
+    fn elliptic(bias: &MyFloat) -> F1dim<MyFloat> {
         let b = bias.clone();
         F1dim::new(MultiDimFn::new(move |x: &Array1<MyFloat>| {
             let sum: MyFloat = x
@@ -550,7 +605,7 @@ mod minimize_myfloat_cmaes_tests {
     }
 
     // Helper function to create Griewank
-    fn griewank(bias: &MyFloat) -> F1dim {
+    fn griewank(bias: &MyFloat) -> F1dim<MyFloat> {
         let b = bias.clone();
         F1dim::new(MultiDimFn::new(move |x: &Array1<MyFloat>| {
             let t1 = x.iter().map(|val| val.powi(2)).sum::<MyFloat>() / 4000.0;
@@ -564,7 +619,7 @@ mod minimize_myfloat_cmaes_tests {
     }
 
     // Helper function to create Rosenbrock
-    fn rosenbrock(shift: &Array1<MyFloat>, bias: &MyFloat) -> F1dim {
+    fn rosenbrock(shift: &Array1<MyFloat>, bias: &MyFloat) -> F1dim<MyFloat> {
         let s = shift.clone();
         let b = bias.clone();
         F1dim::new(MultiDimFn::new(move |x: &Array1<MyFloat>| {
@@ -1114,9 +1169,8 @@ mod minimize_myfloat_cmaes_tests {
     }
 
     mod cec2005_tests {
-        use crate::minimize::myfloat::dot_1d_2d;
-
         use super::*;
+        use crate::minimize::dot_1d_2d;
         use rand::Rng;
 
         const TEST_30D: bool = false;

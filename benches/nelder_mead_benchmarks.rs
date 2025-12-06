@@ -5,7 +5,9 @@ use ndarray::prelude::*;
 use std::time::Duration;
 
 // Import your crate modules - adjust the crate name as needed
-use rfkit::minimize::f64::{F1dim, MultiDimFn, NelderMead, NelderMeadBounded};
+use rfkit::minimize::{
+    F1dim, MinimizerOptions, MultiDimFn, NelderMead, NelderMeadBounded, NelderMeadOptions,
+};
 use rfkit::prelude::*;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -34,7 +36,7 @@ impl TestType {
 #[derive(Clone)]
 struct TestProblem {
     name: String,
-    function: F1dim,
+    function: F1dim<f64>,
     x0: Array1<f64>,
     scale: Array1<f64>,
     lb: Array1<f64>,
@@ -44,13 +46,13 @@ struct TestProblem {
 }
 
 // Test Functions
-fn sphere_function() -> F1dim {
+fn sphere_function() -> F1dim<f64> {
     F1dim::new(MultiDimFn::new(move |x: &Array1<f64>| {
         x.iter().map(|xi| xi * xi).sum()
     }))
 }
 
-fn rosenbrock_function() -> F1dim {
+fn rosenbrock_function() -> F1dim<f64> {
     F1dim::new(MultiDimFn::new(|x: &Array1<f64>| {
         if x.len() < 2 {
             return 0.0;
@@ -66,7 +68,7 @@ fn rosenbrock_function() -> F1dim {
     }))
 }
 
-fn rastrigin_function() -> F1dim {
+fn rastrigin_function() -> F1dim<f64> {
     F1dim::new(MultiDimFn::new(|x: &Array1<f64>| {
         let a = 10.0;
         let n = x.len() as f64;
@@ -80,7 +82,7 @@ fn rastrigin_function() -> F1dim {
     }))
 }
 
-fn ackley_function() -> F1dim {
+fn ackley_function() -> F1dim<f64> {
     F1dim::new(MultiDimFn::new(|x: &Array1<f64>| {
         let a = 20.0;
         let b = 0.2;
@@ -95,7 +97,7 @@ fn ackley_function() -> F1dim {
     }))
 }
 
-fn himmelblau_function() -> F1dim {
+fn himmelblau_function() -> F1dim<f64> {
     F1dim::new(MultiDimFn::new(|x: &Array1<f64>| {
         if x.len() != 2 {
             // Extend to n-dimensions by summing pairs
@@ -266,7 +268,7 @@ fn setup_test_problems() -> Vec<TestProblem> {
 fn run_optimization_benchmark(
     problem: &TestProblem,
     category: TestType,
-    iterations: usize,
+    _iterations: usize,
 ) -> (f64, f64, usize, f64) {
     // Add small random perturbation to starting point
     let mut x_start = problem.x0.clone();
@@ -279,12 +281,12 @@ fn run_optimization_benchmark(
     // Create boxed optimizer for dynamic dispatch
     let mut solver: Box<dyn Minimizer<Array1<f64>, f64>> = match category {
         TestType::NelderMead => Box::new(NelderMead::new(
-            x_start,
+            x_start.clone(),
             problem.scale.clone(),
             problem.function.clone(),
         )),
         TestType::NelderMeadBounded => Box::new(NelderMeadBounded::new(
-            x_start,
+            x_start.clone(),
             problem.scale.clone(),
             problem.lb.clone(),
             problem.ub.clone(),
@@ -292,12 +294,26 @@ fn run_optimization_benchmark(
         )),
     };
 
-    let result = solver.minimize(Some(iterations));
+    let options: Box<dyn MinimizerOptions<Array1<f64>, f64>> = Box::new(NelderMeadOptions::new(
+        x_start.clone(),
+        Some(problem.scale.clone()),
+        Some(1),
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    ));
+    let result = solver.minimize(options).expect("Optimization failed");
 
     // Calculate final function value
-    let error = (result.xmin()[0] - problem.expected_min).abs();
+    let final_value = result.xmin()[0];
+    let error = (final_value - problem.expected_min).abs();
+    let iterations = result.iters();
+    let tolerance = result.tolerance();
 
-    (result.xmin()[0], error, result.iters(), result.tolerance())
+    (final_value, error, iterations, tolerance)
 }
 
 // Benchmark functions for each iteration count

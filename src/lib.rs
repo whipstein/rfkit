@@ -5,6 +5,7 @@ pub mod circuit;
 pub mod element;
 pub mod error;
 pub mod file;
+pub mod float;
 pub mod frequency;
 pub mod impedance;
 pub mod math;

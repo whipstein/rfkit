@@ -96,25 +96,25 @@ pub enum WaveType {
 // pub type PointFloat = Array2<MyFloat>;
 // pub type Point = Array2<Complex64>;
 // pub type Pointf64 = Array2<f64>;
-pub type PortPoints = Array1<Complex64>;
-pub type PortPointsf64 = Array1<f64>;
+pub type PortPoints<T> = Array1<T>;
+// pub type PortPointsf64 = Array1<f64>;
 // pub type Points = Array3<Complex64>;
 // pub type Pointsf64 = Array3<f64>;
 
 pub trait NetworkPortPoints {
-    fn db(&self) -> PortPointsf64;
+    fn db(&self) -> PortPoints<f64>;
 
-    fn deg(&self) -> PortPointsf64;
+    fn deg(&self) -> PortPoints<f64>;
 
-    fn im(&self) -> PortPointsf64;
+    fn im(&self) -> PortPoints<f64>;
 
-    fn mag(&self) -> PortPointsf64;
+    fn mag(&self) -> PortPoints<f64>;
 
     // fn new_like(pt: &Points) -> PortPoints;
 
-    fn rad(&self) -> PortPointsf64;
+    fn rad(&self) -> PortPoints<f64>;
 
-    fn re(&self) -> PortPointsf64;
+    fn re(&self) -> PortPoints<f64>;
 }
 
 pub trait NetworkPoint<T, U, V> {

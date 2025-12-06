@@ -3,7 +3,7 @@ use crate::impedance::ComplexNumberType;
 use crate::math::*;
 use crate::mycomplex::MyComplex;
 use crate::myfloat::MyFloat;
-use crate::network::{NetworkPoint, PortPoints, PortPointsf64, PortVal, WaveType, network_err_msg};
+use crate::network::{NetworkPoint, PortPoints, PortVal, WaveType, network_err_msg};
 use crate::parameter::RFParameter;
 use crate::point::{Point, Pt};
 use crate::points::{Points, Pts};
@@ -785,7 +785,7 @@ impl Network {
         val
     }
 
-    pub fn max_gain(&self) -> PortPointsf64 {
+    pub fn max_gain(&self) -> PortPoints<f64> {
         if self.nports != 2 {
             panic!(
                 "{}",
@@ -808,7 +808,7 @@ impl Network {
             / (&k + Array1::<f64>::from_shape_fn(k.len(), |i| (k[i].powi(2) - 1.0).sqrt()))
     }
 
-    pub fn max_stable_gain(&self) -> PortPointsf64 {
+    pub fn max_stable_gain(&self) -> PortPoints<f64> {
         if self.nports != 2 {
             panic!(
                 "{}",
@@ -931,17 +931,17 @@ impl Network {
         Point::<Complex64>::new(self.net(param).slice(s![idx, .., ..]).to_owned())
     }
 
-    pub fn net_at_port(&self, param: RFParameter, port: PortVal) -> PortPoints {
+    pub fn net_at_port(&self, param: RFParameter, port: PortVal) -> PortPoints<Complex64> {
         self.net(param).slice(s![.., port.0, port.1]).to_owned()
     }
 
-    pub fn net_at_port_conj(&self, param: RFParameter, port: PortVal) -> PortPoints {
+    pub fn net_at_port_conj(&self, param: RFParameter, port: PortVal) -> PortPoints<Complex64> {
         self.net_conj(param)
             .slice(s![.., port.0, port.1])
             .to_owned()
     }
 
-    pub fn net_at_port_idx(&self, param: RFParameter, j: usize, k: usize) -> PortPoints {
+    pub fn net_at_port_idx(&self, param: RFParameter, j: usize, k: usize) -> PortPoints<Complex64> {
         self.net(param).slice(s![.., j, k]).to_owned()
     }
 
@@ -975,7 +975,7 @@ impl Network {
         self.net(param).rad()
     }
 
-    pub fn net_rad_at_port(&self, param: RFParameter, port: PortVal) -> PortPointsf64 {
+    pub fn net_rad_at_port(&self, param: RFParameter, port: PortVal) -> PortPoints<f64> {
         self.net(param)
             .rad()
             .slice(s![.., port.0, port.1])
