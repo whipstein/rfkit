@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 #![allow(unused_assignments)]
-use crate::{error::MinimizerError, float::RFFloat, minimize::ObjFn};
+use crate::{error::MinimizerError, minimize::ObjFn, num::RFFloat};
 use ndarray::prelude::*;
 use rand::prelude::*;
 use rand_distr::{Distribution, Normal};

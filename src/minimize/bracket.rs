@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 #![allow(unused_assignments)]
-use crate::{error::MinimizerError, float::RFFloat, minimize::ObjFn};
+use crate::{error::MinimizerError, minimize::ObjFn, num::RFFloat};
 use std::fmt;
 
 /// Result of minimum bracketing

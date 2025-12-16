@@ -93,7 +93,7 @@ impl Points<f64, Ix3> {
     }
 }
 
-impl Pts<f64, f64, Ix3> for Points<f64, Ix3> {
+impl Pts<f64, Ix3> for Points<f64, Ix3> {
     /// Create a new matrix with given dimensions filled with zeros
     fn zeros(shape: impl IntoDimension<Dim = Dim<[usize; 3]>>) -> Self {
         Points(Array3::from_elem(shape, f64::zero()))

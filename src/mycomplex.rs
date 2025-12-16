@@ -1739,6 +1739,20 @@ impl From<MyFloat> for MyComplex {
     }
 }
 
+// Implement Sum trait for owned values
+impl std::iter::Sum for MyComplex {
+    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+        iter.fold(MyComplex::zero(), |acc, x| acc + x)
+    }
+}
+
+// Implement Sum trait for borrowed values
+impl<'a> std::iter::Sum<&'a MyComplex> for MyComplex {
+    fn sum<I: Iterator<Item = &'a Self>>(iter: I) -> Self {
+        iter.fold(MyComplex::zero(), |acc, x| acc + x)
+    }
+}
+
 #[cfg(test)]
 mod mycomplex_tests {
 
@@ -2037,5 +2051,37 @@ mod mycomplex_tests {
         // Test double negation
         let double_not = !!MyComplex::zero();
         assert_eq!(double_not, MyComplex::zero());
+    }
+
+    #[test]
+    fn test_sum_trait() {
+        // Test Sum trait with owned values
+        let values = vec![
+            MyComplex::from_f64(1.0, 2.0),
+            MyComplex::from_f64(3.0, 4.0),
+            MyComplex::from_f64(5.0, 6.0),
+        ];
+
+        let sum: MyComplex = values.into_iter().sum();
+        assert_eq!(sum.real(), MyFloat::new(9.0)); // 1 + 3 + 5
+        assert_eq!(sum.imag(), MyFloat::new(12.0)); // 2 + 4 + 6
+
+        // Test Sum trait with borrowed values
+        let values = vec![
+            MyComplex::from_f64(2.0, 1.0),
+            MyComplex::from_f64(4.0, 3.0),
+            MyComplex::from_f64(6.0, 5.0),
+        ];
+
+        let sum: MyComplex = values.iter().sum();
+        assert_eq!(sum.real(), MyFloat::new(12.0)); // 2 + 4 + 6
+        assert_eq!(sum.imag(), MyFloat::new(9.0)); // 1 + 3 + 5
+
+        // Test empty iterator
+        let empty: Vec<MyComplex> = vec![];
+        let sum: MyComplex = empty.into_iter().sum();
+        assert_eq!(sum.real(), MyFloat::new(0.0));
+        assert_eq!(sum.imag(), MyFloat::new(0.0));
+        assert!(sum.is_zero());
     }
 }

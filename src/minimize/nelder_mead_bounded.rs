@@ -2,8 +2,8 @@
 #![allow(unused_variables)]
 use crate::{
     error::MinimizerError,
-    float::RFFloat,
     minimize::{Minimizer, MinimizerOptions, MinimizerResult, ObjFn},
+    num::RFFloat,
 };
 use ndarray::prelude::*;
 

@@ -121,7 +121,7 @@ impl Points<Complex64, Ix3> {
     }
 }
 
-impl Pts<Complex64, f64, Ix3> for Points<Complex64, Ix3> {
+impl Pts<Complex64, Ix3> for Points<Complex64, Ix3> {
     /// Create a new matrix with given dimensions filled with zeros
     fn zeros(shape: impl IntoDimension<Dim = Dim<[usize; 3]>>) -> Self {
         Points(Array3::from_elem(shape, Complex64::zero()))
@@ -1476,7 +1476,7 @@ impl DivAssign<f64> for Points<Complex64, Ix3> {
 
 impl Default for Points<Complex64, Ix3> {
     fn default() -> Self {
-        Points::zeros((0, 0, 0))
+        Points::<Complex64, Ix3>::zeros((0, 0, 0))
     }
 }
 
@@ -1492,7 +1492,7 @@ impl PartialEq for Points<Complex64, Ix3> {
 
 impl Zero for Points<Complex64, Ix3> {
     fn zero() -> Self {
-        Points::zeros((0, 0, 0))
+        Points::<Complex64, Ix3>::zeros((0, 0, 0))
     }
 
     fn is_zero(&self) -> bool {

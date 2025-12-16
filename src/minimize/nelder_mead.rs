@@ -1,8 +1,8 @@
 #![allow(dead_code)]
 use crate::{
     error::MinimizerError,
-    float::RFFloat,
     minimize::{Minimizer, MinimizerOptions, MinimizerResult, ObjFn},
+    num::RFFloat,
 };
 use ndarray::prelude::*;
 

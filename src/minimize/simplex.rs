@@ -2,8 +2,8 @@
 #![allow(unused_assignments)]
 use crate::{
     error::MinimizerError,
-    float::RFFloat,
     minimize::{ObjFn, Vertex},
+    num::RFFloat,
 };
 use ndarray::prelude::*;
 use std::fmt;

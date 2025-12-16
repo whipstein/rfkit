@@ -1,10 +1,11 @@
 #![allow(dead_code)]
+use crate::{mycomplex::MyComplex, myfloat::MyFloat};
+use num::complex::{Complex, Complex64};
 use std::fmt;
 
 pub trait RFNum:
     Sized
     + Clone
-    + PartialOrd
     + fmt::Display
     + fmt::Debug
     + std::ops::Add<Output = Self>
@@ -32,22 +33,14 @@ pub trait RFNum:
     + for<'a> std::ops::SubAssign<&'a Self>
     + for<'a> std::ops::MulAssign<&'a Self>
     + for<'a> std::ops::DivAssign<&'a Self>
-    + for<'a> std::cmp::PartialEq<f64>
     + num_traits::Zero
     + num_traits::One
     + std::iter::Sum
     + for<'a> std::iter::Sum<&'a Self>
     + std::convert::From<f64>
 {
-    // ========== Custom conversion methods ==========
-    /// Create from f64
-    fn from_f64(val: f64) -> Self;
-
-    /// Create from usize
-    fn from_usize(val: usize) -> Self;
-
-    /// Create to f64
-    fn to_f64(&self) -> f64;
+    /// The underlying real type (e.g., f64 for Complex<f64>, MyFloat for MyComplex)
+    type Real;
 
     // ========== Special values (constants) ==========
     /// Returns the NaN value
@@ -55,24 +48,6 @@ pub trait RFNum:
 
     /// Returns positive infinity
     fn infinity() -> Self;
-
-    /// Returns negative infinity
-    fn neg_infinity() -> Self;
-
-    /// Returns negative zero
-    fn neg_zero() -> Self;
-
-    /// Returns the smallest finite value that this type can represent
-    fn min_value() -> Self;
-
-    /// Returns the largest finite value that this type can represent
-    fn max_value() -> Self;
-
-    /// Returns the smallest positive, normalized value that this type can represent
-    fn min_positive_value() -> Self;
-
-    /// Returns the machine epsilon value for this type
-    fn epsilon() -> Self;
 
     // ========== Classification methods ==========
     /// Returns true if this value is NaN
@@ -86,197 +61,132 @@ pub trait RFNum:
 
     /// Returns true if the number is neither zero, infinite, subnormal, or NaN
     fn is_normal(&self) -> bool;
+}
 
-    /// Returns true if the number is subnormal
-    fn is_subnormal(&self) -> bool;
+impl RFNum for f64 {
+    /// The underlying real type (e.g., f64 for Complex<f64>, MyFloat for MyComplex)
+    type Real = f64;
 
-    /// Returns the floating point category of the number
-    fn classify(&self) -> std::num::FpCategory;
+    // ========== Special values (constants) ==========
+    fn nan() -> Self {
+        f64::NAN
+    }
 
-    /// Returns true if the sign bit is positive
-    fn is_sign_positive(&self) -> bool;
+    fn infinity() -> Self {
+        f64::INFINITY
+    }
 
-    /// Returns true if the sign bit is negative
-    fn is_sign_negative(&self) -> bool;
+    // ========== Classification methods ==========
+    fn is_nan(&self) -> bool {
+        f64::is_nan(*self)
+    }
 
-    // ========== Rounding methods ==========
-    /// Returns the largest integer less than or equal to a number
-    fn floor(&self) -> Self;
+    fn is_infinite(&self) -> bool {
+        f64::is_infinite(*self)
+    }
 
-    /// Returns the smallest integer greater than or equal to a number
-    fn ceil(&self) -> Self;
+    fn is_finite(&self) -> bool {
+        f64::is_finite(*self)
+    }
 
-    /// Returns the nearest integer to a number (round half-way cases away from 0.0)
-    fn round(&self) -> Self;
+    fn is_normal(&self) -> bool {
+        f64::is_normal(*self)
+    }
+}
 
-    /// Returns the integer part of a number
-    fn trunc(&self) -> Self;
+impl RFNum for MyFloat {
+    /// The underlying real type (e.g., f64 for Complex<f64>, MyFloat for MyComplex)
+    type Real = MyFloat;
 
-    /// Returns the fractional part of a number
-    fn fract(&self) -> Self;
+    // ========== Special values (constants) ==========
+    fn nan() -> Self {
+        MyFloat::nan()
+    }
 
-    // ========== Basic operations ==========
-    /// Computes the absolute value of self
-    fn abs(&self) -> Self;
+    fn infinity() -> Self {
+        MyFloat::infinity()
+    }
 
-    /// Returns a number that represents the sign of self
-    fn signum(&self) -> Self;
+    // ========== Classification methods ==========
+    fn is_nan(&self) -> bool {
+        MyFloat::is_nan(self)
+    }
 
-    /// Returns a number composed of the magnitude of self and the sign of sign
-    fn copysign(&self, sign: &Self) -> Self;
+    fn is_infinite(&self) -> bool {
+        MyFloat::is_infinite(self)
+    }
 
-    /// Fused multiply-add: (self * a) + b with only one rounding error
-    fn mul_add(&self, a: &Self, b: &Self) -> Self;
+    fn is_finite(&self) -> bool {
+        MyFloat::is_finite(self)
+    }
 
-    /// Takes the reciprocal (inverse) of a number, 1/x
-    fn recip(&self) -> Self;
+    fn is_normal(&self) -> bool {
+        MyFloat::is_normal(self)
+    }
+}
 
-    /// Returns the maximum of the two numbers
-    fn max(&self, other: &Self) -> Self;
+impl RFNum for Complex64 {
+    /// The underlying real type (e.g., f64 for Complex<f64>, MyFloat for MyComplex)
+    type Real = f64;
 
-    /// Returns the minimum of the two numbers
-    fn min(&self, other: &Self) -> Self;
+    // ========== Special values (constants) ==========
+    fn nan() -> Self {
+        Complex::new(f64::NAN, f64::NAN)
+    }
 
-    /// The positive difference of two numbers
-    fn abs_sub(&self, other: &Self) -> Self;
+    fn infinity() -> Self {
+        Complex::new(f64::INFINITY, f64::INFINITY)
+    }
 
-    /// Restrict a value to a certain interval
-    fn clamp(&self, min: &Self, max: &Self) -> Self;
+    fn is_nan(&self) -> bool {
+        self.re.is_nan() || self.im.is_nan()
+    }
 
-    // ========== Exponential and power functions ==========
-    /// Returns e^(self)
-    fn exp(&self) -> Self;
+    fn is_infinite(&self) -> bool {
+        self.re.is_infinite() || self.im.is_infinite()
+    }
 
-    /// Returns 2^(self)
-    fn exp2(&self) -> Self;
+    fn is_finite(&self) -> bool {
+        self.re.is_finite() && self.im.is_finite()
+    }
 
-    /// Returns e^(self) - 1 in a way that is accurate even if the number is close to zero
-    fn exp_m1(&self) -> Self;
+    fn is_normal(&self) -> bool {
+        self.re.is_normal() && self.im.is_normal()
+    }
+}
 
-    /// Returns the natural logarithm of the number
-    fn ln(&self) -> Self;
+impl RFNum for MyComplex {
+    /// The underlying real type (e.g., f64 for Complex<f64>, MyFloat for MyComplex)
+    type Real = MyFloat;
 
-    /// Returns ln(1+n) more accurately than if the operations were performed separately
-    fn ln_1p(&self) -> Self;
+    // ========== Special values (constants) ==========
+    fn nan() -> Self {
+        MyComplex::nan()
+    }
 
-    /// Returns the logarithm of the number with respect to an arbitrary base
-    fn log(&self, base: &Self) -> Self;
+    fn infinity() -> Self {
+        MyComplex::infinity()
+    }
 
-    /// Returns the base 2 logarithm of the number
-    fn log2(&self) -> Self;
+    fn is_nan(&self) -> bool {
+        MyComplex::is_nan(self)
+    }
 
-    /// Returns the base 10 logarithm of the number
-    fn log10(&self) -> Self;
+    fn is_infinite(&self) -> bool {
+        MyComplex::is_infinite(self)
+    }
 
-    /// Raises self to the power of exp, using exponentiation by squaring
-    fn powi(&self, n: i32) -> Self;
+    fn is_finite(&self) -> bool {
+        MyComplex::is_finite(self)
+    }
 
-    /// Raises self to a floating point power
-    fn powf(&self, n: &Self) -> Self;
-
-    /// Returns the square root of a number
-    fn sqrt(&self) -> Self;
-
-    /// Returns the cube root of a number
-    fn cbrt(&self) -> Self;
-
-    // ========== Trigonometric functions ==========
-    /// Computes the sine of a number (in radians)
-    fn sin(&self) -> Self;
-
-    /// Computes the cosine of a number (in radians)
-    fn cos(&self) -> Self;
-
-    /// Computes the tangent of a number (in radians)
-    fn tan(&self) -> Self;
-
-    /// Computes the arcsine of a number
-    fn asin(&self) -> Self;
-
-    /// Computes the arccosine of a number
-    fn acos(&self) -> Self;
-
-    /// Computes the arctangent of a number
-    fn atan(&self) -> Self;
-
-    /// Computes the four quadrant arctangent of self (y) and other (x)
-    fn atan2(&self, other: &Self) -> Self;
-
-    /// Simultaneously computes the sine and cosine of the number
-    fn sin_cos(&self) -> (Self, Self);
-
-    /// Converts radians to degrees
-    fn to_degrees(&self) -> Self;
-
-    /// Converts degrees to radians
-    fn to_radians(&self) -> Self;
-
-    /// Computes the Euclidean distance: sqrt(self^2 + other^2)
-    fn hypot(&self, other: &Self) -> Self;
-
-    // ========== Hyperbolic functions ==========
-    /// Hyperbolic sine function
-    fn sinh(&self) -> Self;
-
-    /// Hyperbolic cosine function
-    fn cosh(&self) -> Self;
-
-    /// Hyperbolic tangent function
-    fn tanh(&self) -> Self;
-
-    /// Inverse hyperbolic sine function
-    fn asinh(&self) -> Self;
-
-    /// Inverse hyperbolic cosine function
-    fn acosh(&self) -> Self;
-
-    /// Inverse hyperbolic tangent function
-    fn atanh(&self) -> Self;
-
-    // ========== Other methods ==========
-    /// Returns the mantissa, exponent and sign as integers
-    fn integer_decode(&self) -> (u64, i16, i8);
+    fn is_normal(&self) -> bool {
+        MyComplex::is_normal(self)
+    }
 }
 
 /// Trait for numeric types that can be used in bracketing algorithms
-pub trait RFFloat:
-    Sized
-    + Clone
-    + PartialOrd
-    + fmt::Display
-    + fmt::Debug
-    + std::ops::Add<Output = Self>
-    + std::ops::Sub<Output = Self>
-    + std::ops::Mul<Output = Self>
-    + std::ops::Div<Output = Self>
-    + std::ops::Neg<Output = Self>
-    + std::ops::Add<f64, Output = Self>
-    + std::ops::Sub<f64, Output = Self>
-    + std::ops::Mul<f64, Output = Self>
-    + std::ops::Div<f64, Output = Self>
-    + std::ops::AddAssign
-    + std::ops::SubAssign
-    + std::ops::MulAssign
-    + std::ops::DivAssign
-    + std::ops::AddAssign<f64>
-    + std::ops::SubAssign<f64>
-    + std::ops::MulAssign<f64>
-    + std::ops::DivAssign<f64>
-    + for<'a> std::ops::Add<&'a Self, Output = Self>
-    + for<'a> std::ops::Sub<&'a Self, Output = Self>
-    + for<'a> std::ops::Mul<&'a Self, Output = Self>
-    + for<'a> std::ops::Div<&'a Self, Output = Self>
-    + for<'a> std::ops::AddAssign<&'a Self>
-    + for<'a> std::ops::SubAssign<&'a Self>
-    + for<'a> std::ops::MulAssign<&'a Self>
-    + for<'a> std::ops::DivAssign<&'a Self>
-    + for<'a> std::cmp::PartialEq<f64>
-    + num_traits::Zero
-    + num_traits::One
-    + std::iter::Sum
-    + for<'a> std::iter::Sum<&'a Self>
-    + std::convert::From<f64>
-{
+pub trait RFFloat: RFNum + PartialOrd + for<'a> std::cmp::PartialEq<f64> {
     // ========== Custom conversion methods ==========
     /// Create from f64
     fn from_f64(val: f64) -> Self;
@@ -288,12 +198,6 @@ pub trait RFFloat:
     fn to_f64(&self) -> f64;
 
     // ========== Special values (constants) ==========
-    /// Returns the NaN value
-    fn nan() -> Self;
-
-    /// Returns positive infinity
-    fn infinity() -> Self;
-
     /// Returns negative infinity
     fn neg_infinity() -> Self;
 
@@ -313,18 +217,6 @@ pub trait RFFloat:
     fn epsilon() -> Self;
 
     // ========== Classification methods ==========
-    /// Returns true if this value is NaN
-    fn is_nan(&self) -> bool;
-
-    /// Returns true if this value is positive infinity or negative infinity
-    fn is_infinite(&self) -> bool;
-
-    /// Returns true if this number is neither infinite nor NaN
-    fn is_finite(&self) -> bool;
-
-    /// Returns true if the number is neither zero, infinite, subnormal, or NaN
-    fn is_normal(&self) -> bool;
-
     /// Returns true if the number is subnormal
     fn is_subnormal(&self) -> bool;
 
@@ -476,7 +368,6 @@ pub trait RFFloat:
     fn integer_decode(&self) -> (u64, i16, i8);
 }
 
-// Implement RFFloat for f64
 impl RFFloat for f64 {
     // ========== Custom conversion methods ==========
     fn from_f64(val: f64) -> Self {
@@ -492,14 +383,6 @@ impl RFFloat for f64 {
     }
 
     // ========== Special values (constants) ==========
-    fn nan() -> Self {
-        f64::NAN
-    }
-
-    fn infinity() -> Self {
-        f64::INFINITY
-    }
-
     fn neg_infinity() -> Self {
         f64::NEG_INFINITY
     }
@@ -525,22 +408,6 @@ impl RFFloat for f64 {
     }
 
     // ========== Classification methods ==========
-    fn is_nan(&self) -> bool {
-        f64::is_nan(*self)
-    }
-
-    fn is_infinite(&self) -> bool {
-        f64::is_infinite(*self)
-    }
-
-    fn is_finite(&self) -> bool {
-        f64::is_finite(*self)
-    }
-
-    fn is_normal(&self) -> bool {
-        f64::is_normal(*self)
-    }
-
     fn is_subnormal(&self) -> bool {
         f64::is_subnormal(*self)
     }
@@ -740,15 +607,14 @@ impl RFFloat for f64 {
     }
 }
 
-// Implement RFFloat for MyFloat
-impl RFFloat for crate::myfloat::MyFloat {
+impl RFFloat for MyFloat {
     // ========== Custom conversion methods ==========
     fn from_f64(val: f64) -> Self {
-        crate::myfloat::MyFloat::new(val)
+        MyFloat::new(val)
     }
 
     fn from_usize(val: usize) -> Self {
-        crate::myfloat::MyFloat::from(val as f64)
+        MyFloat::from(val as f64)
     }
 
     fn to_f64(&self) -> f64 {
@@ -756,55 +622,31 @@ impl RFFloat for crate::myfloat::MyFloat {
     }
 
     // ========== Special values (constants) ==========
-    fn nan() -> Self {
-        crate::myfloat::MyFloat::nan()
-    }
-
-    fn infinity() -> Self {
-        crate::myfloat::MyFloat::infinity()
-    }
-
     fn neg_infinity() -> Self {
-        crate::myfloat::MyFloat::neg_infinity()
+        MyFloat::neg_infinity()
     }
 
     fn neg_zero() -> Self {
-        crate::myfloat::MyFloat::new(-0.0)
+        MyFloat::new(-0.0)
     }
 
     fn min_value() -> Self {
-        crate::myfloat::MyFloat::new(f64::MIN)
+        MyFloat::new(f64::MIN)
     }
 
     fn max_value() -> Self {
-        crate::myfloat::MyFloat::new(f64::MAX)
+        MyFloat::new(f64::MAX)
     }
 
     fn min_positive_value() -> Self {
-        crate::myfloat::MyFloat::new(f64::MIN_POSITIVE)
+        MyFloat::new(f64::MIN_POSITIVE)
     }
 
     fn epsilon() -> Self {
-        crate::myfloat::MyFloat::new(f64::EPSILON)
+        MyFloat::new(f64::EPSILON)
     }
 
     // ========== Classification methods ==========
-    fn is_nan(&self) -> bool {
-        crate::myfloat::MyFloat::is_nan(self)
-    }
-
-    fn is_infinite(&self) -> bool {
-        crate::myfloat::MyFloat::is_infinite(self)
-    }
-
-    fn is_finite(&self) -> bool {
-        crate::myfloat::MyFloat::is_finite(self)
-    }
-
-    fn is_normal(&self) -> bool {
-        crate::myfloat::MyFloat::is_normal(self)
-    }
-
     fn is_subnormal(&self) -> bool {
         self.to_f64().is_subnormal()
     }
@@ -814,45 +656,45 @@ impl RFFloat for crate::myfloat::MyFloat {
     }
 
     fn is_sign_positive(&self) -> bool {
-        crate::myfloat::MyFloat::is_sign_positive(self)
+        MyFloat::is_sign_positive(self)
     }
 
     fn is_sign_negative(&self) -> bool {
-        crate::myfloat::MyFloat::is_sign_negative(self)
+        MyFloat::is_sign_negative(self)
     }
 
     // ========== Rounding methods ==========
     fn floor(&self) -> Self {
-        crate::myfloat::MyFloat::floor(self)
+        MyFloat::floor(self)
     }
 
     fn ceil(&self) -> Self {
-        crate::myfloat::MyFloat::ceil(self)
+        MyFloat::ceil(self)
     }
 
     fn round(&self) -> Self {
-        crate::myfloat::MyFloat::round(self)
+        MyFloat::round(self)
     }
 
     fn trunc(&self) -> Self {
-        crate::myfloat::MyFloat::trunc(self)
+        MyFloat::trunc(self)
     }
 
     fn fract(&self) -> Self {
-        crate::myfloat::MyFloat::fract(self)
+        MyFloat::fract(self)
     }
 
     // ========== Basic operations ==========
     fn abs(&self) -> Self {
-        crate::myfloat::MyFloat::abs(self)
+        MyFloat::abs(self)
     }
 
     fn signum(&self) -> Self {
-        crate::myfloat::MyFloat::signum(self)
+        MyFloat::signum(self)
     }
 
     fn copysign(&self, sign: &Self) -> Self {
-        crate::myfloat::MyFloat::copysign(self, sign)
+        MyFloat::copysign(self, sign)
     }
 
     fn mul_add(&self, a: &Self, b: &Self) -> Self {
@@ -864,11 +706,11 @@ impl RFFloat for crate::myfloat::MyFloat {
     }
 
     fn max(&self, other: &Self) -> Self {
-        crate::myfloat::MyFloat::max(self, other)
+        MyFloat::max(self, other)
     }
 
     fn min(&self, other: &Self) -> Self {
-        crate::myfloat::MyFloat::min(self, other)
+        MyFloat::min(self, other)
     }
 
     fn abs_sub(&self, other: &Self) -> Self {
@@ -880,12 +722,12 @@ impl RFFloat for crate::myfloat::MyFloat {
     }
 
     fn clamp(&self, min: &Self, max: &Self) -> Self {
-        crate::myfloat::MyFloat::clamp(self, min, max)
+        MyFloat::clamp(self, min, max)
     }
 
     // ========== Exponential and power functions ==========
     fn exp(&self) -> Self {
-        crate::myfloat::MyFloat::exp(self)
+        MyFloat::exp(self)
     }
 
     fn exp2(&self) -> Self {
@@ -897,7 +739,7 @@ impl RFFloat for crate::myfloat::MyFloat {
     }
 
     fn ln(&self) -> Self {
-        crate::myfloat::MyFloat::ln(self)
+        MyFloat::ln(self)
     }
 
     fn ln_1p(&self) -> Self {
@@ -909,23 +751,23 @@ impl RFFloat for crate::myfloat::MyFloat {
     }
 
     fn log2(&self) -> Self {
-        crate::myfloat::MyFloat::log2(self)
+        MyFloat::log2(self)
     }
 
     fn log10(&self) -> Self {
-        crate::myfloat::MyFloat::log10(self)
+        MyFloat::log10(self)
     }
 
     fn powi(&self, n: i32) -> Self {
-        crate::myfloat::MyFloat::powi(self, n as isize)
+        MyFloat::powi(self, n as isize)
     }
 
     fn powf(&self, n: &Self) -> Self {
-        crate::myfloat::MyFloat::pow(self, n)
+        MyFloat::pow(self, n)
     }
 
     fn sqrt(&self) -> Self {
-        crate::myfloat::MyFloat::sqrt(self)
+        MyFloat::sqrt(self)
     }
 
     fn cbrt(&self) -> Self {
@@ -934,31 +776,31 @@ impl RFFloat for crate::myfloat::MyFloat {
 
     // ========== Trigonometric functions ==========
     fn sin(&self) -> Self {
-        crate::myfloat::MyFloat::sin(self)
+        MyFloat::sin(self)
     }
 
     fn cos(&self) -> Self {
-        crate::myfloat::MyFloat::cos(self)
+        MyFloat::cos(self)
     }
 
     fn tan(&self) -> Self {
-        crate::myfloat::MyFloat::tan(self)
+        MyFloat::tan(self)
     }
 
     fn asin(&self) -> Self {
-        crate::myfloat::MyFloat::asin(self)
+        MyFloat::asin(self)
     }
 
     fn acos(&self) -> Self {
-        crate::myfloat::MyFloat::acos(self)
+        MyFloat::acos(self)
     }
 
     fn atan(&self) -> Self {
-        crate::myfloat::MyFloat::atan(self)
+        MyFloat::atan(self)
     }
 
     fn atan2(&self, other: &Self) -> Self {
-        crate::myfloat::MyFloat::atan2(self, other)
+        MyFloat::atan2(self, other)
     }
 
     fn sin_cos(&self) -> (Self, Self) {
@@ -966,11 +808,11 @@ impl RFFloat for crate::myfloat::MyFloat {
     }
 
     fn to_degrees(&self) -> Self {
-        crate::myfloat::MyFloat::to_degrees(self)
+        MyFloat::to_degrees(self)
     }
 
     fn to_radians(&self) -> Self {
-        crate::myfloat::MyFloat::to_radians(self)
+        MyFloat::to_radians(self)
     }
 
     fn hypot(&self, other: &Self) -> Self {
@@ -979,27 +821,27 @@ impl RFFloat for crate::myfloat::MyFloat {
 
     // ========== Hyperbolic functions ==========
     fn sinh(&self) -> Self {
-        crate::myfloat::MyFloat::sinh(self)
+        MyFloat::sinh(self)
     }
 
     fn cosh(&self) -> Self {
-        crate::myfloat::MyFloat::cosh(self)
+        MyFloat::cosh(self)
     }
 
     fn tanh(&self) -> Self {
-        crate::myfloat::MyFloat::tanh(self)
+        MyFloat::tanh(self)
     }
 
     fn asinh(&self) -> Self {
-        crate::myfloat::MyFloat::asinh(self)
+        MyFloat::asinh(self)
     }
 
     fn acosh(&self) -> Self {
-        crate::myfloat::MyFloat::acosh(self)
+        MyFloat::acosh(self)
     }
 
     fn atanh(&self) -> Self {
-        crate::myfloat::MyFloat::atanh(self)
+        MyFloat::atanh(self)
     }
 
     // ========== Other methods ==========
@@ -1010,37 +852,16 @@ impl RFFloat for crate::myfloat::MyFloat {
 
 /// Trait for complex numeric types that can be used in RF and optimization algorithms
 pub trait RFComplex:
-    Sized
-    + Clone
-    + fmt::Display
-    + fmt::Debug
-    + std::ops::Add<Output = Self>
-    + std::ops::Sub<Output = Self>
-    + std::ops::Mul<Output = Self>
-    + std::ops::Div<Output = Self>
-    + std::ops::Neg<Output = Self>
-    + std::ops::Add<f64, Output = Self>
-    + std::ops::Sub<f64, Output = Self>
-    + std::ops::Mul<f64, Output = Self>
-    + std::ops::Div<f64, Output = Self>
-    + std::ops::AddAssign
-    + std::ops::SubAssign
-    + std::ops::MulAssign
-    + std::ops::DivAssign
-    + std::ops::AddAssign<f64>
-    + std::ops::SubAssign<f64>
-    + std::ops::MulAssign<f64>
-    + std::ops::DivAssign<f64>
-    + for<'a> std::ops::Add<&'a Self, Output = Self>
-    + for<'a> std::ops::Sub<&'a Self, Output = Self>
-    + for<'a> std::ops::Mul<&'a Self, Output = Self>
-    + for<'a> std::ops::Div<&'a Self, Output = Self>
-    + num_traits::Zero
-    + num_traits::One
+    RFNum
+    + std::ops::Add<Complex64, Output = Self>
+    + std::ops::Sub<Complex64, Output = Self>
+    + std::ops::Mul<Complex64, Output = Self>
+    + std::ops::Div<Complex64, Output = Self>
+    + std::ops::AddAssign<Complex64>
+    + std::ops::SubAssign<Complex64>
+    + std::ops::MulAssign<Complex64>
+    + std::ops::DivAssign<Complex64>
 {
-    /// The underlying real type (e.g., f64 for Complex<f64>, MyFloat for MyComplex)
-    type Real: RFFloat;
-
     fn new(re: Self::Real, im: Self::Real) -> Self;
 
     // ========== Custom conversion methods ==========
@@ -1066,25 +887,6 @@ pub trait RFComplex:
     /// Get the imaginary part
     fn im(&self) -> Self::Real;
     fn imag(&self) -> Self::Real;
-
-    // ========== Special values (constants) ==========
-    /// Returns a NaN complex number
-    fn nan() -> Self;
-
-    /// Returns an infinite complex number
-    fn infinity() -> Self;
-
-    /// Check if either component is NaN
-    fn is_nan(&self) -> bool;
-
-    /// Check if either component is infinite
-    fn is_infinite(&self) -> bool;
-
-    /// Check if both components are finite
-    fn is_finite(&self) -> bool;
-
-    /// Check if both components are normal (not zero, infinite, subnormal, or NaN)
-    fn is_normal(&self) -> bool;
 
     // ========== Complex-specific operations ==========
     /// Get the magnitude (absolute value) of the complex number
@@ -1155,32 +957,30 @@ pub trait RFComplex:
 }
 
 // Implement RFComplex for Complex<f64>
-impl RFComplex for num::complex::Complex<f64> {
-    type Real = f64;
-
+impl RFComplex for Complex64 {
     fn new(re: Self::Real, im: Self::Real) -> Self {
-        num::complex::Complex::<f64>::new(re, im)
+        Complex::<f64>::new(re, im)
     }
 
     // ========== Custom conversion methods ==========
     fn from_f64(real: f64, imag: f64) -> Self {
-        num::complex::Complex::new(real, imag)
+        Complex::new(real, imag)
     }
 
     fn from_real_imag(real: Self::Real, imag: Self::Real) -> Self {
-        num::complex::Complex::new(real, imag)
+        Complex::new(real, imag)
     }
 
     fn from_real(real: Self::Real) -> Self {
-        num::complex::Complex::new(real, 0.0)
+        Complex::new(real, 0.0)
     }
 
     fn from_imag(imag: Self::Real) -> Self {
-        num::complex::Complex::new(0.0, imag)
+        Complex::new(0.0, imag)
     }
 
     fn from_polar(mag: &Self::Real, ang: &Self::Real) -> Self {
-        num::complex::Complex::from_polar(*mag, *ang)
+        Complex::from_polar(*mag, *ang)
     }
 
     fn re(&self) -> Self::Real {
@@ -1199,147 +999,120 @@ impl RFComplex for num::complex::Complex<f64> {
         self.im
     }
 
-    // ========== Special values (constants) ==========
-    fn nan() -> Self {
-        num::complex::Complex::new(f64::NAN, f64::NAN)
-    }
-
-    fn infinity() -> Self {
-        num::complex::Complex::new(f64::INFINITY, f64::INFINITY)
-    }
-
-    fn is_nan(&self) -> bool {
-        self.re.is_nan() || self.im.is_nan()
-    }
-
-    fn is_infinite(&self) -> bool {
-        self.re.is_infinite() || self.im.is_infinite()
-    }
-
-    fn is_finite(&self) -> bool {
-        self.re.is_finite() && self.im.is_finite()
-    }
-
-    fn is_normal(&self) -> bool {
-        self.re.is_normal() && self.im.is_normal()
-    }
-
     // ========== Complex-specific operations ==========
     fn abs(&self) -> Self::Real {
-        num::complex::Complex::norm(*self)
+        Complex::norm(*self)
     }
 
     fn arg(&self) -> Self::Real {
-        num::complex::Complex::arg(*self)
+        Complex::arg(*self)
     }
 
     fn conj(&self) -> Self {
-        num::complex::Complex::conj(self)
+        Complex::conj(self)
     }
 
     fn norm_sqr(&self) -> Self::Real {
-        num::complex::Complex::norm_sqr(self)
+        Complex::norm_sqr(self)
     }
 
     // ========== Exponential and power functions ==========
     fn exp(&self) -> Self {
-        num::complex::Complex::exp(*self)
+        Complex::exp(*self)
     }
 
     fn ln(&self) -> Self {
-        num::complex::Complex::ln(*self)
+        Complex::ln(*self)
     }
 
     fn pow(&self, exp: &Self) -> Self {
-        num::complex::Complex::powc(*self, *exp)
+        Complex::powc(*self, *exp)
     }
 
     fn powi(&self, n: i32) -> Self {
-        num::complex::Complex::powi(self, n)
+        Complex::powi(self, n)
     }
 
     fn sqrt(&self) -> Self {
-        num::complex::Complex::sqrt(*self)
+        Complex::sqrt(*self)
     }
 
     // ========== Trigonometric functions ==========
     fn sin(&self) -> Self {
-        num::complex::Complex::sin(*self)
+        Complex::sin(*self)
     }
 
     fn cos(&self) -> Self {
-        num::complex::Complex::cos(*self)
+        Complex::cos(*self)
     }
 
     fn tan(&self) -> Self {
-        num::complex::Complex::tan(*self)
+        Complex::tan(*self)
     }
 
     fn asin(&self) -> Self {
-        num::complex::Complex::asin(*self)
+        Complex::asin(*self)
     }
 
     fn acos(&self) -> Self {
-        num::complex::Complex::acos(*self)
+        Complex::acos(*self)
     }
 
     fn atan(&self) -> Self {
-        num::complex::Complex::atan(*self)
+        Complex::atan(*self)
     }
 
     // ========== Hyperbolic functions ==========
     fn sinh(&self) -> Self {
-        num::complex::Complex::sinh(*self)
+        Complex::sinh(*self)
     }
 
     fn cosh(&self) -> Self {
-        num::complex::Complex::cosh(*self)
+        Complex::cosh(*self)
     }
 
     fn tanh(&self) -> Self {
-        num::complex::Complex::tanh(*self)
+        Complex::tanh(*self)
     }
 
     fn asinh(&self) -> Self {
-        num::complex::Complex::asinh(*self)
+        Complex::asinh(*self)
     }
 
     fn acosh(&self) -> Self {
-        num::complex::Complex::acosh(*self)
+        Complex::acosh(*self)
     }
 
     fn atanh(&self) -> Self {
-        num::complex::Complex::atanh(*self)
+        Complex::atanh(*self)
     }
 }
 
 // Implement RFComplex for MyComplex
-impl RFComplex for crate::mycomplex::MyComplex {
-    type Real = crate::myfloat::MyFloat;
-
+impl RFComplex for MyComplex {
     fn new(re: Self::Real, im: Self::Real) -> Self {
-        crate::mycomplex::MyComplex::new(re, im)
+        MyComplex::new(re, im)
     }
 
     // ========== Custom conversion methods ==========
     fn from_f64(real: f64, imag: f64) -> Self {
-        crate::mycomplex::MyComplex::from_f64(real, imag)
+        MyComplex::from_f64(real, imag)
     }
 
     fn from_real_imag(real: Self::Real, imag: Self::Real) -> Self {
-        crate::mycomplex::MyComplex::new(real, imag)
+        MyComplex::new(real, imag)
     }
 
     fn from_real(real: Self::Real) -> Self {
-        crate::mycomplex::MyComplex::from_real(real)
+        MyComplex::from_real(real)
     }
 
     fn from_imag(imag: Self::Real) -> Self {
-        crate::mycomplex::MyComplex::from_imag(imag)
+        MyComplex::from_imag(imag)
     }
 
     fn from_polar(mag: &Self::Real, ang: &Self::Real) -> Self {
-        crate::mycomplex::MyComplex::from_polar(mag, ang)
+        MyComplex::from_polar(mag, ang)
     }
 
     fn re(&self) -> Self::Real {
@@ -1358,59 +1131,34 @@ impl RFComplex for crate::mycomplex::MyComplex {
         self.im()
     }
 
-    // ========== Special values (constants) ==========
-    fn nan() -> Self {
-        crate::mycomplex::MyComplex::nan()
-    }
-
-    fn infinity() -> Self {
-        crate::mycomplex::MyComplex::infinity()
-    }
-
-    fn is_nan(&self) -> bool {
-        crate::mycomplex::MyComplex::is_nan(self)
-    }
-
-    fn is_infinite(&self) -> bool {
-        crate::mycomplex::MyComplex::is_infinite(self)
-    }
-
-    fn is_finite(&self) -> bool {
-        crate::mycomplex::MyComplex::is_finite(self)
-    }
-
-    fn is_normal(&self) -> bool {
-        crate::mycomplex::MyComplex::is_normal(self)
-    }
-
     // ========== Complex-specific operations ==========
     fn abs(&self) -> Self::Real {
-        crate::mycomplex::MyComplex::abs(self)
+        MyComplex::abs(self)
     }
 
     fn arg(&self) -> Self::Real {
-        crate::mycomplex::MyComplex::arg(self)
+        MyComplex::arg(self)
     }
 
     fn conj(&self) -> Self {
-        crate::mycomplex::MyComplex::conj(self)
+        MyComplex::conj(self)
     }
 
     fn norm_sqr(&self) -> Self::Real {
-        crate::mycomplex::MyComplex::norm_sqr(self)
+        MyComplex::norm_sqr(self)
     }
 
     // ========== Exponential and power functions ==========
     fn exp(&self) -> Self {
-        crate::mycomplex::MyComplex::exp(self)
+        MyComplex::exp(self)
     }
 
     fn ln(&self) -> Self {
-        crate::mycomplex::MyComplex::ln(self)
+        MyComplex::ln(self)
     }
 
     fn pow(&self, exp: &Self) -> Self {
-        crate::mycomplex::MyComplex::pow(self, exp)
+        MyComplex::pow(self, exp)
     }
 
     fn powi(&self, n: i32) -> Self {
@@ -1420,16 +1168,16 @@ impl RFComplex for crate::mycomplex::MyComplex {
     }
 
     fn sqrt(&self) -> Self {
-        crate::mycomplex::MyComplex::sqrt(self)
+        MyComplex::sqrt(self)
     }
 
     // ========== Trigonometric functions ==========
     fn sin(&self) -> Self {
-        crate::mycomplex::MyComplex::sin(self)
+        MyComplex::sin(self)
     }
 
     fn cos(&self) -> Self {
-        crate::mycomplex::MyComplex::cos(self)
+        MyComplex::cos(self)
     }
 
     fn tan(&self) -> Self {

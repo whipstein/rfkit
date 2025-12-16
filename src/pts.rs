@@ -1,4 +1,4 @@
-use crate::error::InversionError;
+use crate::{error::InversionError, num::RFNum};
 use ndarray::{
     Dimension, IntoDimension, ShapeError, SliceArg,
     iter::{AxisIter, AxisIterMut, IndexedIter, IndexedIterMut},
@@ -13,8 +13,9 @@ pub mod myfloat;
 #[derive(Clone)]
 pub struct Points<T, D>(pub Array<T, D>);
 
-pub trait Pts<T, U, D>
+pub trait Pts<T, D>
 where
+    T: RFNum,
     D: Dimension,
 {
     /// Create a new matrix with given dimensions filled with zeros
@@ -96,7 +97,7 @@ where
     /// Element-wise conjugate
     fn conj(&self) -> Self;
     /// Calculate the Frobenius norm
-    fn frobenius_norm(&self) -> Array1<U>;
+    fn frobenius_norm(&self) -> Array1<T::Real>;
 
     /// Point multiplication
     fn dot(&self, other: &Self) -> Self;

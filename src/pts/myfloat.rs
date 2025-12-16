@@ -146,7 +146,7 @@ impl Points<MyFloat, Ix3> {
     }
 }
 
-impl Pts<MyFloat, MyFloat, Ix3> for Points<MyFloat, Ix3> {
+impl Pts<MyFloat, Ix3> for Points<MyFloat, Ix3> {
     /// Create a new matrix with given dimensions filled with zeros
     fn zeros(shape: impl IntoDimension<Dim = Dim<[usize; 3]>>) -> Self {
         Points(Array3::from_elem(shape, MyFloat::zero()))

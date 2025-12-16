@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 #![allow(unused_assignments)]
-use crate::{error::MinimizerError, float::RFFloat, minimize::ObjDerFn};
+use crate::{error::MinimizerError, minimize::ObjDerFn, num::RFFloat};
 use std::fmt;
 
 /// Result of Brent's method with derivatives

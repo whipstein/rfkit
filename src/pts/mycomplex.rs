@@ -174,7 +174,7 @@ impl Points<MyComplex, Ix3> {
     }
 }
 
-impl Pts<MyComplex, MyFloat, Ix3> for Points<MyComplex, Ix3> {
+impl Pts<MyComplex, Ix3> for Points<MyComplex, Ix3> {
     /// Create a new matrix with given dimensions filled with zeros
     fn zeros(shape: impl IntoDimension<Dim = Dim<[usize; 3]>>) -> Self {
         Points(Array3::from_elem(shape, MyComplex::zero()))

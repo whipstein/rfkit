@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-use crate::{error::MinimizerError, float::RFFloat};
+use crate::{error::MinimizerError, num::RFFloat};
 use dyn_clone::DynClone;
 use ndarray::prelude::*;
 use std::fmt;
