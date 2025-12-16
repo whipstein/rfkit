@@ -1,23 +1,27 @@
-use crate::element::{Elem, ElemType, Element};
-use crate::frequency::Frequency;
-use crate::network::{Network, NetworkBuilder};
-use crate::point::{Point, Pt};
-use crate::points::{Points, Pts};
-use crate::prelude::ElementBuilder;
-use ndarray::prelude::*;
+use crate::{
+    element::{Elem, ElemType, Element},
+    frequency::Frequency,
+    network::{Network, NetworkBuilder},
+    point::{Point, Pt},
+    prelude::ElementBuilder,
+    pts::{Points, Pts},
+};
+use ndarray::{IntoDimension, prelude::*};
 use num::complex::{Complex, Complex64};
-use std::collections::{BTreeMap, HashMap};
-use std::fmt::{Debug, Display, Formatter, Result};
-use std::panic;
+use std::{
+    collections::{BTreeMap, HashMap},
+    fmt::{Debug, Display, Formatter, Result},
+    panic,
+};
 
 /// Representation of a node in a circuit
 #[derive(Clone)]
 struct Node {
-    elem: Vec<Element>,    // Elements connected to the node
-    port: Option<Element>, // Port connected to the node
-    x: Points<Complex64>,  // Interaction scattering matrix for the node
-    y: Vec<Complex64>,     // Sum of admittances connected to the node
-    ground: bool,          // Is this a ground node
+    elem: Vec<Element>,        // Elements connected to the node
+    port: Option<Element>,     // Port connected to the node
+    x: Points<Complex64, Ix3>, // Interaction scattering matrix for the node
+    y: Vec<Complex64>,         // Sum of admittances connected to the node
+    ground: bool,              // Is this a ground node
 }
 
 impl Node {
@@ -25,8 +29,8 @@ impl Node {
     fn add_elem(&self, elem: &Element, freq: &Frequency) -> Node {
         let mut new_node = self.copy();
         if self.elem.len() != 0 {
-            new_node.x = Points::from_shape_fn(
-                (self.x.dim().0, self.x.dim().1 + 1, self.x.dim().2 + 1),
+            new_node.x = Points::<Complex64, Ix3>::from_shape_fn(
+                (self.x.dim().0, self.x.dim().1 + 1, self.x.dim().2 + 1).into_dimension(),
                 |(i, j, k)| {
                     if j < self.x.dim().1 && k < self.x.dim().2 {
                         self.x[[i, j, k]]
@@ -147,7 +151,7 @@ impl Node {
         Node {
             elem: elem,
             port: None,
-            x: Points::zeros((freq.npts(), 1, 1)),
+            x: Points::<Complex64, Ix3>::zeros((freq.npts(), 1, 1).into_dimension()),
             y: vec![Complex64::ZERO; freq.npts()],
             ground: ground,
         }
@@ -164,7 +168,7 @@ impl Node {
     }
 
     /// Return interaction scattering matrix of Node
-    fn x(&self) -> &Points<Complex64> {
+    fn x(&self) -> &Points<Complex64, Ix3> {
         &self.x
     }
 
@@ -343,14 +347,14 @@ impl CircuitMap {
 /// Vol. 38, No. 2, 2003, pgs 99-102.
 #[derive(Debug, Clone)]
 pub struct Circuit {
-    c: Points<Complex64>,               // Element Scattering Matrix
+    c: Points<Complex64, Ix3>,          // Element Scattering Matrix
     freq: Frequency,                    // Frequencies
     z0: Array1<Complex64>,              // Port Impedances
     map: CircuitMap,                    // Map element node to full circuit matrix position
     nodes: BTreeMap<usize, Node>,       // Interactions
     ports_only: bool,                   // Circuit Contains Ports Only
-    s: Points<Complex64>,               // Circuit Scattering Matrix
-    x: Points<Complex64>,               // Interaction Scattering Matrix
+    s: Points<Complex64, Ix3>,          // Circuit Scattering Matrix
+    x: Points<Complex64, Ix3>,          // Interaction Scattering Matrix
     dim: (usize, usize, usize),         // Dimension of S
     dimx: (usize, usize, usize),        // Dimension of C & X
     elements: HashMap<String, Element>, // Map of <Element ID, Element>
@@ -393,7 +397,7 @@ impl Circuit {
 
     /// Calculate the element scattering matrix
     fn calc_c(&mut self, freq: &Frequency) {
-        self.c = Points::zeros(self.dimx);
+        self.c = Points::<Complex64, Ix3>::zeros(self.dimx.into_dimension());
 
         for (j, (id1, node1)) in self.map.elem_map().iter().enumerate() {
             for (k, (id2, node2)) in self.map.elem_map().iter().enumerate() {
@@ -412,7 +416,7 @@ impl Circuit {
 
     /// Calculate the circuit scattering matrix
     fn calc_s(&mut self) {
-        self.s = Points::zeros(self.dim);
+        self.s = Points::<Complex64, Ix3>::zeros(self.dim.into_dimension());
 
         if self.ports_only {
             return;
@@ -443,7 +447,7 @@ impl Circuit {
 
     /// Calculate the interaction scattering matrix\
     fn calc_x(&mut self) {
-        self.x = Points::zeros(self.dimx);
+        self.x = Points::<Complex64, Ix3>::zeros(self.dimx.into_dimension());
 
         let mut cntr = 0;
         for node in self.nodes.clone().into_values() {
@@ -459,12 +463,12 @@ impl Circuit {
     pub fn clear(&mut self) {
         let mut nodes = BTreeMap::new();
         nodes.insert(0, Node::new(&self.freq, true));
-        self.c = Points::zeros((self.dimx.0, 1, 1));
+        self.c = Points::<Complex64, Ix3>::zeros((self.dimx.0, 1, 1).into_dimension());
         self.map.clear();
         self.nodes = nodes;
         self.ports_only = true;
-        self.s = Points::zeros((self.dim.0, 0, 0));
-        self.x = Points::zeros((self.dimx.0, 1, 1));
+        self.s = Points::<Complex64, Ix3>::zeros((self.dim.0, 0, 0).into_dimension());
+        self.x = Points::<Complex64, Ix3>::zeros((self.dimx.0, 1, 1).into_dimension());
         self.dim = (self.dim.0, 0, 0);
         self.dimx = (self.dimx.0, 1, 1);
         self.elements.clear();
@@ -492,7 +496,7 @@ impl Circuit {
         let mut nodes = BTreeMap::new();
         nodes.insert(0, Node::new(f, true));
         Circuit {
-            c: Points::zeros((f.npts(), 1, 1)),
+            c: Points::<Complex64, Ix3>::zeros((f.npts(), 1, 1).into_dimension()),
             dim: (f.npts(), 0, 0),
             dimx: (f.npts(), 1, 1),
             freq: f.clone(),
@@ -500,8 +504,8 @@ impl Circuit {
             map: CircuitMap::new(),
             nodes: nodes,
             ports_only: true,
-            s: Points::zeros((f.npts(), 0, 0)),
-            x: Points::zeros((f.npts(), 1, 1)),
+            s: Points::<Complex64, Ix3>::zeros((f.npts(), 0, 0).into_dimension()),
+            x: Points::<Complex64, Ix3>::zeros((f.npts(), 1, 1).into_dimension()),
             elements: HashMap::new(),
         }
     }
@@ -513,7 +517,7 @@ impl Circuit {
         self.calc_s();
     }
 
-    pub fn c(&self) -> Points<Complex64> {
+    pub fn c(&self) -> Points<Complex64, Ix3> {
         self.c.clone()
     }
 
@@ -525,11 +529,11 @@ impl Circuit {
         self.ports_only
     }
 
-    pub fn s(&self) -> Points<Complex64> {
+    pub fn s(&self) -> Points<Complex64, Ix3> {
         self.s.clone()
     }
 
-    pub fn x(&self) -> Points<Complex64> {
+    pub fn x(&self) -> Points<Complex64, Ix3> {
         self.x.clone()
     }
 
@@ -627,10 +631,10 @@ mod circuit_tests {
 
         let y = 1.0 / z_p1;
         let exemplar_y = vec![y];
-        let exemplar_x = Points::<Complex64>::ones((1, 1, 1));
+        let exemplar_x = Points::<Complex64, Ix3>::ones((1, 1, 1));
         node = node.add_elem(&p1, &freq);
         comp_vec_c64(&exemplar_y, &node.y(), margin, "node.y(p1)");
-        comp_points_c64(&exemplar_x, &node.x(), margin, "node.x(p1)");
+        comp_points_c64(exemplar_x.view(), node.x().view(), margin, "node.x(p1)");
 
         let y = 1.0 / z_p1 + 1.0 / z_r1;
         let x11 = 2.0 / (z_p1 * y) - 1.0;
@@ -640,7 +644,7 @@ mod circuit_tests {
         let exemplar_x = points![Complex64, [[x11, x12], [x12, x22]]];
         node = node.add_elem(&r1, &freq);
         comp_vec_c64(&exemplar_y, &node.y(), margin, "node.y(r1)");
-        comp_points_c64(&exemplar_x, &node.x(), margin, "node.x(r1)");
+        comp_points_c64(exemplar_x.view(), node.x().view(), margin, "node.x(r1)");
 
         let y = 1.0 / z_p1 + 1.0 / z_r1 + 1.0 / z_c1;
         let x11 = 2.0 / (z_p1 * y) - 1.0;
@@ -656,7 +660,7 @@ mod circuit_tests {
         ];
         node = node.add_elem(&c1, &freq);
         comp_vec_c64(&exemplar_y, &node.y(), margin, "node.y(c1)");
-        comp_points_c64(&exemplar_x, &node.x(), margin, "node.x(c1)");
+        comp_points_c64(exemplar_x.view(), node.x().view(), margin, "node.x(c1)");
 
         let y = 1.0 / z_p1 + 1.0 / z_r1 + 1.0 / z_c1 + 1.0 / z_l1;
         let x11 = 2.0 / (z_p1 * y) - 1.0;
@@ -681,7 +685,7 @@ mod circuit_tests {
         ];
         node = node.add_elem(&l1, &freq);
         comp_vec_c64(&exemplar_y, &node.y(), margin, "node.y(l1)");
-        comp_points_c64(&exemplar_x, &node.x(), margin, "node.x(l1)");
+        comp_points_c64(exemplar_x.view(), node.x().view(), margin, "node.x(l1)");
     }
 
     #[test]
@@ -1403,7 +1407,7 @@ mod circuit_tests {
             .unwrap();
         let margin = MARGIN;
 
-        let exemplar_c = Points::zeros((1, 2, 2));
+        let exemplar_c = Points::<Complex64, Ix3>::zeros((1, 2, 2));
         let exemplar_x = points![
             Complex64,
             [
@@ -1411,31 +1415,32 @@ mod circuit_tests {
                 [Complex64::ZERO, Complex64::ONE]
             ]
         ];
-        let exemplar_s = Points::zeros((1, 1, 1));
+        let exemplar_s = Points::<Complex64, Ix3>::zeros((1, 1, 1));
         cir.add_elem(&p1, &freq);
-        comp_points_c64(&exemplar_c, &cir.c, margin, "cir.c(1)");
-        comp_points_c64(&exemplar_x, &cir.x, margin, "cir.x(1)");
-        comp_points_c64(&exemplar_s, &cir.s, margin, "cir.s(1)");
+        comp_points_c64(exemplar_c.view(), cir.c.view(), margin, "cir.c(1)");
+        comp_points_c64(exemplar_x.view(), cir.x.view(), margin, "cir.x(1)");
+        comp_points_c64(exemplar_s.view(), cir.s.view(), margin, "cir.s(1)");
 
-        let exemplar_c = Points::zeros((1, 3, 3));
-        let exemplar_x = Points::from_shape_fn((1, 3, 3), |(_, j, k)| {
+        let exemplar_c = Points::<Complex64, Ix3>::zeros((1, 3, 3));
+        let exemplar_x = Points::<Complex64, Ix3>::from_shape_fn((1, 3, 3), |(_, j, k)| {
             if j == k && j != 0 {
                 Complex64::ONE
             } else {
                 Complex64::ZERO
             }
         });
-        let exemplar_s = Points::zeros((1, 2, 2));
+        let exemplar_s = Points::<Complex64, Ix3>::zeros((1, 2, 2));
         cir.add_elem(&p2, &freq);
-        comp_points_c64(&exemplar_c, &cir.c, margin, "cir.c(2)");
-        comp_points_c64(&exemplar_x, &cir.x, margin, "cir.x(2)");
-        comp_points_c64(&exemplar_s, &cir.s, margin, "cir.s(2)");
+        comp_points_c64(exemplar_c.view(), cir.c.view(), margin, "cir.c(2)");
+        comp_points_c64(exemplar_x.view(), cir.x.view(), margin, "cir.x(2)");
+        comp_points_c64(exemplar_s.view(), cir.s.view(), margin, "cir.s(2)");
 
-        let exemplar_c = Points::from_shape_fn((1, 5, 5), |(_, j, k)| match (j, k) {
-            (2, 2) | (4, 4) => 0.3333333333333333.into(),
-            (2, 4) | (4, 2) => 0.6666666666666667.into(),
-            _ => Complex64::ZERO,
-        });
+        let exemplar_c =
+            Points::<Complex64, Ix3>::from_shape_fn((1, 5, 5), |(_, j, k)| match (j, k) {
+                (2, 2) | (4, 4) => 0.3333333333333333.into(),
+                (2, 4) | (4, 2) => 0.6666666666666667.into(),
+                _ => Complex64::ZERO,
+            });
         let exemplar_x = points![
             Complex64,
             [
@@ -1476,15 +1481,16 @@ mod circuit_tests {
                 ]
             ]
         ];
-        let exemplar_s = Points::from_shape_fn((1, 2, 2), |(_, j, k)| match (j, k) {
-            (0, 0) | (1, 1) => 0.1666666666666659.into(),
-            (0, 1) | (1, 0) => 0.8333333333333326.into(),
-            _ => Complex64::ZERO,
-        });
+        let exemplar_s =
+            Points::<Complex64, Ix3>::from_shape_fn((1, 2, 2), |(_, j, k)| match (j, k) {
+                (0, 0) | (1, 1) => 0.1666666666666659.into(),
+                (0, 1) | (1, 0) => 0.8333333333333326.into(),
+                _ => Complex64::ZERO,
+            });
         cir.add_elem(&r1, &freq);
-        comp_points_c64(&exemplar_c, &cir.c, margin, "cir.c(3)");
-        comp_points_c64(&exemplar_x, &cir.x, margin, "cir.x(3)");
-        comp_points_c64(&exemplar_s, &cir.s, margin, "cir.s(3)");
+        comp_points_c64(exemplar_c.view(), cir.c.view(), margin, "cir.c(3)");
+        comp_points_c64(exemplar_x.view(), cir.x.view(), margin, "cir.x(3)");
+        comp_points_c64(exemplar_s.view(), cir.s.view(), margin, "cir.s(3)");
 
         let mut cir2 = Circuit::new(&freq);
         let p1 = ElementBuilder::new()
@@ -1509,7 +1515,7 @@ mod circuit_tests {
             .build()
             .unwrap();
 
-        let exemplar2_c = Points::zeros((1, 2, 2));
+        let exemplar2_c = Points::<Complex64, Ix3>::zeros((1, 2, 2));
         let exemplar2_x = points![
             Complex64,
             [
@@ -1517,31 +1523,32 @@ mod circuit_tests {
                 [Complex64::ZERO, Complex64::ONE]
             ]
         ];
-        let exemplar2_s = Points::zeros((1, 1, 1));
+        let exemplar2_s = Points::<Complex64, Ix3>::zeros((1, 1, 1));
         cir2.add_elem(&p1, &freq);
-        comp_points_c64(&exemplar2_c, &cir2.c, margin, "cir2.c(1)");
-        comp_points_c64(&exemplar2_x, &cir2.x, margin, "cir2.x(1)");
-        comp_points_c64(&exemplar2_s, &cir2.s, margin, "cir2.s(1)");
+        comp_points_c64(exemplar2_c.view(), cir2.c.view(), margin, "cir2.c(1)");
+        comp_points_c64(exemplar2_x.view(), cir2.x.view(), margin, "cir2.x(1)");
+        comp_points_c64(exemplar2_s.view(), cir2.s.view(), margin, "cir2.s(1)");
 
-        let exemplar2_c = Points::zeros((1, 3, 3));
-        let exemplar2_x = Points::from_shape_fn((1, 3, 3), |(_, j, k)| {
+        let exemplar2_c = Points::<Complex64, Ix3>::zeros((1, 3, 3));
+        let exemplar2_x = Points::<Complex64, Ix3>::from_shape_fn((1, 3, 3), |(_, j, k)| {
             if j == k && j != 0 {
                 Complex64::ONE
             } else {
                 Complex64::ZERO
             }
         });
-        let exemplar2_s = Points::zeros((1, 2, 2));
+        let exemplar2_s = Points::<Complex64, Ix3>::zeros((1, 2, 2));
         cir2.add_elem(&p2, &freq);
-        comp_points_c64(&exemplar2_c, &cir2.c, margin, "cir2.c(2)");
-        comp_points_c64(&exemplar2_x, &cir2.x, margin, "cir2.x(2)");
-        comp_points_c64(&exemplar2_s, &cir2.s, margin, "cir2.s(2)");
+        comp_points_c64(exemplar2_c.view(), cir2.c.view(), margin, "cir2.c(2)");
+        comp_points_c64(exemplar2_x.view(), cir2.x.view(), margin, "cir2.x(2)");
+        comp_points_c64(exemplar2_s.view(), cir2.s.view(), margin, "cir2.s(2)");
 
-        let exemplar2_c = Points::from_shape_fn((1, 5, 5), |(_, j, k)| match (j, k) {
-            (2, 2) | (4, 4) => 0.3333333333333333.into(),
-            (2, 4) | (4, 2) => 0.6666666666666667.into(),
-            _ => Complex64::ZERO,
-        });
+        let exemplar2_c =
+            Points::<Complex64, Ix3>::from_shape_fn((1, 5, 5), |(_, j, k)| match (j, k) {
+                (2, 2) | (4, 4) => 0.3333333333333333.into(),
+                (2, 4) | (4, 2) => 0.6666666666666667.into(),
+                _ => Complex64::ZERO,
+            });
         let exemplar2_x = points![
             Complex64,
             [
@@ -1590,9 +1597,9 @@ mod circuit_tests {
             ]
         ];
         cir2.add_elem(&r1, &freq);
-        comp_points_c64(&exemplar2_c, &cir2.c, margin, "cir2.c(3)");
-        comp_points_c64(&exemplar2_x, &cir2.x, margin, "cir2.x(3)");
-        comp_points_c64(&exemplar2_s, &cir2.s, margin, "cir2.s(3)");
+        comp_points_c64(exemplar2_c.view(), cir2.c.view(), margin, "cir2.c(3)");
+        comp_points_c64(exemplar2_x.view(), cir2.x.view(), margin, "cir2.x(3)");
+        comp_points_c64(exemplar2_s.view(), cir2.s.view(), margin, "cir2.s(3)");
     }
 
     #[test]
@@ -1627,7 +1634,7 @@ mod circuit_tests {
             .unwrap();
 
         cir.add_elem(&p1, &freq);
-        let exemplar_c = Points::zeros((1, 2, 2));
+        let exemplar_c = Points::<Complex64, Ix3>::zeros((1, 2, 2));
         let exemplar_x = points![
             Complex64,
             [
@@ -1635,13 +1642,13 @@ mod circuit_tests {
                 [Complex64::ZERO, Complex64::ONE]
             ]
         ];
-        let exemplar_s = Points::zeros((1, 1, 1));
-        comp_points_c64(&exemplar_c, &cir.c, margin, "cir.c(1)");
-        comp_points_c64(&exemplar_x, &cir.x, margin, "cir.x(1)");
-        comp_points_c64(&exemplar_s, &cir.s, margin, "cir.s(1)");
+        let exemplar_s = Points::<Complex64, Ix3>::zeros((1, 1, 1));
+        comp_points_c64(exemplar_c.view(), cir.c.view(), margin, "cir.c(1)");
+        comp_points_c64(exemplar_x.view(), cir.x.view(), margin, "cir.x(1)");
+        comp_points_c64(exemplar_s.view(), cir.s.view(), margin, "cir.s(1)");
 
         cir.add_elem(&p2, &freq);
-        let exemplar_c = Points::zeros((1, 3, 3));
+        let exemplar_c = Points::<Complex64, Ix3>::zeros((1, 3, 3));
         let exemplar_x = points![
             Complex64,
             [
@@ -1650,17 +1657,18 @@ mod circuit_tests {
                 [Complex64::ZERO, Complex64::ZERO, Complex64::ONE]
             ]
         ];
-        let exemplar_s = Points::zeros((1, 2, 2));
-        comp_points_c64(&exemplar_c, &cir.c, margin, "cir.c(2)");
-        comp_points_c64(&exemplar_x, &cir.x, margin, "cir.x(2)");
-        comp_points_c64(&exemplar_s, &cir.s, margin, "cir.s(2)");
+        let exemplar_s = Points::<Complex64, Ix3>::zeros((1, 2, 2));
+        comp_points_c64(exemplar_c.view(), cir.c.view(), margin, "cir.c(2)");
+        comp_points_c64(exemplar_x.view(), cir.x.view(), margin, "cir.x(2)");
+        comp_points_c64(exemplar_s.view(), cir.s.view(), margin, "cir.s(2)");
 
         cir.add_elem(&c1, &freq);
-        let exemplar_c = Points::from_shape_fn((1, 5, 5), |(_, j, k)| match (j, k) {
-            (2, 2) | (4, 4) => 0.3333333333333333.into(),
-            (2, 4) | (4, 2) => 0.6666666666666667.into(),
-            _ => Complex64::ZERO,
-        });
+        let exemplar_c =
+            Points::<Complex64, Ix3>::from_shape_fn((1, 5, 5), |(_, j, k)| match (j, k) {
+                (2, 2) | (4, 4) => 0.3333333333333333.into(),
+                (2, 4) | (4, 2) => 0.6666666666666667.into(),
+                _ => Complex64::ZERO,
+            });
         let exemplar_x = points![
             Complex64,
             [
@@ -1701,14 +1709,15 @@ mod circuit_tests {
                 ]
             ]
         ];
-        let exemplar_s = Points::from_shape_fn((1, 2, 2), |(_, j, k)| match (j, k) {
-            (0, 0) | (1, 1) => c64(0.7169568003248977, -0.4504772433683886),
-            (0, 1) | (1, 0) => c64(0.2830431996751022, 0.4504772433683886),
-            _ => Complex64::ZERO,
-        });
-        comp_points_c64(&exemplar_c, &cir.c, margin, "cir.c(3)");
-        comp_points_c64(&exemplar_x, &cir.x, margin, "cir.x(3)");
-        comp_points_c64(&exemplar_s, &cir.s, margin, "cir.s(3)");
+        let exemplar_s =
+            Points::<Complex64, Ix3>::from_shape_fn((1, 2, 2), |(_, j, k)| match (j, k) {
+                (0, 0) | (1, 1) => c64(0.7169568003248977, -0.4504772433683886),
+                (0, 1) | (1, 0) => c64(0.2830431996751022, 0.4504772433683886),
+                _ => Complex64::ZERO,
+            });
+        comp_points_c64(exemplar_c.view(), cir.c.view(), margin, "cir.c(3)");
+        comp_points_c64(exemplar_x.view(), cir.x.view(), margin, "cir.x(3)");
+        comp_points_c64(exemplar_s.view(), cir.s.view(), margin, "cir.s(3)");
 
         let mut cir2 = Circuit::new(&freq);
         let p1 = ElementBuilder::new()
@@ -1734,7 +1743,7 @@ mod circuit_tests {
             .unwrap();
 
         cir2.add_elem(&p1, &freq);
-        let exemplar_c = Points::zeros((1, 2, 2));
+        let exemplar_c = Points::<Complex64, Ix3>::zeros((1, 2, 2));
         let exemplar_x = points![
             Complex64,
             [
@@ -1742,13 +1751,13 @@ mod circuit_tests {
                 [Complex64::ZERO, Complex64::ONE]
             ]
         ];
-        let exemplar_s = Points::zeros((1, 1, 1));
-        comp_points_c64(&exemplar_c, &cir2.c, margin, "cir2.c(1)");
-        comp_points_c64(&exemplar_x, &cir2.x, margin, "cir2.x(1)");
-        comp_points_c64(&exemplar_s, &cir2.s, margin, "cir2.s(1)");
+        let exemplar_s = Points::<Complex64, Ix3>::zeros((1, 1, 1));
+        comp_points_c64(exemplar_c.view(), cir2.c.view(), margin, "cir2.c(1)");
+        comp_points_c64(exemplar_x.view(), cir2.x.view(), margin, "cir2.x(1)");
+        comp_points_c64(exemplar_s.view(), cir2.s.view(), margin, "cir2.s(1)");
 
         cir2.add_elem(&p2, &freq);
-        let exemplar_c = Points::zeros((1, 3, 3));
+        let exemplar_c = Points::<Complex64, Ix3>::zeros((1, 3, 3));
         let exemplar_x = points![
             Complex64,
             [
@@ -1757,17 +1766,18 @@ mod circuit_tests {
                 [Complex64::ZERO, Complex64::ZERO, Complex64::ONE]
             ]
         ];
-        let exemplar_s = Points::zeros((1, 2, 2));
-        comp_points_c64(&exemplar_c, &cir2.c, margin, "cir2.c(2)");
-        comp_points_c64(&exemplar_x, &cir2.x, margin, "cir2.x(2)");
-        comp_points_c64(&exemplar_s, &cir2.s, margin, "cir2.s(2)");
+        let exemplar_s = Points::<Complex64, Ix3>::zeros((1, 2, 2));
+        comp_points_c64(exemplar_c.view(), cir2.c.view(), margin, "cir2.c(2)");
+        comp_points_c64(exemplar_x.view(), cir2.x.view(), margin, "cir2.x(2)");
+        comp_points_c64(exemplar_s.view(), cir2.s.view(), margin, "cir2.s(2)");
 
         cir2.add_elem(&c1, &freq);
-        let exemplar_c = Points::from_shape_fn((1, 5, 5), |(_, j, k)| match (j, k) {
-            (2, 2) | (4, 4) => 0.3333333333333333.into(),
-            (2, 4) | (4, 2) => 0.6666666666666667.into(),
-            _ => Complex64::ZERO,
-        });
+        let exemplar_c =
+            Points::<Complex64, Ix3>::from_shape_fn((1, 5, 5), |(_, j, k)| match (j, k) {
+                (2, 2) | (4, 4) => 0.3333333333333333.into(),
+                (2, 4) | (4, 2) => 0.6666666666666667.into(),
+                _ => Complex64::ZERO,
+            });
         let exemplar_x = points![
             Complex64,
             [
@@ -1821,9 +1831,9 @@ mod circuit_tests {
                 ]
             ]
         ];
-        comp_points_c64(&exemplar_c, &cir2.c, margin, "cir2.c(3)");
-        comp_points_c64(&exemplar_x, &cir2.x, margin, "cir2.x(3)");
-        comp_points_c64(&exemplar_s, &cir2.s, margin, "cir2.s(3)");
+        comp_points_c64(exemplar_c.view(), cir2.c.view(), margin, "cir2.c(3)");
+        comp_points_c64(exemplar_x.view(), cir2.x.view(), margin, "cir2.x(3)");
+        comp_points_c64(exemplar_s.view(), cir2.s.view(), margin, "cir2.s(3)");
     }
 
     #[test]
@@ -1858,7 +1868,7 @@ mod circuit_tests {
             .unwrap();
 
         cir.add_elem(&p1, &freq);
-        let exemplar_c = Points::zeros((1, 2, 2));
+        let exemplar_c = Points::<Complex64, Ix3>::zeros((1, 2, 2));
         let exemplar_x = points![
             Complex64,
             [
@@ -1866,13 +1876,13 @@ mod circuit_tests {
                 [Complex64::ZERO, Complex64::ONE]
             ]
         ];
-        let exemplar_s = Points::zeros((1, 1, 1));
-        comp_points_c64(&exemplar_c, &cir.c, margin, "cir.c(1)");
-        comp_points_c64(&exemplar_x, &cir.x, margin, "cir.x(1)");
-        comp_points_c64(&exemplar_s, &cir.s, margin, "cir.s(1)");
+        let exemplar_s = Points::<Complex64, Ix3>::zeros((1, 1, 1));
+        comp_points_c64(exemplar_c.view(), cir.c.view(), margin, "cir.c(1)");
+        comp_points_c64(exemplar_x.view(), cir.x.view(), margin, "cir.x(1)");
+        comp_points_c64(exemplar_s.view(), cir.s.view(), margin, "cir.s(1)");
 
         cir.add_elem(&p2, &freq);
-        let exemplar_c = Points::zeros((1, 3, 3));
+        let exemplar_c = Points::<Complex64, Ix3>::zeros((1, 3, 3));
         let exemplar_x = points![
             Complex64,
             [
@@ -1881,17 +1891,18 @@ mod circuit_tests {
                 [Complex64::ZERO, Complex64::ZERO, Complex64::ONE]
             ]
         ];
-        let exemplar_s = Points::zeros((1, 2, 2));
-        comp_points_c64(&exemplar_c, &cir.c, margin, "cir.c(2)");
-        comp_points_c64(&exemplar_x, &cir.x, margin, "cir.x(2)");
-        comp_points_c64(&exemplar_s, &cir.s, margin, "cir.s(2)");
+        let exemplar_s = Points::<Complex64, Ix3>::zeros((1, 2, 2));
+        comp_points_c64(exemplar_c.view(), cir.c.view(), margin, "cir.c(2)");
+        comp_points_c64(exemplar_x.view(), cir.x.view(), margin, "cir.x(2)");
+        comp_points_c64(exemplar_s.view(), cir.s.view(), margin, "cir.s(2)");
 
         cir.add_elem(&l1, &freq);
-        let exemplar_c = Points::from_shape_fn((1, 5, 5), |(_, j, k)| match (j, k) {
-            (2, 2) | (4, 4) => 0.3333333333333333.into(),
-            (2, 4) | (4, 2) => 0.6666666666666667.into(),
-            _ => Complex64::ZERO,
-        });
+        let exemplar_c =
+            Points::<Complex64, Ix3>::from_shape_fn((1, 5, 5), |(_, j, k)| match (j, k) {
+                (2, 2) | (4, 4) => 0.3333333333333333.into(),
+                (2, 4) | (4, 2) => 0.6666666666666667.into(),
+                _ => Complex64::ZERO,
+            });
         let exemplar_x = points![
             Complex64,
             [
@@ -1932,14 +1943,15 @@ mod circuit_tests {
                 ]
             ]
         ];
-        let exemplar_s = Points::from_shape_fn((1, 2, 2), |(_, j, k)| match (j, k) {
-            (0, 0) | (1, 1) => c64(0.0039323175928275, 0.0625847782705717),
-            (0, 1) | (1, 0) => c64(0.9960676824071726, -0.0625847782705717),
-            _ => Complex64::ZERO,
-        });
-        comp_points_c64(&exemplar_c, &cir.c, margin, "cir.c(3)");
-        comp_points_c64(&exemplar_x, &cir.x, margin, "cir.x(3)");
-        comp_points_c64(&exemplar_s, &cir.s, margin, "cir.s(3)");
+        let exemplar_s =
+            Points::<Complex64, Ix3>::from_shape_fn((1, 2, 2), |(_, j, k)| match (j, k) {
+                (0, 0) | (1, 1) => c64(0.0039323175928275, 0.0625847782705717),
+                (0, 1) | (1, 0) => c64(0.9960676824071726, -0.0625847782705717),
+                _ => Complex64::ZERO,
+            });
+        comp_points_c64(exemplar_c.view(), cir.c.view(), margin, "cir.c(3)");
+        comp_points_c64(exemplar_x.view(), cir.x.view(), margin, "cir.x(3)");
+        comp_points_c64(exemplar_s.view(), cir.s.view(), margin, "cir.s(3)");
 
         let mut cir2 = Circuit::new(&freq);
         let p1 = ElementBuilder::new()
@@ -1965,7 +1977,7 @@ mod circuit_tests {
             .unwrap();
 
         cir2.add_elem(&p1, &freq);
-        let exemplar_c = Points::zeros((1, 2, 2));
+        let exemplar_c = Points::<Complex64, Ix3>::zeros((1, 2, 2));
         let exemplar_x = points![
             Complex64,
             [
@@ -1973,13 +1985,13 @@ mod circuit_tests {
                 [Complex64::ZERO, Complex64::ONE]
             ]
         ];
-        let exemplar_s = Points::zeros((1, 1, 1));
-        comp_points_c64(&exemplar_c, &cir2.c, margin, "cir2.c(1)");
-        comp_points_c64(&exemplar_x, &cir2.x, margin, "cir2.x(1)");
-        comp_points_c64(&exemplar_s, &cir2.s, margin, "cir2.s(1)");
+        let exemplar_s = Points::<Complex64, Ix3>::zeros((1, 1, 1));
+        comp_points_c64(exemplar_c.view(), cir2.c.view(), margin, "cir2.c(1)");
+        comp_points_c64(exemplar_x.view(), cir2.x.view(), margin, "cir2.x(1)");
+        comp_points_c64(exemplar_s.view(), cir2.s.view(), margin, "cir2.s(1)");
 
         cir2.add_elem(&p2, &freq);
-        let exemplar_c = Points::zeros((1, 3, 3));
+        let exemplar_c = Points::<Complex64, Ix3>::zeros((1, 3, 3));
         let exemplar_x = points![
             Complex64,
             [
@@ -1988,17 +2000,18 @@ mod circuit_tests {
                 [Complex64::ZERO, Complex64::ZERO, Complex64::ONE]
             ]
         ];
-        let exemplar_s = Points::zeros((1, 2, 2));
-        comp_points_c64(&exemplar_c, &cir2.c, margin, "cir2.c(2)");
-        comp_points_c64(&exemplar_x, &cir2.x, margin, "cir2.x(2)");
-        comp_points_c64(&exemplar_s, &cir2.s, margin, "cir2.s(2)");
+        let exemplar_s = Points::<Complex64, Ix3>::zeros((1, 2, 2));
+        comp_points_c64(exemplar_c.view(), cir2.c.view(), margin, "cir2.c(2)");
+        comp_points_c64(exemplar_x.view(), cir2.x.view(), margin, "cir2.x(2)");
+        comp_points_c64(exemplar_s.view(), cir2.s.view(), margin, "cir2.s(2)");
 
         cir2.add_elem(&l1, &freq);
-        let exemplar_c = Points::from_shape_fn((1, 5, 5), |(_, j, k)| match (j, k) {
-            (2, 2) | (4, 4) => 0.3333333333333333.into(),
-            (2, 4) | (4, 2) => 0.6666666666666667.into(),
-            _ => Complex64::ZERO,
-        });
+        let exemplar_c =
+            Points::<Complex64, Ix3>::from_shape_fn((1, 5, 5), |(_, j, k)| match (j, k) {
+                (2, 2) | (4, 4) => 0.3333333333333333.into(),
+                (2, 4) | (4, 2) => 0.6666666666666667.into(),
+                _ => Complex64::ZERO,
+            });
         let exemplar_x = points![
             Complex64,
             [
@@ -2052,9 +2065,9 @@ mod circuit_tests {
                 ],
             ]
         ];
-        comp_points_c64(&exemplar_c, &cir2.c, margin, "cir2.c(3)");
-        comp_points_c64(&exemplar_x, &cir2.x, margin, "cir2.x(3)");
-        comp_points_c64(&exemplar_s, &cir2.s, margin, "cir2.s(3)");
+        comp_points_c64(exemplar_c.view(), cir2.c.view(), margin, "cir2.c(3)");
+        comp_points_c64(exemplar_x.view(), cir2.x.view(), margin, "cir2.x(3)");
+        comp_points_c64(exemplar_s.view(), cir2.s.view(), margin, "cir2.s(3)");
     }
 
     #[test]
@@ -2128,7 +2141,7 @@ mod circuit_tests {
                 ]
             ]
         ];
-        comp_points_c64(&exemplar_s, &cir.s, margin, "cir.s(1)");
+        comp_points_c64(exemplar_s.view(), cir.s.view(), margin, "cir.s(1)");
 
         let src = ImpedanceBuilder::new()
             .kind(ImpedanceType::Z)
@@ -2181,7 +2194,7 @@ mod circuit_tests {
                 ]
             ]
         ];
-        comp_points_c64(&exemplar_s, &cir.s, margin, "cir.s(2)");
+        comp_points_c64(exemplar_s.view(), cir.s.view(), margin, "cir.s(2)");
 
         let load = ImpedanceBuilder::new()
             .kind(ImpedanceType::Z)
@@ -2243,7 +2256,7 @@ mod circuit_tests {
                 ]
             ]
         ];
-        comp_points_c64(&exemplar_s, &cir.s, margin, "cir.s(3)");
+        comp_points_c64(exemplar_s.view(), cir.s.view(), margin, "cir.s(3)");
 
         let mut cir = Circuit::new(&freq);
         let ls = ElementBuilder::new()
@@ -2278,7 +2291,7 @@ mod circuit_tests {
                 ]
             ]
         ];
-        comp_points_c64(&exemplar_s, &cir.s, margin, "cir.s(4)");
+        comp_points_c64(exemplar_s.view(), cir.s.view(), margin, "cir.s(4)");
 
         let mut cir = Circuit::new(&freq);
         let ls = ElementBuilder::new()
@@ -2313,7 +2326,7 @@ mod circuit_tests {
                 ]
             ]
         ];
-        comp_points_c64(&exemplar_s, &cir.s, margin, "cir.s(5)");
+        comp_points_c64(exemplar_s.view(), cir.s.view(), margin, "cir.s(5)");
     }
 
     #[test]
@@ -2354,7 +2367,7 @@ mod circuit_tests {
             .build()
             .unwrap();
 
-        let exemplar_c = Points::zeros((1, 2, 2));
+        let exemplar_c = Points::<Complex64, Ix3>::zeros((1, 2, 2));
         let exemplar_x = points![
             Complex64,
             [
@@ -2362,31 +2375,32 @@ mod circuit_tests {
                 [Complex64::ZERO, Complex64::ONE]
             ]
         ];
-        let exemplar_s = Points::zeros((1, 1, 1));
+        let exemplar_s = Points::<Complex64, Ix3>::zeros((1, 1, 1));
         cir.add_elem(&p1, &freq);
-        comp_points_c64(&exemplar_c, &cir.c, margin, "cir.c(p1)");
-        comp_points_c64(&exemplar_x, &cir.x, margin, "cir.x(p1)");
-        comp_points_c64(&exemplar_s, &cir.s, margin, "cir.s(p1)");
+        comp_points_c64(exemplar_c.view(), cir.c.view(), margin, "cir.c(p1)");
+        comp_points_c64(exemplar_x.view(), cir.x.view(), margin, "cir.x(p1)");
+        comp_points_c64(exemplar_s.view(), cir.s.view(), margin, "cir.s(p1)");
 
-        let exemplar_c = Points::zeros((1, 3, 3));
-        let exemplar_x = Points::from_shape_fn((1, 3, 3), |(_, j, k)| {
+        let exemplar_c = Points::<Complex64, Ix3>::zeros((1, 3, 3));
+        let exemplar_x = Points::<Complex64, Ix3>::from_shape_fn((1, 3, 3), |(_, j, k)| {
             if j == k && j != 0 {
                 Complex64::ONE
             } else {
                 Complex64::ZERO
             }
         });
-        let exemplar_s = Points::zeros((1, 2, 2));
+        let exemplar_s = Points::<Complex64, Ix3>::zeros((1, 2, 2));
         cir.add_elem(&p2, &freq);
-        comp_points_c64(&exemplar_c, &cir.c, margin, "cir.c(p2)");
-        comp_points_c64(&exemplar_x, &cir.x, margin, "cir.x(p2)");
-        comp_points_c64(&exemplar_s, &cir.s, margin, "cir.s(p2)");
+        comp_points_c64(exemplar_c.view(), cir.c.view(), margin, "cir.c(p2)");
+        comp_points_c64(exemplar_x.view(), cir.x.view(), margin, "cir.x(p2)");
+        comp_points_c64(exemplar_s.view(), cir.s.view(), margin, "cir.s(p2)");
 
-        let exemplar_c = Points::from_shape_fn((1, 5, 5), |(_, j, k)| match (j, k) {
-            (2, 2) | (4, 4) => 0.3333333333333333.into(),
-            (2, 4) | (4, 2) => 0.6666666666666667.into(),
-            _ => Complex64::ZERO,
-        });
+        let exemplar_c =
+            Points::<Complex64, Ix3>::from_shape_fn((1, 5, 5), |(_, j, k)| match (j, k) {
+                (2, 2) | (4, 4) => 0.3333333333333333.into(),
+                (2, 4) | (4, 2) => 0.6666666666666667.into(),
+                _ => Complex64::ZERO,
+            });
         let exemplar_x = points![
             Complex64,
             [
@@ -2427,21 +2441,23 @@ mod circuit_tests {
                 ]
             ]
         ];
-        let exemplar_s = Points::from_shape_fn((1, 2, 2), |(_, j, k)| match (j, k) {
-            (0, 0) | (1, 1) => 0.1666666666666659.into(),
-            (0, 1) | (1, 0) => 0.8333333333333326.into(),
-            _ => Complex64::ZERO,
-        });
+        let exemplar_s =
+            Points::<Complex64, Ix3>::from_shape_fn((1, 2, 2), |(_, j, k)| match (j, k) {
+                (0, 0) | (1, 1) => 0.1666666666666659.into(),
+                (0, 1) | (1, 0) => 0.8333333333333326.into(),
+                _ => Complex64::ZERO,
+            });
         cir.add_elem(&r1, &freq);
-        comp_points_c64(&exemplar_c, &cir.c, margin, "cir.c(r1)");
-        comp_points_c64(&exemplar_x, &cir.x, margin, "cir.x(r1)");
-        comp_points_c64(&exemplar_s, &cir.s, margin, "cir.s(r1)");
+        comp_points_c64(exemplar_c.view(), cir.c.view(), margin, "cir.c(r1)");
+        comp_points_c64(exemplar_x.view(), cir.x.view(), margin, "cir.x(r1)");
+        comp_points_c64(exemplar_s.view(), cir.s.view(), margin, "cir.s(r1)");
 
-        let exemplar_c = Points::from_shape_fn((1, 7, 7), |(_, j, k)| match (j, k) {
-            (2, 2) | (3, 3) | (5, 5) | (6, 6) => 0.3333333333333333.into(),
-            (2, 5) | (3, 6) | (5, 2) | (6, 3) => 0.6666666666666667.into(),
-            _ => Complex64::ZERO,
-        });
+        let exemplar_c =
+            Points::<Complex64, Ix3>::from_shape_fn((1, 7, 7), |(_, j, k)| match (j, k) {
+                (2, 2) | (3, 3) | (5, 5) | (6, 6) => 0.3333333333333333.into(),
+                (2, 5) | (3, 6) | (5, 2) | (6, 3) => 0.6666666666666667.into(),
+                _ => Complex64::ZERO,
+            });
         let exemplar_x = points![
             Complex64,
             [
@@ -2510,15 +2526,16 @@ mod circuit_tests {
                 ],
             ]
         ];
-        let exemplar_s = Points::from_shape_fn((1, 2, 2), |(_, j, k)| match (j, k) {
-            (0, 0) | (1, 1) => c64(0.1648587877586434, -0.0172639718834091),
-            (0, 1) | (1, 0) => c64(0.8351412122413568, 0.0172639718834091),
-            _ => Complex64::ZERO,
-        });
+        let exemplar_s =
+            Points::<Complex64, Ix3>::from_shape_fn((1, 2, 2), |(_, j, k)| match (j, k) {
+                (0, 0) | (1, 1) => c64(0.1648587877586434, -0.0172639718834091),
+                (0, 1) | (1, 0) => c64(0.8351412122413568, 0.0172639718834091),
+                _ => Complex64::ZERO,
+            });
         cir.add_elem(&c1, &freq);
-        comp_points_c64(&exemplar_c, &cir.c, margin, "cir.c(c1)");
-        comp_points_c64(&exemplar_x, &cir.x, margin, "cir.x(c1)");
-        comp_points_c64(&exemplar_s, &cir.s, margin, "cir.s(c1)");
+        comp_points_c64(exemplar_c.view(), cir.c.view(), margin, "cir.c(c1)");
+        comp_points_c64(exemplar_x.view(), cir.x.view(), margin, "cir.x(c1)");
+        comp_points_c64(exemplar_s.view(), cir.s.view(), margin, "cir.s(c1)");
 
         let mut cir2 = Circuit::new(&freq);
         let p1 = ElementBuilder::new()
@@ -2550,7 +2567,7 @@ mod circuit_tests {
             .build()
             .unwrap();
 
-        let exemplar2_c = Points::zeros((1, 2, 2));
+        let exemplar2_c = Points::<Complex64, Ix3>::zeros((1, 2, 2));
         let exemplar2_x = points![
             Complex64,
             [
@@ -2558,31 +2575,32 @@ mod circuit_tests {
                 [Complex64::ZERO, Complex64::ONE]
             ]
         ];
-        let exemplar2_s = Points::zeros((1, 1, 1));
+        let exemplar2_s = Points::<Complex64, Ix3>::zeros((1, 1, 1));
         cir2.add_elem(&p1, &freq);
-        comp_points_c64(&exemplar2_c, &cir2.c, margin, "cir2.c(1)");
-        comp_points_c64(&exemplar2_x, &cir2.x, margin, "cir2.x(1)");
-        comp_points_c64(&exemplar2_s, &cir2.s, margin, "cir2.s(1)");
+        comp_points_c64(exemplar2_c.view(), cir2.c.view(), margin, "cir2.c(1)");
+        comp_points_c64(exemplar2_x.view(), cir2.x.view(), margin, "cir2.x(1)");
+        comp_points_c64(exemplar2_s.view(), cir2.s.view(), margin, "cir2.s(1)");
 
-        let exemplar2_c = Points::zeros((1, 3, 3));
-        let exemplar2_x = Points::from_shape_fn((1, 3, 3), |(_, j, k)| {
+        let exemplar2_c = Points::<Complex64, Ix3>::zeros((1, 3, 3));
+        let exemplar2_x = Points::<Complex64, Ix3>::from_shape_fn((1, 3, 3), |(_, j, k)| {
             if j == k && j != 0 {
                 Complex64::ONE
             } else {
                 Complex64::ZERO
             }
         });
-        let exemplar2_s = Points::zeros((1, 2, 2));
+        let exemplar2_s = Points::<Complex64, Ix3>::zeros((1, 2, 2));
         cir2.add_elem(&p2, &freq);
-        comp_points_c64(&exemplar2_c, &cir2.c, margin, "cir2.c(2)");
-        comp_points_c64(&exemplar2_x, &cir2.x, margin, "cir2.x(2)");
-        comp_points_c64(&exemplar2_s, &cir2.s, margin, "cir2.s(2)");
+        comp_points_c64(exemplar2_c.view(), cir2.c.view(), margin, "cir2.c(2)");
+        comp_points_c64(exemplar2_x.view(), cir2.x.view(), margin, "cir2.x(2)");
+        comp_points_c64(exemplar2_s.view(), cir2.s.view(), margin, "cir2.s(2)");
 
-        let exemplar2_c = Points::from_shape_fn((1, 5, 5), |(_, j, k)| match (j, k) {
-            (2, 2) | (4, 4) => 0.3333333333333333.into(),
-            (2, 4) | (4, 2) => 0.6666666666666667.into(),
-            _ => Complex64::ZERO,
-        });
+        let exemplar2_c =
+            Points::<Complex64, Ix3>::from_shape_fn((1, 5, 5), |(_, j, k)| match (j, k) {
+                (2, 2) | (4, 4) => 0.3333333333333333.into(),
+                (2, 4) | (4, 2) => 0.6666666666666667.into(),
+                _ => Complex64::ZERO,
+            });
         let exemplar2_x = points![
             Complex64,
             [
@@ -2631,15 +2649,16 @@ mod circuit_tests {
             ]
         ];
         cir2.add_elem(&r1, &freq);
-        comp_points_c64(&exemplar2_c, &cir2.c, margin, "cir2.c(3)");
-        comp_points_c64(&exemplar2_x, &cir2.x, margin, "cir2.x(3)");
-        comp_points_c64(&exemplar2_s, &cir2.s, margin, "cir2.s(3)");
+        comp_points_c64(exemplar2_c.view(), cir2.c.view(), margin, "cir2.c(3)");
+        comp_points_c64(exemplar2_x.view(), cir2.x.view(), margin, "cir2.x(3)");
+        comp_points_c64(exemplar2_s.view(), cir2.s.view(), margin, "cir2.s(3)");
 
-        let exemplar_c = Points::from_shape_fn((1, 7, 7), |(_, j, k)| match (j, k) {
-            (2, 2) | (3, 3) | (5, 5) | (6, 6) => 0.3333333333333333.into(),
-            (2, 5) | (3, 6) | (5, 2) | (6, 3) => 0.6666666666666667.into(),
-            _ => Complex64::ZERO,
-        });
+        let exemplar_c =
+            Points::<Complex64, Ix3>::from_shape_fn((1, 7, 7), |(_, j, k)| match (j, k) {
+                (2, 2) | (3, 3) | (5, 5) | (6, 6) => 0.3333333333333333.into(),
+                (2, 5) | (3, 6) | (5, 2) | (6, 3) => 0.6666666666666667.into(),
+                _ => Complex64::ZERO,
+            });
         let exemplar_x = points![
             Complex64,
             [
@@ -2722,9 +2741,9 @@ mod circuit_tests {
             ]
         ];
         cir2.add_elem(&c1, &freq);
-        comp_points_c64(&exemplar_c, &cir2.c, margin, "cir2.c(c1)");
-        comp_points_c64(&exemplar_x, &cir2.x, margin, "cir2.x(c1)");
-        comp_points_c64(&exemplar_s, &cir2.s, margin, "cir2.s(c1)");
+        comp_points_c64(exemplar_c.view(), cir2.c.view(), margin, "cir2.c(c1)");
+        comp_points_c64(exemplar_x.view(), cir2.x.view(), margin, "cir2.x(c1)");
+        comp_points_c64(exemplar_s.view(), cir2.s.view(), margin, "cir2.s(c1)");
     }
 
     #[test]
@@ -2769,11 +2788,12 @@ mod circuit_tests {
         cir.add_elem(&p2, &freq);
         cir.add_elem(&r1, &freq);
         cir.add_elem(&l1, &freq);
-        let exemplar_c = Points::from_shape_fn((1, 7, 7), |(_, j, k)| match (j, k) {
-            (2, 2) | (3, 3) | (5, 5) | (6, 6) => 0.3333333333333333.into(),
-            (2, 5) | (3, 6) | (5, 2) | (6, 3) => 0.6666666666666667.into(),
-            _ => Complex64::ZERO,
-        });
+        let exemplar_c =
+            Points::<Complex64, Ix3>::from_shape_fn((1, 7, 7), |(_, j, k)| match (j, k) {
+                (2, 2) | (3, 3) | (5, 5) | (6, 6) => 0.3333333333333333.into(),
+                (2, 5) | (3, 6) | (5, 2) | (6, 3) => 0.6666666666666667.into(),
+                _ => Complex64::ZERO,
+            });
         let exemplar_x = points![
             Complex64,
             [
@@ -2842,14 +2862,15 @@ mod circuit_tests {
                 ]
             ]
         ];
-        let exemplar_s = Points::from_shape_fn((1, 2, 2), |(_, j, k)| match (j, k) {
-            (0, 0) | (1, 1) => c64(0.0207395044231295, 0.0550132441036204),
-            (0, 1) | (1, 0) => c64(0.9792604955768716, -0.0550132441036205),
-            _ => Complex64::ZERO,
-        });
-        comp_points_c64(&exemplar_c, &cir.c, margin, "cir.c(l1)");
-        comp_points_c64(&exemplar_x, &cir.x, margin, "cir.x(l1)");
-        comp_points_c64(&exemplar_s, &cir.s, margin, "cir.s(l1)");
+        let exemplar_s =
+            Points::<Complex64, Ix3>::from_shape_fn((1, 2, 2), |(_, j, k)| match (j, k) {
+                (0, 0) | (1, 1) => c64(0.0207395044231295, 0.0550132441036204),
+                (0, 1) | (1, 0) => c64(0.9792604955768716, -0.0550132441036205),
+                _ => Complex64::ZERO,
+            });
+        comp_points_c64(exemplar_c.view(), cir.c.view(), margin, "cir.c(l1)");
+        comp_points_c64(exemplar_x.view(), cir.x.view(), margin, "cir.x(l1)");
+        comp_points_c64(exemplar_s.view(), cir.s.view(), margin, "cir.s(l1)");
 
         let mut cir2 = Circuit::new(&freq);
         let p1 = ElementBuilder::new()
@@ -2885,11 +2906,12 @@ mod circuit_tests {
         cir2.add_elem(&p2, &freq);
         cir2.add_elem(&r1, &freq);
         cir2.add_elem(&l1, &freq);
-        let exemplar_c = Points::from_shape_fn((1, 7, 7), |(_, j, k)| match (j, k) {
-            (2, 2) | (3, 3) | (5, 5) | (6, 6) => 0.3333333333333333.into(),
-            (2, 5) | (3, 6) | (5, 2) | (6, 3) => 0.6666666666666667.into(),
-            _ => Complex64::ZERO,
-        });
+        let exemplar_c =
+            Points::<Complex64, Ix3>::from_shape_fn((1, 7, 7), |(_, j, k)| match (j, k) {
+                (2, 2) | (3, 3) | (5, 5) | (6, 6) => 0.3333333333333333.into(),
+                (2, 5) | (3, 6) | (5, 2) | (6, 3) => 0.6666666666666667.into(),
+                _ => Complex64::ZERO,
+            });
         let exemplar_x = points![
             Complex64,
             [
@@ -2971,9 +2993,9 @@ mod circuit_tests {
                 ]
             ]
         ];
-        comp_points_c64(&exemplar_c, &cir2.c, margin, "cir2.c(l1)");
-        comp_points_c64(&exemplar_x, &cir2.x, margin, "cir2.x(l1)");
-        comp_points_c64(&exemplar_s, &cir2.s, margin, "cir2.s(l1)");
+        comp_points_c64(exemplar_c.view(), cir2.c.view(), margin, "cir2.c(l1)");
+        comp_points_c64(exemplar_x.view(), cir2.x.view(), margin, "cir2.x(l1)");
+        comp_points_c64(exemplar_s.view(), cir2.s.view(), margin, "cir2.s(l1)");
     }
 
     #[test]
@@ -3018,11 +3040,12 @@ mod circuit_tests {
         cir.add_elem(&p2, &freq);
         cir.add_elem(&c1, &freq);
         cir.add_elem(&l1, &freq);
-        let exemplar_c = Points::from_shape_fn((1, 7, 7), |(_, j, k)| match (j, k) {
-            (2, 2) | (3, 3) | (5, 5) | (6, 6) => 0.3333333333333333.into(),
-            (2, 5) | (3, 6) | (5, 2) | (6, 3) => 0.6666666666666667.into(),
-            _ => Complex64::ZERO,
-        });
+        let exemplar_c =
+            Points::<Complex64, Ix3>::from_shape_fn((1, 7, 7), |(_, j, k)| match (j, k) {
+                (2, 2) | (3, 3) | (5, 5) | (6, 6) => 0.3333333333333333.into(),
+                (2, 5) | (3, 6) | (5, 2) | (6, 3) => 0.6666666666666667.into(),
+                _ => Complex64::ZERO,
+            });
         let exemplar_x = points![
             Complex64,
             [
@@ -3091,14 +3114,15 @@ mod circuit_tests {
                 ]
             ]
         ];
-        let exemplar_s = Points::from_shape_fn((1, 2, 2), |(_, j, k)| match (j, k) {
-            (0, 0) | (1, 1) => c64(0.0042607993839932, 0.0651355891399034),
-            (0, 1) | (1, 0) => c64(0.9957392006160075, -0.0651355891399034),
-            _ => Complex64::ZERO,
-        });
-        comp_points_c64(&exemplar_c, &cir.c, margin, "cir.c()");
-        comp_points_c64(&exemplar_x, &cir.x, margin, "cir.x()");
-        comp_points_c64(&exemplar_s, &cir.s, margin, "cir.s()");
+        let exemplar_s =
+            Points::<Complex64, Ix3>::from_shape_fn((1, 2, 2), |(_, j, k)| match (j, k) {
+                (0, 0) | (1, 1) => c64(0.0042607993839932, 0.0651355891399034),
+                (0, 1) | (1, 0) => c64(0.9957392006160075, -0.0651355891399034),
+                _ => Complex64::ZERO,
+            });
+        comp_points_c64(exemplar_c.view(), cir.c.view(), margin, "cir.c()");
+        comp_points_c64(exemplar_x.view(), cir.x.view(), margin, "cir.x()");
+        comp_points_c64(exemplar_s.view(), cir.s.view(), margin, "cir.s()");
 
         let mut cir2 = Circuit::new(&freq);
         let p1 = ElementBuilder::new()
@@ -3134,11 +3158,12 @@ mod circuit_tests {
         cir2.add_elem(&p2, &freq);
         cir2.add_elem(&c1, &freq);
         cir2.add_elem(&l1, &freq);
-        let exemplar_c = Points::from_shape_fn((1, 7, 7), |(_, j, k)| match (j, k) {
-            (1, 1) | (3, 3) | (4, 4) | (6, 6) => 0.3333333333333333.into(),
-            (1, 3) | (4, 6) | (3, 1) | (6, 4) => 0.6666666666666667.into(),
-            _ => Complex64::ZERO,
-        });
+        let exemplar_c =
+            Points::<Complex64, Ix3>::from_shape_fn((1, 7, 7), |(_, j, k)| match (j, k) {
+                (1, 1) | (3, 3) | (4, 4) | (6, 6) => 0.3333333333333333.into(),
+                (1, 3) | (4, 6) | (3, 1) | (6, 4) => 0.6666666666666667.into(),
+                _ => Complex64::ZERO,
+            });
         let exemplar_x = points![
             Complex64,
             [
@@ -3220,9 +3245,9 @@ mod circuit_tests {
                 ]
             ]
         ];
-        comp_points_c64(&exemplar_c, &cir2.c, margin, "cir2.c()");
-        comp_points_c64(&exemplar_x, &cir2.x, margin, "cir2.x()");
-        comp_points_c64(&exemplar_s, &cir2.s, margin, "cir2.s()");
+        comp_points_c64(exemplar_c.view(), cir2.c.view(), margin, "cir2.c()");
+        comp_points_c64(exemplar_x.view(), cir2.x.view(), margin, "cir2.x()");
+        comp_points_c64(exemplar_s.view(), cir2.s.view(), margin, "cir2.s()");
 
         let mut cir3 = Circuit::new(&freq);
         let p1 = ElementBuilder::new()
@@ -3258,11 +3283,12 @@ mod circuit_tests {
         cir3.add_elem(&p2, &freq);
         cir3.add_elem(&c1, &freq);
         cir3.add_elem(&l1, &freq);
-        let exemplar_c = Points::from_shape_fn((1, 7, 7), |(_, j, k)| match (j, k) {
-            (1, 1) | (3, 3) | (5, 5) | (6, 6) => 0.3333333333333333.into(),
-            (1, 5) | (3, 6) | (5, 1) | (6, 3) => 0.6666666666666667.into(),
-            _ => Complex64::ZERO,
-        });
+        let exemplar_c =
+            Points::<Complex64, Ix3>::from_shape_fn((1, 7, 7), |(_, j, k)| match (j, k) {
+                (1, 1) | (3, 3) | (5, 5) | (6, 6) => 0.3333333333333333.into(),
+                (1, 5) | (3, 6) | (5, 1) | (6, 3) => 0.6666666666666667.into(),
+                _ => Complex64::ZERO,
+            });
         let exemplar_x = points![
             Complex64,
             [
@@ -3344,9 +3370,9 @@ mod circuit_tests {
                 ]
             ]
         ];
-        comp_points_c64(&exemplar_c, &cir3.c, margin, "cir3.c()");
-        comp_points_c64(&exemplar_x, &cir3.x, margin, "cir3.x()");
-        comp_points_c64(&exemplar_s, &cir3.s, margin, "cir3.s()");
+        comp_points_c64(exemplar_c.view(), cir3.c.view(), margin, "cir3.c()");
+        comp_points_c64(exemplar_x.view(), cir3.x.view(), margin, "cir3.x()");
+        comp_points_c64(exemplar_s.view(), cir3.s.view(), margin, "cir3.s()");
 
         let mut cir4 = Circuit::new(&freq);
         let p1 = ElementBuilder::new()
@@ -3382,11 +3408,12 @@ mod circuit_tests {
         cir4.add_elem(&p2, &freq);
         cir4.add_elem(&c1, &freq);
         cir4.add_elem(&l1, &freq);
-        let exemplar_c = Points::from_shape_fn((1, 7, 7), |(_, j, k)| match (j, k) {
-            (1, 1) | (3, 3) | (5, 5) | (6, 6) => 0.3333333333333333.into(),
-            (1, 6) | (3, 5) | (6, 1) | (5, 3) => 0.6666666666666667.into(),
-            _ => Complex64::ZERO,
-        });
+        let exemplar_c =
+            Points::<Complex64, Ix3>::from_shape_fn((1, 7, 7), |(_, j, k)| match (j, k) {
+                (1, 1) | (3, 3) | (5, 5) | (6, 6) => 0.3333333333333333.into(),
+                (1, 6) | (3, 5) | (6, 1) | (5, 3) => 0.6666666666666667.into(),
+                _ => Complex64::ZERO,
+            });
         let exemplar_x = points![
             Complex64,
             [
@@ -3468,9 +3495,9 @@ mod circuit_tests {
                 ]
             ]
         ];
-        comp_points_c64(&exemplar_c, &cir4.c, margin, "cir4.c()");
-        comp_points_c64(&exemplar_x, &cir4.x, margin, "cir4.x()");
-        comp_points_c64(&exemplar_s, &cir4.s, margin, "cir4.s()");
+        comp_points_c64(exemplar_c.view(), cir4.c.view(), margin, "cir4.c()");
+        comp_points_c64(exemplar_x.view(), cir4.x.view(), margin, "cir4.x()");
+        comp_points_c64(exemplar_s.view(), cir4.s.view(), margin, "cir4.s()");
     }
 
     #[test]
@@ -3523,11 +3550,12 @@ mod circuit_tests {
         cir.add_elem(&r1, &freq);
         cir.add_elem(&c1, &freq);
         cir.add_elem(&l1, &freq);
-        let exemplar_c = Points::from_shape_fn((1, 9, 9), |(_, j, k)| match (j, k) {
-            (2, 2) | (3, 3) | (4, 4) | (6, 6) | (7, 7) | (8, 8) => 0.3333333333333333.into(),
-            (2, 6) | (3, 7) | (4, 8) | (6, 2) | (7, 3) | (8, 4) => 0.6666666666666667.into(),
-            _ => Complex64::ZERO,
-        });
+        let exemplar_c =
+            Points::<Complex64, Ix3>::from_shape_fn((1, 9, 9), |(_, j, k)| match (j, k) {
+                (2, 2) | (3, 3) | (4, 4) | (6, 6) | (7, 7) | (8, 8) => 0.3333333333333333.into(),
+                (2, 6) | (3, 7) | (4, 8) | (6, 2) | (7, 3) | (8, 4) => 0.6666666666666667.into(),
+                _ => Complex64::ZERO,
+            });
         let exemplar_x = points![
             Complex64,
             [
@@ -3645,9 +3673,9 @@ mod circuit_tests {
                 ]
             ]
         ];
-        comp_points_c64(&exemplar_c, &cir.c, margin, "cir.c()");
-        comp_points_c64(&exemplar_x, &cir.x, margin, "cir.x()");
-        comp_points_c64(&exemplar_s, &cir.s, margin, "cir.s()");
+        comp_points_c64(exemplar_c.view(), cir.c.view(), margin, "cir.c()");
+        comp_points_c64(exemplar_x.view(), cir.x.view(), margin, "cir.x()");
+        comp_points_c64(exemplar_s.view(), cir.s.view(), margin, "cir.s()");
     }
 
     #[test]
@@ -3766,29 +3794,31 @@ mod circuit_tests {
                 ]
             ]
         ];
-        let exemplar_x = Points::from_shape_fn((1, 10, 10), |(_, j, k)| match (j, k) {
-            (1, 1) => (-0.17157293888502256).into(),
-            (2, 2) | (3, 3) => (-0.41421353055748866).into(),
-            (1, 2) | (1, 3) | (2, 1) | (3, 1) => (0.6966213916620551).into(),
-            (2, 3) | (3, 2) => (0.5857864694425113).into(),
-            (4, 4) | (7, 7) => (-0.09383635942272539).into(),
-            (5, 5) | (8, 8) => (-0.3592454608659119).into(),
-            (6, 6) | (9, 9) => (-0.5469181797113627).into(),
-            (4, 5) | (5, 4) | (7, 8) | (8, 7) => (0.7619898069516147).into(),
-            (4, 6) | (6, 4) | (7, 9) | (9, 7) => (0.6407544551168801).into(),
-            (5, 6) | (6, 5) | (8, 9) | (9, 8) => (0.538808159690515).into(),
-            _ => Complex64::ZERO,
-        });
-        let exemplar_c = Points::from_shape_fn((1, 10, 10), |(_, j, k)| match (j, k) {
-            (2, 5) | (3, 8) | (5, 2) | (8, 3) => -Complex64::I,
-            (6, 6) | (9, 9) => (1.0 / 3.0).into(),
-            (6, 9) | (9, 6) => (2.0 / 3.0).into(),
-            _ => Complex64::ZERO,
-        });
+        let exemplar_x =
+            Points::<Complex64, Ix3>::from_shape_fn((1, 10, 10), |(_, j, k)| match (j, k) {
+                (1, 1) => (-0.17157293888502256).into(),
+                (2, 2) | (3, 3) => (-0.41421353055748866).into(),
+                (1, 2) | (1, 3) | (2, 1) | (3, 1) => (0.6966213916620551).into(),
+                (2, 3) | (3, 2) => (0.5857864694425113).into(),
+                (4, 4) | (7, 7) => (-0.09383635942272539).into(),
+                (5, 5) | (8, 8) => (-0.3592454608659119).into(),
+                (6, 6) | (9, 9) => (-0.5469181797113627).into(),
+                (4, 5) | (5, 4) | (7, 8) | (8, 7) => (0.7619898069516147).into(),
+                (4, 6) | (6, 4) | (7, 9) | (9, 7) => (0.6407544551168801).into(),
+                (5, 6) | (6, 5) | (8, 9) | (9, 8) => (0.538808159690515).into(),
+                _ => Complex64::ZERO,
+            });
+        let exemplar_c =
+            Points::<Complex64, Ix3>::from_shape_fn((1, 10, 10), |(_, j, k)| match (j, k) {
+                (2, 5) | (3, 8) | (5, 2) | (8, 3) => -Complex64::I,
+                (6, 6) | (9, 9) => (1.0 / 3.0).into(),
+                (6, 9) | (9, 6) => (2.0 / 3.0).into(),
+                _ => Complex64::ZERO,
+            });
 
-        comp_points_c64(&exemplar_c, &cir.c, margin, "cir.c()");
-        comp_points_c64(&exemplar_x, &cir.x, margin, "cir.x()");
-        comp_points_c64(&exemplar_s, &cir.s, margin, "cir.s()");
+        comp_points_c64(exemplar_c.view(), cir.c.view(), margin, "cir.c()");
+        comp_points_c64(exemplar_x.view(), cir.x.view(), margin, "cir.x()");
+        comp_points_c64(exemplar_s.view(), cir.s.view(), margin, "cir.s()");
     }
 
     #[test]
@@ -3844,29 +3874,32 @@ mod circuit_tests {
         cir.add_elem(&l1, &freq);
         cir.add_elem(&l2, &freq);
         cir.add_elem(&c1, &freq);
-        let exemplar_c = Points::from_shape_fn((1, 9, 9), |(_, j, k)| match (j, k) {
-            (1, 1) | (3, 3) | (5, 5) | (6, 6) | (7, 7) | (8, 8) => (1.0 / 3.0).into(),
-            (1, 8) | (8, 1) | (3, 6) | (6, 3) | (5, 7) | (7, 5) => (2.0 / 3.0).into(),
-            _ => Complex64::ZERO,
-        });
-        let exemplar_x = Points::from_shape_fn((1, 9, 9), |(_, j, k)| match (j, k) {
-            (0, 0) | (1, 1) => (-1.0).into(),
-            (2, 2) | (4, 4) => c64(-0.9689082471969974, 0.24742030739945778),
-            (3, 3) | (5, 5) => c64(0.9689082471969976, -0.24742030739945778),
-            (2, 3) | (3, 2) | (4, 5) | (5, 4) => c64(0.5555511820823531, 0.43151303443327826),
-            (6, 6) | (7, 7) => (0.02013669115344152).into(),
-            (8, 8) => (-1.04027338230688).into(),
-            (6, 7) | (7, 6) => (1.0201366911534415).into(),
-            (6, 8) | (8, 6) | (7, 8) | (8, 7) => c64(0.0, 0.20269276002882086),
-            _ => Complex64::ZERO,
-        });
-        let exemplar_s = Points::from_shape_fn((1, 2, 2), |(_, j, k)| match (j, k) {
-            (0, 0) | (1, 1) => c64(-0.0094890066888926, -0.0325208858508174),
-            (0, 1) | (1, 0) => c64(0.9594192405081047, -0.2799411932502752),
-            _ => Complex64::ZERO,
-        });
-        comp_points_c64(&exemplar_c, &cir.c, margin, "cir.c()");
-        comp_points_c64(&exemplar_x, &cir.x, margin, "cir.x()");
-        comp_points_c64(&exemplar_s, &cir.s, margin, "cir.s()");
+        let exemplar_c =
+            Points::<Complex64, Ix3>::from_shape_fn((1, 9, 9), |(_, j, k)| match (j, k) {
+                (1, 1) | (3, 3) | (5, 5) | (6, 6) | (7, 7) | (8, 8) => (1.0 / 3.0).into(),
+                (1, 8) | (8, 1) | (3, 6) | (6, 3) | (5, 7) | (7, 5) => (2.0 / 3.0).into(),
+                _ => Complex64::ZERO,
+            });
+        let exemplar_x =
+            Points::<Complex64, Ix3>::from_shape_fn((1, 9, 9), |(_, j, k)| match (j, k) {
+                (0, 0) | (1, 1) => (-1.0).into(),
+                (2, 2) | (4, 4) => c64(-0.9689082471969974, 0.24742030739945778),
+                (3, 3) | (5, 5) => c64(0.9689082471969976, -0.24742030739945778),
+                (2, 3) | (3, 2) | (4, 5) | (5, 4) => c64(0.5555511820823531, 0.43151303443327826),
+                (6, 6) | (7, 7) => (0.02013669115344152).into(),
+                (8, 8) => (-1.04027338230688).into(),
+                (6, 7) | (7, 6) => (1.0201366911534415).into(),
+                (6, 8) | (8, 6) | (7, 8) | (8, 7) => c64(0.0, 0.20269276002882086),
+                _ => Complex64::ZERO,
+            });
+        let exemplar_s =
+            Points::<Complex64, Ix3>::from_shape_fn((1, 2, 2), |(_, j, k)| match (j, k) {
+                (0, 0) | (1, 1) => c64(-0.0094890066888926, -0.0325208858508174),
+                (0, 1) | (1, 0) => c64(0.9594192405081047, -0.2799411932502752),
+                _ => Complex64::ZERO,
+            });
+        comp_points_c64(exemplar_c.view(), cir.c.view(), margin, "cir.c()");
+        comp_points_c64(exemplar_x.view(), cir.x.view(), margin, "cir.x()");
+        comp_points_c64(exemplar_s.view(), cir.s.view(), margin, "cir.s()");
     }
 }

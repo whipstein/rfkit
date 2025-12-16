@@ -1,15 +1,16 @@
-use crate::frequency::Frequency;
-use crate::impedance::ComplexNumberType;
-use crate::math::*;
-use crate::mycomplex::MyComplex;
-use crate::myfloat::MyFloat;
-use crate::network::{Network, NetworkPoint, PortVal, WaveType, network_err_msg};
-use crate::parameter::RFParameter;
-use crate::point::{Point, Pt};
-use crate::points::{Points, Pts};
-use crate::unit::Unit;
-use ndarray::OwnedRepr;
-use ndarray::prelude::*;
+use crate::{
+    frequency::Frequency,
+    impedance::ComplexNumberType,
+    math::*,
+    mycomplex::MyComplex,
+    myfloat::MyFloat,
+    network::{Network, NetworkPoint, PortVal, WaveType, network_err_msg},
+    parameter::RFParameter,
+    point::{Point, Pt},
+    pts::{Points, Pts},
+    unit::Unit,
+};
+use ndarray::{OwnedRepr, prelude::*};
 use ndarray_linalg::*;
 use num::complex::{Complex64, c64};
 use num::zero;
@@ -19,13 +20,17 @@ use rug::az::UnwrappedAs;
 use rug::ops::{Pow, PowAssign};
 use rug::{Complex, Float};
 use simple_error::SimpleError;
-use std::error::Error;
-use std::f64::consts::PI;
-use std::iter::Iterator;
-use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, Sub, SubAssign};
-use std::process::Child;
-use std::slice::Iter;
-use std::{fmt, fs, mem, process};
+use std::{
+    error::Error,
+    f64::consts::PI,
+    fmt, fs,
+    iter::Iterator,
+    mem,
+    ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, Sub, SubAssign},
+    process,
+    process::Child,
+    slice::Iter,
+};
 
 /// Builder design pattern for Network
 ///
@@ -50,17 +55,17 @@ pub struct NetworkBuilder {
     dim: (usize, usize, usize),
     z0: Array1<Complex64>,
     param: RFParameter,
-    net: Option<Points<Complex64>>,
-    a: Option<Points<Complex64>>,
-    g: Option<Points<Complex64>>,
-    h: Option<Points<Complex64>>,
-    s: Option<Points<Complex64>>,
-    s_power: Option<Points<Complex64>>,
-    s_pseudo: Option<Points<Complex64>>,
-    s_traveling: Option<Points<Complex64>>,
-    t: Option<Points<Complex64>>,
-    y: Option<Points<Complex64>>,
-    z: Option<Points<Complex64>>,
+    net: Option<Points<Complex64, Ix3>>,
+    a: Option<Points<Complex64, Ix3>>,
+    g: Option<Points<Complex64, Ix3>>,
+    h: Option<Points<Complex64, Ix3>>,
+    s: Option<Points<Complex64, Ix3>>,
+    s_power: Option<Points<Complex64, Ix3>>,
+    s_pseudo: Option<Points<Complex64, Ix3>>,
+    s_traveling: Option<Points<Complex64, Ix3>>,
+    t: Option<Points<Complex64, Ix3>>,
+    y: Option<Points<Complex64, Ix3>>,
+    z: Option<Points<Complex64, Ix3>>,
 }
 
 impl NetworkBuilder {
@@ -119,7 +124,7 @@ impl NetworkBuilder {
     }
 
     /// Provide ABCD parameters representation of Network
-    pub fn a(mut self, net: Points<Complex64>) -> Self {
+    pub fn a(mut self, net: Points<Complex64, Ix3>) -> Self {
         self.param = RFParameter::A;
         self.nports = net.slice(s![0, .., ..]).nrows();
         self.net = Some(net);
@@ -127,7 +132,7 @@ impl NetworkBuilder {
     }
 
     /// Provide inverse hybrid parameters representation of Network
-    pub fn g(mut self, net: Points<Complex64>) -> Self {
+    pub fn g(mut self, net: Points<Complex64, Ix3>) -> Self {
         self.param = RFParameter::G;
         self.nports = net.slice(s![0, .., ..]).nrows();
         self.net = Some(net);
@@ -135,7 +140,7 @@ impl NetworkBuilder {
     }
 
     /// Provide hybrid parameters representation of Network
-    pub fn h(mut self, net: Points<Complex64>) -> Self {
+    pub fn h(mut self, net: Points<Complex64, Ix3>) -> Self {
         self.param = RFParameter::H;
         self.nports = net.slice(s![0, .., ..]).nrows();
         self.net = Some(net);
@@ -143,7 +148,7 @@ impl NetworkBuilder {
     }
 
     /// Provide S-parameter representation of Network
-    pub fn s(mut self, net: Points<Complex64>) -> Self {
+    pub fn s(mut self, net: Points<Complex64, Ix3>) -> Self {
         self.param = RFParameter::S;
         self.nports = net.slice(s![0, .., ..]).nrows();
         self.net = Some(net);
@@ -151,7 +156,7 @@ impl NetworkBuilder {
     }
 
     /// Provide Power S-parameter representation of Network
-    pub fn s_power(mut self, net: Points<Complex64>) -> Self {
+    pub fn s_power(mut self, net: Points<Complex64, Ix3>) -> Self {
         self.param = RFParameter::SPower;
         self.nports = net.slice(s![0, .., ..]).nrows();
         self.net = Some(net);
@@ -159,7 +164,7 @@ impl NetworkBuilder {
     }
 
     /// Provide Pseudo S-parameter representation of Network
-    pub fn s_pseudo(mut self, net: Points<Complex64>) -> Self {
+    pub fn s_pseudo(mut self, net: Points<Complex64, Ix3>) -> Self {
         self.param = RFParameter::SPseudo;
         self.nports = net.slice(s![0, .., ..]).nrows();
         self.net = Some(net);
@@ -167,7 +172,7 @@ impl NetworkBuilder {
     }
 
     /// Provide Traveling S-parameter representation of Network
-    pub fn s_traveling(mut self, net: Points<Complex64>) -> Self {
+    pub fn s_traveling(mut self, net: Points<Complex64, Ix3>) -> Self {
         self.param = RFParameter::STraveling;
         self.nports = net.slice(s![0, .., ..]).nrows();
         self.net = Some(net);
@@ -175,7 +180,7 @@ impl NetworkBuilder {
     }
 
     /// Provide cascade parameters representation of Network
-    pub fn t(mut self, net: Points<Complex64>) -> Self {
+    pub fn t(mut self, net: Points<Complex64, Ix3>) -> Self {
         self.param = RFParameter::T;
         self.nports = net.slice(s![0, .., ..]).nrows();
         self.net = Some(net);
@@ -183,7 +188,7 @@ impl NetworkBuilder {
     }
 
     /// Provide admittance parameters representation of Network
-    pub fn y(mut self, net: Points<Complex64>) -> Self {
+    pub fn y(mut self, net: Points<Complex64, Ix3>) -> Self {
         self.param = RFParameter::Y;
         self.nports = net.slice(s![0, .., ..]).nrows();
         self.net = Some(net);
@@ -191,7 +196,7 @@ impl NetworkBuilder {
     }
 
     /// Provide impedance parameters representation of Network
-    pub fn z(mut self, net: Points<Complex64>) -> Self {
+    pub fn z(mut self, net: Points<Complex64, Ix3>) -> Self {
         self.param = RFParameter::Z;
         self.nports = net.slice(s![0, .., ..]).nrows();
         self.net = Some(net);
@@ -199,7 +204,7 @@ impl NetworkBuilder {
     }
 
     /// Provide RF parameters representation of Network
-    pub fn params(mut self, net: Points<Complex64>, param: RFParameter) -> Self {
+    pub fn params(mut self, net: Points<Complex64, Ix3>, param: RFParameter) -> Self {
         self.param = param;
         self.nports = net.slice(s![0, .., ..]).nrows();
         self.net = Some(net);
@@ -263,19 +268,19 @@ impl NetworkBuilder {
                             self.a = Some(net.clone());
                             self.g = net.clone().a_to_g();
                             self.h = net.clone().a_to_h();
-                            self.s = net.clone().a_to_s(&self.z0);
+                            self.s = net.clone().a_to_s(self.z0.view());
                             self.s_power = self.s.clone();
                             self.s_pseudo = self.s.clone().unwrap().s_to_s(
-                                &self.z0,
+                                self.z0.view(),
                                 wave_type,
                                 WaveType::Pseudo,
                             );
                             self.s_traveling = self.s.clone().unwrap().s_to_s(
-                                &self.z0,
+                                self.z0.view(),
                                 wave_type,
                                 WaveType::Traveling,
                             );
-                            self.t = net.clone().a_to_t(&self.z0);
+                            self.t = net.clone().a_to_t(self.z0.view());
                             self.y = net.clone().a_to_y();
                             self.z = net.clone().a_to_z();
                         }
@@ -283,19 +288,19 @@ impl NetworkBuilder {
                             self.a = net.clone().g_to_a();
                             self.g = Some(net.clone());
                             self.h = net.clone().g_to_h();
-                            self.s = net.clone().g_to_s(&self.z0);
+                            self.s = net.clone().g_to_s(self.z0.view());
                             self.s_power = self.s.clone();
                             self.s_pseudo = self.s.clone().unwrap().s_to_s(
-                                &self.z0,
+                                self.z0.view(),
                                 wave_type,
                                 WaveType::Pseudo,
                             );
                             self.s_traveling = self.s.clone().unwrap().s_to_s(
-                                &self.z0,
+                                self.z0.view(),
                                 wave_type,
                                 WaveType::Traveling,
                             );
-                            self.t = net.clone().g_to_t(&self.z0);
+                            self.t = net.clone().g_to_t(self.z0.view());
                             self.y = net.clone().g_to_y();
                             self.z = net.clone().g_to_z();
                         }
@@ -303,121 +308,121 @@ impl NetworkBuilder {
                             self.a = net.clone().h_to_a();
                             self.g = net.clone().h_to_g();
                             self.h = Some(net.clone());
-                            self.s = net.clone().h_to_s(&self.z0);
+                            self.s = net.clone().h_to_s(self.z0.view());
                             self.s_power = self.s.clone();
                             self.s_pseudo = self.s.clone().unwrap().s_to_s(
-                                &self.z0,
+                                self.z0.view(),
                                 wave_type,
                                 WaveType::Pseudo,
                             );
                             self.s_traveling = self.s.clone().unwrap().s_to_s(
-                                &self.z0,
+                                self.z0.view(),
                                 wave_type,
                                 WaveType::Traveling,
                             );
-                            self.t = net.clone().h_to_t(&self.z0);
+                            self.t = net.clone().h_to_t(self.z0.view());
                             self.y = net.clone().h_to_y();
                             self.z = net.clone().h_to_z();
                         }
                         RFParameter::S | RFParameter::SPower => {
-                            self.a = net.clone().s_to_a(&self.z0);
-                            self.g = net.clone().s_to_g(&self.z0);
-                            self.h = net.clone().s_to_h(&self.z0);
+                            self.a = net.clone().s_to_a(self.z0.view());
+                            self.g = net.clone().s_to_g(self.z0.view());
+                            self.h = net.clone().s_to_h(self.z0.view());
                             self.s = Some(net.clone());
                             self.s_power = self.s.clone();
                             self.s_pseudo = self.s.clone().unwrap().s_to_s(
-                                &self.z0,
+                                self.z0.view(),
                                 wave_type,
                                 WaveType::Pseudo,
                             );
                             self.s_traveling = self.s.clone().unwrap().s_to_s(
-                                &self.z0,
+                                self.z0.view(),
                                 wave_type,
                                 WaveType::Traveling,
                             );
                             self.t = net.clone().s_to_t();
-                            self.y = net.clone().s_to_y(&self.z0);
-                            self.z = net.clone().s_to_z(&self.z0);
+                            self.y = net.clone().s_to_y(self.z0.view());
+                            self.z = net.clone().s_to_z(self.z0.view());
                         }
                         RFParameter::SPseudo => {
                             let wave_type = WaveType::Pseudo;
-                            self.a = net.clone().s_to_a(&self.z0);
-                            self.g = net.clone().s_to_g(&self.z0);
-                            self.h = net.clone().s_to_h(&self.z0);
+                            self.a = net.clone().s_to_a(self.z0.view());
+                            self.g = net.clone().s_to_g(self.z0.view());
+                            self.h = net.clone().s_to_h(self.z0.view());
                             self.s = self.s.clone().unwrap().s_to_s(
-                                &self.z0,
+                                self.z0.view(),
                                 wave_type,
                                 WaveType::Power,
                             );
                             self.s_power = self.s.clone();
                             self.s_pseudo = Some(net.clone());
                             self.s_traveling = self.s.clone().unwrap().s_to_s(
-                                &self.z0,
+                                self.z0.view(),
                                 wave_type,
                                 WaveType::Traveling,
                             );
                             self.t = net.clone().s_to_t();
-                            self.y = net.clone().s_to_y(&self.z0);
-                            self.z = net.clone().s_to_z(&self.z0);
+                            self.y = net.clone().s_to_y(self.z0.view());
+                            self.z = net.clone().s_to_z(self.z0.view());
                         }
                         RFParameter::STraveling => {
                             let wave_type = WaveType::Traveling;
-                            self.a = net.clone().s_to_a(&self.z0);
-                            self.g = net.clone().s_to_g(&self.z0);
-                            self.h = net.clone().s_to_h(&self.z0);
+                            self.a = net.clone().s_to_a(self.z0.view());
+                            self.g = net.clone().s_to_g(self.z0.view());
+                            self.h = net.clone().s_to_h(self.z0.view());
                             self.s = self.s.clone().unwrap().s_to_s(
-                                &self.z0,
+                                self.z0.view(),
                                 wave_type,
                                 WaveType::Power,
                             );
                             self.s_power = self.s.clone();
                             self.s_pseudo = self.s.clone().unwrap().s_to_s(
-                                &self.z0,
+                                self.z0.view(),
                                 wave_type,
                                 WaveType::Pseudo,
                             );
                             self.s_traveling = Some(net.clone());
                             self.t = net.clone().s_to_t();
-                            self.y = net.clone().s_to_y(&self.z0);
-                            self.z = net.clone().s_to_z(&self.z0);
+                            self.y = net.clone().s_to_y(self.z0.view());
+                            self.z = net.clone().s_to_z(self.z0.view());
                         }
                         RFParameter::T => {
-                            self.a = net.clone().t_to_a(&self.z0);
-                            self.g = net.clone().t_to_g(&self.z0);
-                            self.h = net.clone().t_to_h(&self.z0);
+                            self.a = net.clone().t_to_a(self.z0.view());
+                            self.g = net.clone().t_to_g(self.z0.view());
+                            self.h = net.clone().t_to_h(self.z0.view());
                             self.s = net.clone().t_to_s();
                             self.s_power = self.s.clone();
                             self.s_pseudo = self.s.clone().unwrap().s_to_s(
-                                &self.z0,
+                                self.z0.view(),
                                 wave_type,
                                 WaveType::Pseudo,
                             );
                             self.s_traveling = self.s.clone().unwrap().s_to_s(
-                                &self.z0,
+                                self.z0.view(),
                                 wave_type,
                                 WaveType::Traveling,
                             );
                             self.t = Some(net.clone());
-                            self.y = net.clone().t_to_y(&self.z0);
-                            self.z = net.clone().t_to_z(&self.z0);
+                            self.y = net.clone().t_to_y(self.z0.view());
+                            self.z = net.clone().t_to_z(self.z0.view());
                         }
                         RFParameter::Y => {
                             self.a = net.clone().y_to_a();
                             self.g = net.clone().y_to_g();
                             self.h = net.clone().y_to_h();
-                            self.s = net.clone().y_to_s(&self.z0);
+                            self.s = net.clone().y_to_s(self.z0.view());
                             self.s_power = self.s.clone();
                             self.s_pseudo = self.s.clone().unwrap().s_to_s(
-                                &self.z0,
+                                self.z0.view(),
                                 wave_type,
                                 WaveType::Pseudo,
                             );
                             self.s_traveling = self.s.clone().unwrap().s_to_s(
-                                &self.z0,
+                                self.z0.view(),
                                 wave_type,
                                 WaveType::Traveling,
                             );
-                            self.t = net.clone().y_to_t(&self.z0);
+                            self.t = net.clone().y_to_t(self.z0.view());
                             self.y = Some(net.clone());
                             self.z = net.clone().y_to_z();
                         }
@@ -425,19 +430,19 @@ impl NetworkBuilder {
                             self.a = net.clone().z_to_a();
                             self.g = net.clone().z_to_g();
                             self.h = net.clone().z_to_h();
-                            self.s = net.clone().z_to_s(&self.z0);
+                            self.s = net.clone().z_to_s(self.z0.view());
                             self.s_power = self.s.clone();
                             self.s_pseudo = self.s.clone().unwrap().s_to_s(
-                                &self.z0,
+                                self.z0.view(),
                                 wave_type,
                                 WaveType::Pseudo,
                             );
                             self.s_traveling = self.s.clone().unwrap().s_to_s(
-                                &self.z0,
+                                self.z0.view(),
                                 wave_type,
                                 WaveType::Traveling,
                             );
-                            self.t = net.clone().z_to_t(&self.z0);
+                            self.t = net.clone().z_to_t(self.z0.view());
                             self.y = net.clone().z_to_y();
                             self.z = Some(net.clone());
                         }
@@ -451,62 +456,62 @@ impl NetworkBuilder {
                             self.s = Some(net.clone());
                             self.s_power = self.s.clone();
                             self.s_pseudo = self.s.clone().unwrap().s_to_s(
-                                &self.z0,
+                                self.z0.view(),
                                 wave_type,
                                 WaveType::Pseudo,
                             );
                             self.s_traveling = self.s.clone().unwrap().s_to_s(
-                                &self.z0,
+                                self.z0.view(),
                                 wave_type,
                                 WaveType::Traveling,
                             );
-                            self.y = net.clone().s_to_y(&self.z0);
-                            self.z = net.clone().s_to_z(&self.z0);
+                            self.y = net.clone().s_to_y(self.z0.view());
+                            self.z = net.clone().s_to_z(self.z0.view());
                         }
                         RFParameter::SPseudo => {
                             let wave_type = WaveType::Pseudo;
                             self.s = self.s.clone().unwrap().s_to_s(
-                                &self.z0,
+                                self.z0.view(),
                                 wave_type,
                                 WaveType::Power,
                             );
                             self.s_power = self.s.clone();
                             self.s_pseudo = Some(net.clone());
                             self.s_traveling = self.s.clone().unwrap().s_to_s(
-                                &self.z0,
+                                self.z0.view(),
                                 wave_type,
                                 WaveType::Traveling,
                             );
-                            self.y = net.clone().s_to_y(&self.z0);
-                            self.z = net.clone().s_to_z(&self.z0);
+                            self.y = net.clone().s_to_y(self.z0.view());
+                            self.z = net.clone().s_to_z(self.z0.view());
                         }
                         RFParameter::STraveling => {
                             let wave_type = WaveType::Traveling;
                             self.s = self.s.clone().unwrap().s_to_s(
-                                &self.z0,
+                                self.z0.view(),
                                 wave_type,
                                 WaveType::Power,
                             );
                             self.s_power = self.s.clone();
                             self.s_pseudo = self.s.clone().unwrap().s_to_s(
-                                &self.z0,
+                                self.z0.view(),
                                 wave_type,
                                 WaveType::Pseudo,
                             );
                             self.s_traveling = Some(net.clone());
-                            self.y = net.clone().s_to_y(&self.z0);
-                            self.z = net.clone().s_to_z(&self.z0);
+                            self.y = net.clone().s_to_y(self.z0.view());
+                            self.z = net.clone().s_to_z(self.z0.view());
                         }
                         RFParameter::Y => {
-                            self.s = net.clone().y_to_s(&self.z0);
+                            self.s = net.clone().y_to_s(self.z0.view());
                             self.s_power = self.s.clone();
                             self.s_pseudo = self.s.clone().unwrap().s_to_s(
-                                &self.z0,
+                                self.z0.view(),
                                 wave_type,
                                 WaveType::Pseudo,
                             );
                             self.s_traveling = self.s.clone().unwrap().s_to_s(
-                                &self.z0,
+                                self.z0.view(),
                                 wave_type,
                                 WaveType::Traveling,
                             );
@@ -514,15 +519,15 @@ impl NetworkBuilder {
                             self.z = net.clone().y_to_z();
                         }
                         RFParameter::Z => {
-                            self.s = net.clone().z_to_s(&self.z0);
+                            self.s = net.clone().z_to_s(self.z0.view());
                             self.s_power = self.s.clone();
                             self.s_pseudo = self.s.clone().unwrap().s_to_s(
-                                &self.z0,
+                                self.z0.view(),
                                 wave_type,
                                 WaveType::Pseudo,
                             );
                             self.s_traveling = self.s.clone().unwrap().s_to_s(
-                                &self.z0,
+                                self.z0.view(),
                                 wave_type,
                                 WaveType::Traveling,
                             );
@@ -604,10 +609,10 @@ mod network_builder_tests {
         ulps: 10,
     };
 
-    fn compare_2ports(calc: &Network, exemplars: HashMap<RFParameter, Points<Complex64>>) {
+    fn compare_2ports(calc: &Network, exemplars: HashMap<RFParameter, Points<Complex64, Ix3>>) {
         let margin = MARGIN;
         let mut new_net = calc.clone();
-        let x = Points::<Complex64>::new(array![
+        let x = Points::<Complex64, Ix3>::new(array![
             [
                 [c64(1.0, 0.0), c64(2.0, 0.0)],
                 [c64(3.0, 0.0), c64(4.0, 0.0)]
@@ -624,195 +629,235 @@ mod network_builder_tests {
 
         let param = RFParameter::A;
         comp_points_c64(
-            &exemplars.get(&param).unwrap(),
-            &calc.net(param),
+            exemplars.get(&param).unwrap().view(),
+            calc.net(param).view(),
             margin,
             format!("net({})", param).as_str(),
         );
-        comp_points_c64(&exemplars.get(&param).unwrap(), &calc.a(), margin, "a()");
+        comp_points_c64(
+            exemplars.get(&param).unwrap().view(),
+            calc.a().view(),
+            margin,
+            "a()",
+        );
         new_net.set_net(&x, param);
-        comp_points_c64(&x, &new_net.a(), margin, "a(x)");
+        comp_points_c64(x.view(), new_net.a().view(), margin, "a(x)");
         new_net.set_net(calc.a(), param);
         comp_points_c64(
-            &exemplars.get(&param).unwrap(),
-            &new_net.a(),
+            exemplars.get(&param).unwrap().view(),
+            new_net.a().view(),
             margin,
             "a(new_net)",
         );
 
         let param = RFParameter::G;
         comp_points_c64(
-            &exemplars.get(&param).unwrap(),
-            &calc.net(param),
+            exemplars.get(&param).unwrap().view(),
+            calc.net(param).view(),
             margin,
             format!("net({})", param).as_str(),
         );
-        comp_points_c64(&exemplars.get(&param).unwrap(), &calc.g(), margin, "g()");
+        comp_points_c64(
+            exemplars.get(&param).unwrap().view(),
+            calc.g().view(),
+            margin,
+            "g()",
+        );
         new_net.set_net(&x, param);
-        comp_points_c64(&x, &new_net.g(), margin, "g(x)");
+        comp_points_c64(x.view(), new_net.g().view(), margin, "g(x)");
         new_net.set_net(calc.g(), param);
         comp_points_c64(
-            &exemplars.get(&param).unwrap(),
-            &new_net.g(),
+            exemplars.get(&param).unwrap().view(),
+            new_net.g().view(),
             margin,
             "g(new_net)",
         );
 
         let param = RFParameter::H;
         comp_points_c64(
-            &exemplars.get(&param).unwrap(),
-            &calc.net(param),
+            exemplars.get(&param).unwrap().view(),
+            calc.net(param).view(),
             margin,
             format!("net({})", param).as_str(),
         );
-        comp_points_c64(&exemplars.get(&param).unwrap(), &calc.h(), margin, "h()");
+        comp_points_c64(
+            exemplars.get(&param).unwrap().view(),
+            calc.h().view(),
+            margin,
+            "h()",
+        );
         new_net.set_net(&x, param);
-        comp_points_c64(&x, &new_net.h(), margin, "h(x)");
+        comp_points_c64(x.view(), new_net.h().view(), margin, "h(x)");
         new_net.set_net(calc.h(), param);
         comp_points_c64(
-            &exemplars.get(&param).unwrap(),
-            &new_net.h(),
+            exemplars.get(&param).unwrap().view(),
+            new_net.h().view(),
             margin,
             "h(new_net)",
         );
 
         let param = RFParameter::S;
         comp_points_c64(
-            &exemplars.get(&param).unwrap(),
-            &calc.net(param),
+            exemplars.get(&param).unwrap().view(),
+            calc.net(param).view(),
             margin,
             format!("net({})", param).as_str(),
         );
-        comp_points_c64(&exemplars.get(&param).unwrap(), &calc.s(), margin, "s()");
+        comp_points_c64(
+            exemplars.get(&param).unwrap().view(),
+            calc.s().view(),
+            margin,
+            "s()",
+        );
         new_net.set_net(&x, param);
-        comp_points_c64(&x, &new_net.s(), margin, "s(x)");
+        comp_points_c64(x.view(), new_net.s().view(), margin, "s(x)");
         new_net.set_net(calc.s(), param);
         comp_points_c64(
-            &exemplars.get(&param).unwrap(),
-            &new_net.s(),
+            exemplars.get(&param).unwrap().view(),
+            new_net.s().view(),
             margin,
             "s(new_net)",
         );
 
         let param = RFParameter::SPower;
         comp_points_c64(
-            &exemplars.get(&param).unwrap(),
-            &calc.net(param),
+            exemplars.get(&param).unwrap().view(),
+            calc.net(param).view(),
             margin,
             format!("net({})", param).as_str(),
         );
         comp_points_c64(
-            &exemplars.get(&param).unwrap(),
-            &calc.s_power(),
+            exemplars.get(&param).unwrap().view(),
+            calc.s_power().view(),
             margin,
             "s_power()",
         );
         new_net.set_net(&x, param);
-        comp_points_c64(&x, &new_net.s_power(), margin, "s_power(x)");
+        comp_points_c64(x.view(), new_net.s_power().view(), margin, "s_power(x)");
         new_net.set_net(calc.s_power(), param);
         comp_points_c64(
-            &exemplars.get(&param).unwrap(),
-            &new_net.s_power(),
+            exemplars.get(&param).unwrap().view(),
+            new_net.s_power().view(),
             margin,
             "s_power(new_net)",
         );
 
         let param = RFParameter::SPseudo;
         comp_points_c64(
-            &exemplars.get(&param).unwrap(),
-            &calc.net(param),
+            exemplars.get(&param).unwrap().view(),
+            calc.net(param).view(),
             margin,
             format!("net({})", param).as_str(),
         );
         comp_points_c64(
-            &exemplars.get(&param).unwrap(),
-            &calc.s_pseudo(),
+            exemplars.get(&param).unwrap().view(),
+            calc.s_pseudo().view(),
             margin,
             "s_pseudo()",
         );
         new_net.set_net(&x, param);
-        comp_points_c64(&x, &new_net.s_pseudo(), margin, "s_pseudo(x)");
+        comp_points_c64(x.view(), new_net.s_pseudo().view(), margin, "s_pseudo(x)");
         new_net.set_net(calc.s_pseudo(), param);
         comp_points_c64(
-            &exemplars.get(&param).unwrap(),
-            &new_net.s_pseudo(),
+            exemplars.get(&param).unwrap().view(),
+            new_net.s_pseudo().view(),
             margin,
             "s_pseudo(new_net)",
         );
 
         let param = RFParameter::STraveling;
         comp_points_c64(
-            &exemplars.get(&param).unwrap(),
-            &calc.net(param),
+            exemplars.get(&param).unwrap().view(),
+            calc.net(param).view(),
             margin,
             format!("net({})", param).as_str(),
         );
         comp_points_c64(
-            &exemplars.get(&param).unwrap(),
-            &calc.s_traveling(),
+            exemplars.get(&param).unwrap().view(),
+            calc.s_traveling().view(),
             margin,
             "s_traveling()",
         );
         new_net.set_net(&x, param);
-        comp_points_c64(&x, &new_net.s_traveling(), margin, "s_traveling(x)");
+        comp_points_c64(
+            x.view(),
+            new_net.s_traveling().view(),
+            margin,
+            "s_traveling(x)",
+        );
         new_net.set_net(calc.s_traveling(), param);
         comp_points_c64(
-            &exemplars.get(&param).unwrap(),
-            &new_net.s_traveling(),
+            exemplars.get(&param).unwrap().view(),
+            new_net.s_traveling().view(),
             margin,
             "s_traveling(new_net)",
         );
 
         let param = RFParameter::T;
         comp_points_c64(
-            &exemplars.get(&param).unwrap(),
-            &calc.net(param),
+            exemplars.get(&param).unwrap().view(),
+            calc.net(param).view(),
             margin,
             format!("net({})", param).as_str(),
         );
-        comp_points_c64(&exemplars.get(&param).unwrap(), &calc.t(), margin, "t()");
+        comp_points_c64(
+            exemplars.get(&param).unwrap().view(),
+            calc.t().view(),
+            margin,
+            "t()",
+        );
         new_net.set_net(&x, param);
-        comp_points_c64(&x, &new_net.t(), margin, "t(x)");
+        comp_points_c64(x.view(), new_net.t().view(), margin, "t(x)");
         new_net.set_net(calc.t(), param);
         comp_points_c64(
-            &exemplars.get(&param).unwrap(),
-            &new_net.t(),
+            exemplars.get(&param).unwrap().view(),
+            new_net.t().view(),
             margin,
             "t(new_net)",
         );
 
         let param = RFParameter::Y;
         comp_points_c64(
-            &exemplars.get(&param).unwrap(),
-            &calc.net(param),
+            exemplars.get(&param).unwrap().view(),
+            calc.net(param).view(),
             margin,
             format!("net({})", param).as_str(),
         );
-        comp_points_c64(&exemplars.get(&param).unwrap(), &calc.y(), margin, "y()");
+        comp_points_c64(
+            exemplars.get(&param).unwrap().view(),
+            calc.y().view(),
+            margin,
+            "y()",
+        );
         new_net.set_net(&x, param);
-        comp_points_c64(&x, &new_net.y(), margin, "y(x)");
+        comp_points_c64(x.view(), new_net.y().view(), margin, "y(x)");
         new_net.set_net(calc.y(), param);
         comp_points_c64(
-            &exemplars.get(&param).unwrap(),
-            &new_net.y(),
+            exemplars.get(&param).unwrap().view(),
+            new_net.y().view(),
             margin,
             "y(new_net)",
         );
 
         let param = RFParameter::Z;
         comp_points_c64(
-            &exemplars.get(&param).unwrap(),
-            &calc.net(param),
+            exemplars.get(&param).unwrap().view(),
+            calc.net(param).view(),
             margin,
             format!("net({})", param).as_str(),
         );
-        comp_points_c64(&exemplars.get(&param).unwrap(), &calc.z(), margin, "z()");
+        comp_points_c64(
+            exemplars.get(&param).unwrap().view(),
+            calc.z().view(),
+            margin,
+            "z()",
+        );
         new_net.set_net(&x, param);
-        comp_points_c64(&x, &new_net.z(), margin, "z(x)");
+        comp_points_c64(x.view(), new_net.z().view(), margin, "z(x)");
         new_net.set_net(calc.z(), param);
         comp_points_c64(
-            &exemplars.get(&param).unwrap(),
-            &new_net.z(),
+            exemplars.get(&param).unwrap().view(),
+            new_net.z().view(),
             margin,
             "z(new_net)",
         );
@@ -824,7 +869,7 @@ mod network_builder_tests {
         let comments = String::from("here are some comments\nand some more");
         let fdata = array![1.0, 2.0, 3.0];
         let z0 = array![c64(50.0, 0.0), c64(50.0, 0.0),];
-        let ndata = Points::<Complex64>::new(array![
+        let ndata = Points::<Complex64, Ix3>::new(array![
             [
                 [c64(0.958, -0.263), c64(-0.846, 0.158)],
                 [c64(0.004, 0.022), c64(0.544, -0.129)]
@@ -910,7 +955,7 @@ mod network_builder_tests {
                     .build(),
             )
             .z0(array![src.z(), load.z()])
-            .s(Points::<Complex64>::new(array![[
+            .s(Points::<Complex64, Ix3>::new(array![[
                 [c64(0.0, 0.0), c64(1.0, 0.0)],
                 [c64(1.0, 0.0), c64(0.0, 0.0)]
             ]]))

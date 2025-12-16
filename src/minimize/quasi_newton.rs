@@ -70,6 +70,7 @@ where
 impl<T> QuasiNewton<T>
 where
     T: RFFloat,
+    for<'a, 'b> &'a T: std::ops::Mul<&'b T, Output = T>,
 {
     pub fn new<F>(f: F) -> Self
     where
@@ -98,10 +99,10 @@ where
     /// Strong Wolfe line search for quasi-Newton methods
     fn wolfe_line_search(
         &mut self,
-        x: &Array1<T>,
-        direction: &Array1<T>,
+        x: ArrayView1<T>,
+        direction: ArrayView1<T>,
         f_current: &T,
-        grad_current: &Array1<T>,
+        grad_current: ArrayView1<T>,
         initial_step: &T,
         wolfe_params: &WolfeParams<T>,
         max_evaluations: usize,
@@ -129,7 +130,7 @@ where
                 .map(|(xi, di)| xi.clone() + alpha.clone() * di.clone())
                 .collect();
 
-            let f_new = self.f.call(&x_new);
+            let f_new = self.f.call(x_new.view());
             evaluations += 1;
 
             if !f_new.is_finite() {
@@ -170,7 +171,7 @@ where
 
         Ok(LineSearchResult {
             alpha: final_alpha,
-            f_new: self.f.call(&x_new),
+            f_new: self.f.call(x_new.view()),
             evaluations,
             converged: false,
         })
@@ -194,7 +195,7 @@ where
     /// * `QuasiNewtonResult` containing the minimum and convergence info
     pub fn quasi_newton(
         &mut self,
-        initial_point: &Array1<T>,
+        initial_point: ArrayView1<T>,
         method: QuasiNewtonMethod,
         tol: Option<T>,
         max_iters: Option<usize>,
@@ -224,20 +225,20 @@ where
     /// BFGS implementation
     fn bfgs_optimization(
         &mut self,
-        initial_point: &Array1<T>,
+        initial_point: ArrayView1<T>,
         tol: &T,
         max_iters: usize,
     ) -> Result<QuasiNewtonResult<T>, MinimizerError> {
         let n = initial_point.len();
         let wolfe_params = WolfeParams::default();
 
-        let mut x = initial_point.clone();
-        let mut f_current = self.f.call(&x);
+        let mut x = initial_point.to_owned();
+        let mut f_current = self.f.call(x.view());
         if !f_current.is_finite() {
             return Err(MinimizerError::FunctionEvaluationError);
         }
 
-        let mut grad_current = self.f.grad(&x);
+        let mut grad_current = self.f.grad(x.view());
         if grad_current.len() != n {
             return Err(MinimizerError::GradientEvaluationError);
         }
@@ -251,20 +252,20 @@ where
         let mut convergence_history = vec![f_current.clone()];
         let mut gradient_norm_history = Vec::new();
 
-        let mut grad_norm = norm_1d(&grad_current);
+        let mut grad_norm = norm_1d(grad_current.view());
         gradient_norm_history.push(grad_norm.clone());
 
         while iterations < max_iters && grad_norm > *tol {
             iterations += 1;
 
             // Compute search direction: p = -H * grad
-            let mut search_direction = dot_2d_1d(&h_inv, &grad_current);
+            let mut search_direction = dot_2d_1d(h_inv.view(), grad_current.view());
             for d in &mut search_direction {
                 *d = -d.clone();
             }
 
             // Ensure it's a descent direction
-            let directional_derivative = dot_1d_1d(&search_direction, &grad_current);
+            let directional_derivative = dot_1d_1d(search_direction.view(), grad_current.view());
             if directional_derivative >= T::zero() {
                 // Reset to steepest descent if not descent direction
                 search_direction = grad_current.iter().map(|g| -g.clone()).collect();
@@ -273,10 +274,10 @@ where
 
             // Line search
             let line_result = self.wolfe_line_search(
-                &x,
-                &search_direction,
+                x.view(),
+                search_direction.view(),
                 &f_current,
-                &grad_current,
+                grad_current.view(),
                 &T::one(),
                 &wolfe_params,
                 50,
@@ -292,7 +293,7 @@ where
                 .map(|(xi, di)| xi.clone() + line_result.alpha.clone() * di.clone())
                 .collect();
 
-            let grad_new = self.f.grad(&x_new);
+            let grad_new = self.f.grad(x_new.view());
             gradient_evaluations += 1;
 
             if grad_new.len() != n {
@@ -303,14 +304,14 @@ where
             let s = &x_new - &x; // step
             let y = &grad_new - &grad_current; // gradient change
 
-            let sy = dot_1d_1d(&s, &y);
+            let sy = dot_1d_1d(s.view(), y.view());
 
             // Check curvature condition for BFGS update
-            if sy > T::from_f64(1e-8) * norm_1d(&s) * norm_1d(&y) {
+            if sy > T::from_f64(1e-8) * norm_1d(s.view()) * norm_1d(y.view()) {
                 // Better curvature condition
                 // BFGS update: H_new = H + (sy + y^T H y)(s s^T)/(sy)^2 - (H y s^T + s y^T H)/(sy)
-                let hy = dot_2d_1d(&h_inv, &y);
-                let yhy = dot_1d_1d(&y, &hy);
+                let hy = dot_2d_1d(h_inv.view(), y.view());
+                let yhy = dot_1d_1d(y.view(), hy.view());
 
                 // Compute the rank-2 update
                 let ss =
@@ -345,7 +346,7 @@ where
             x = x_new.clone();
             f_current = line_result.f_new.clone();
             grad_current = grad_new.clone();
-            grad_norm = norm_1d(&grad_current);
+            grad_norm = norm_1d(grad_current.view());
 
             convergence_history.push(f_current.clone());
             gradient_norm_history.push(grad_norm.clone());
@@ -369,16 +370,16 @@ where
     /// DFP (Davidon-Fletcher-Powell) implementation
     fn dfp_optimization(
         &mut self,
-        initial_point: &Array1<T>,
+        initial_point: ArrayView1<T>,
         tol: &T,
         max_iters: usize,
     ) -> Result<QuasiNewtonResult<T>, MinimizerError> {
         let n = initial_point.len();
         let wolfe_params = WolfeParams::default();
 
-        let mut x = initial_point.clone();
-        let mut f_current = self.f.call(&x);
-        let mut grad_current = self.f.grad(&x);
+        let mut x = initial_point.to_owned();
+        let mut f_current = self.f.call(x.view());
+        let mut grad_current = self.f.grad(x.view());
         let mut h_inv = Array2::eye(n);
 
         let mut function_evaluations = 1;
@@ -387,20 +388,20 @@ where
         let mut convergence_history = vec![f_current.clone()];
         let mut gradient_norm_history = Vec::new();
 
-        let mut grad_norm = norm_1d(&grad_current);
+        let mut grad_norm = norm_1d(grad_current.view());
         gradient_norm_history.push(grad_norm.clone());
 
         while iterations < max_iters && grad_norm > *tol {
             iterations += 1;
 
-            let search_direction = dot_2d_1d(&h_inv, &grad_current);
+            let search_direction = dot_2d_1d(h_inv.view(), grad_current.view());
             let search_direction: Array1<T> = search_direction.iter().map(|x| -x.clone()).collect();
 
             let line_result = self.wolfe_line_search(
-                &x,
-                &search_direction,
+                x.view(),
+                search_direction.view(),
                 &f_current,
-                &grad_current,
+                grad_current.view(),
                 &T::one(),
                 &wolfe_params,
                 50,
@@ -415,17 +416,17 @@ where
                 .map(|(xi, di)| xi.clone() + line_result.alpha.clone() * di.clone())
                 .collect();
 
-            let grad_new = self.f.grad(&x_new);
+            let grad_new = self.f.grad(x_new.view());
             gradient_evaluations += 1;
 
             let s = &x_new - &x;
             let y = &grad_new - &grad_current;
-            let sy = dot_1d_1d(&s, &y);
+            let sy = dot_1d_1d(s.view(), y.view());
 
             // DFP update: H_new = H - (H y y^T H)/(y^T H y) + (s s^T)/(s^T y)
             if sy > T::from_f64(1e-14) {
-                let hy = dot_2d_1d(&h_inv, &y);
-                let yhy = dot_1d_1d(&y, &hy);
+                let hy = dot_2d_1d(h_inv.view(), y.view());
+                let yhy = dot_1d_1d(y.view(), hy.view());
 
                 if yhy > T::from_f64(1e-14) {
                     let hyhy = Array2::from_shape_fn((hy.len(), hy.len()), |(i, j)| {
@@ -454,7 +455,7 @@ where
             x = x_new.clone();
             f_current = line_result.f_new.clone();
             grad_current = grad_new.clone();
-            grad_norm = norm_1d(&grad_current);
+            grad_norm = norm_1d(grad_current.view());
 
             convergence_history.push(f_current.clone());
             gradient_norm_history.push(grad_norm.clone());
@@ -478,16 +479,16 @@ where
     /// SR1 (Symmetric Rank-1) implementation  
     fn sr1_optimization(
         &mut self,
-        initial_point: &Array1<T>,
+        initial_point: ArrayView1<T>,
         tol: &T,
         max_iters: usize,
     ) -> Result<QuasiNewtonResult<T>, MinimizerError> {
         let n = initial_point.len();
         let wolfe_params = WolfeParams::default();
 
-        let mut x = initial_point.clone();
-        let mut f_current = self.f.call(&x);
-        let mut grad_current = self.f.grad(&x);
+        let mut x = initial_point.to_owned();
+        let mut f_current = self.f.call(x.view());
+        let mut grad_current = self.f.grad(x.view());
         let mut h_inv = Array2::eye(n);
 
         let mut function_evaluations = 1;
@@ -496,20 +497,20 @@ where
         let mut convergence_history = vec![f_current.clone()];
         let mut gradient_norm_history = Vec::new();
 
-        let mut grad_norm = norm_1d(&grad_current);
+        let mut grad_norm = norm_1d(grad_current.view());
         gradient_norm_history.push(grad_norm.clone());
 
         while iterations < max_iters && grad_norm > *tol {
             iterations += 1;
 
-            let search_direction = dot_2d_1d(&h_inv, &grad_current);
+            let search_direction = dot_2d_1d(h_inv.view(), grad_current.view());
             let search_direction: Array1<T> = search_direction.iter().map(|x| -x.clone()).collect();
 
             let line_result = self.wolfe_line_search(
-                &x,
-                &search_direction,
+                x.view(),
+                search_direction.view(),
                 &f_current,
-                &grad_current,
+                grad_current.view(),
                 &T::one(),
                 &wolfe_params,
                 50,
@@ -524,14 +525,14 @@ where
                 .map(|(xi, di)| xi.clone() + line_result.alpha.clone() * di.clone())
                 .collect();
 
-            let grad_new = self.f.grad(&x_new);
+            let grad_new = self.f.grad(x_new.view());
             gradient_evaluations += 1;
 
             let s = &x_new - &x;
             let y = &grad_new - &grad_current;
-            let hy = dot_2d_1d(&h_inv, &y);
+            let hy = dot_2d_1d(h_inv.view(), y.view());
             let v = &s - &hy;
-            let vy = dot_1d_1d(&v, &y);
+            let vy = dot_1d_1d(v.view(), y.view());
 
             // SR1 update: H_new = H + (v v^T)/(v^T y)
             if vy.abs() > T::from_f64(1e-14) {
@@ -548,7 +549,7 @@ where
             x = x_new.clone();
             f_current = line_result.f_new.clone();
             grad_current = grad_new.clone();
-            grad_norm = norm_1d(&grad_current);
+            grad_norm = norm_1d(grad_current.view());
 
             convergence_history.push(f_current.clone());
             gradient_norm_history.push(grad_norm.clone());
@@ -572,7 +573,7 @@ where
     /// Limited-memory BFGS (L-BFGS) implementation
     fn lbfgs_optimization(
         &mut self,
-        initial_point: &Array1<T>,
+        initial_point: ArrayView1<T>,
         tol: &T,
         max_iters: usize,
         memory_size: usize,
@@ -581,9 +582,9 @@ where
         let m = memory_size.min(n).max(1);
         let wolfe_params = WolfeParams::default();
 
-        let mut x = initial_point.clone();
-        let mut f_current = self.f.call(&x);
-        let mut grad_current = self.f.grad(&x);
+        let mut x = initial_point.to_owned();
+        let mut f_current = self.f.call(x.view());
+        let mut grad_current = self.f.grad(x.view());
 
         // L-BFGS storage
         let mut s_history = Array2::<T>::zeros((m, n));
@@ -596,7 +597,7 @@ where
         let mut convergence_history = vec![f_current.clone()];
         let mut gradient_norm_history = Vec::new();
 
-        let mut grad_norm = norm_1d(&grad_current);
+        let mut grad_norm = norm_1d(grad_current.view());
         gradient_norm_history.push(grad_norm.clone());
 
         let mut history = 0;
@@ -608,14 +609,19 @@ where
                 // First iteration: use steepest descent
                 grad_current.iter().map(|g| -g.clone()).collect()
             } else {
-                self.lbfgs_two_loop_recursion(&grad_current, &s_history, &y_history, &rho_history)
+                self.lbfgs_two_loop_recursion(
+                    grad_current.view(),
+                    s_history.view(),
+                    y_history.view(),
+                    rho_history.view(),
+                )
             };
 
             let line_result = self.wolfe_line_search(
-                &x,
-                &search_direction,
+                x.view(),
+                search_direction.view(),
                 &f_current,
-                &grad_current,
+                grad_current.view(),
                 &T::one(),
                 &wolfe_params,
                 50,
@@ -628,12 +634,12 @@ where
                 x[i].clone() + line_result.alpha.clone() * search_direction[i].clone()
             });
 
-            let grad_new = self.f.grad(&x_new);
+            let grad_new = self.f.grad(x_new.view());
             gradient_evaluations += 1;
 
             let s = &x_new - &x;
             let y = &grad_new - &grad_current;
-            let sy = dot_1d_1d(&s, &y);
+            let sy = dot_1d_1d(s.view(), y.view());
 
             // Update L-BFGS history
             if sy > T::from_f64(1e-14) {
@@ -660,7 +666,7 @@ where
             x = x_new.clone();
             f_current = line_result.f_new.clone();
             grad_current = grad_new.clone();
-            grad_norm = norm_1d(&grad_current);
+            grad_norm = norm_1d(grad_current.view());
 
             convergence_history.push(f_current.clone());
             gradient_norm_history.push(grad_norm.clone());
@@ -684,19 +690,19 @@ where
     /// L-BFGS two-loop recursion to compute search direction
     fn lbfgs_two_loop_recursion(
         &mut self,
-        grad: &Array1<T>,
-        s_history: &Array2<T>,
-        y_history: &Array2<T>,
-        rho_history: &Array1<T>,
+        grad: ArrayView1<T>,
+        s_history: ArrayView2<T>,
+        y_history: ArrayView2<T>,
+        rho_history: ArrayView1<T>,
     ) -> Array1<T> {
         let m = s_history.nrows();
         let n = grad.len();
-        let mut q = grad.clone();
+        let mut q = grad.to_owned();
         let mut alpha = Array1::zeros(m);
 
         // First loop (backward)
         for i in (0..m).rev() {
-            alpha[i] = rho_history[i].clone() * dot_1d_1d(&s_history.row(i).to_owned(), &q);
+            alpha[i] = rho_history[i].clone() * dot_1d_1d(s_history.row(i), q.view());
             for j in 0..n {
                 q[j] -= alpha[i].clone() * y_history[[i, j]].clone();
             }
@@ -704,14 +710,8 @@ where
 
         // Apply initial Hessian approximation (H0 = γI)
         let gamma = if m > 0 {
-            let last_sy = dot_1d_1d(
-                &s_history.row(m - 1).to_owned(),
-                &y_history.row(m - 1).to_owned(),
-            );
-            let last_yy = dot_1d_1d(
-                &y_history.row(m - 1).to_owned(),
-                &y_history.row(m - 1).to_owned(),
-            );
+            let last_sy = dot_1d_1d(s_history.row(m - 1), y_history.row(m - 1));
+            let last_yy = dot_1d_1d(y_history.row(m - 1), y_history.row(m - 1));
             if last_yy > T::from_f64(1e-14) {
                 last_sy.clone() / last_yy.clone()
             } else {
@@ -727,7 +727,7 @@ where
 
         // Second loop (forward)
         for i in 0..m {
-            let beta = rho_history[i].clone() * dot_1d_1d(&y_history.row(i).to_owned(), &q);
+            let beta = rho_history[i].clone() * dot_1d_1d(y_history.row(i), q.view());
             for j in 0..n {
                 q[j] += (alpha[i].clone() - beta.clone()) * s_history[[i, j]].clone();
             }
@@ -740,7 +740,7 @@ where
     /// Convenience function using BFGS method
     pub fn minimize_bfgs(
         &mut self,
-        initial_point: &Array1<T>,
+        initial_point: ArrayView1<T>,
     ) -> Result<QuasiNewtonResult<T>, MinimizerError> {
         self.quasi_newton(initial_point, QuasiNewtonMethod::BFGS, None, None)
     }
@@ -748,7 +748,7 @@ where
     /// Compare different quasi-Newton methods
     pub fn compare_quasi_newton_methods(
         &mut self,
-        initial_point: &Array1<T>,
+        initial_point: ArrayView1<T>,
         tol: Option<T>,
         max_iters: Option<usize>,
     ) -> Vec<(
@@ -802,22 +802,22 @@ mod minimize_quasinewton_tests {
 
     // Helper functions
     fn create_simple_quadratic() -> GF1dim<MyFloat> {
-        let func = |x: &Array1<MyFloat>| x[0].powi(2) + x[1].powi(2);
-        let grad = |x: &Array1<MyFloat>| array![2.0 * &x[0], 2.0 * &x[1]];
+        let func = |x: ArrayView1<MyFloat>| x[0].powi(2) + x[1].powi(2);
+        let grad = |x: ArrayView1<MyFloat>| array![2.0 * &x[0], 2.0 * &x[1]];
         GF1dim::new(MultiDimGradFn::new(func, grad))
     }
 
     fn create_ill_conditioned_quadratic() -> GF1dim<MyFloat> {
-        let func = |x: &Array1<MyFloat>| 100.0 * x[0].powi(2) + x[1].powi(2); // Reduced condition number
-        let grad = |x: &Array1<MyFloat>| array![200.0 * &x[0], 2.0 * &x[1]];
+        let func = |x: ArrayView1<MyFloat>| 100.0 * x[0].powi(2) + x[1].powi(2); // Reduced condition number
+        let grad = |x: ArrayView1<MyFloat>| array![200.0 * &x[0], 2.0 * &x[1]];
         GF1dim::new(MultiDimGradFn::new(func, grad))
     }
 
     // Helper function to create Rosenbrock function
     fn create_rosenbrock() -> GF1dim<MyFloat> {
         let func =
-            |x: &Array1<MyFloat>| (1.0 - &x[0]).powi(2) + 100.0 * (&x[1] - x[0].powi(2)).powi(2);
-        let grad = |x: &Array1<MyFloat>| {
+            |x: ArrayView1<MyFloat>| (1.0 - &x[0]).powi(2) + 100.0 * (&x[1] - x[0].powi(2)).powi(2);
+        let grad = |x: ArrayView1<MyFloat>| {
             array![
                 -2.0 * (1.0 - &x[0]) - 400.0 * &x[0] * (&x[1] - x[0].powi(2)),
                 200.0 * (&x[1] - x[0].powi(2)),
@@ -852,13 +852,13 @@ mod minimize_quasinewton_tests {
     #[test]
     fn test_2d_quadratic_bfgs() {
         // f(x,y) = (x-1)² + (y-2)², grad = (2(x-1), 2(y-2))
-        let func = |x: &Array1<MyFloat>| (&x[0] - 1.0).powi(2) + (&x[1] - 2.0).powi(2);
-        let grad = |x: &Array1<MyFloat>| array![2.0 * (&x[0] - 1.0), 2.0 * (&x[1] - 2.0)];
+        let func = |x: ArrayView1<MyFloat>| (&x[0] - 1.0).powi(2) + (&x[1] - 2.0).powi(2);
+        let grad = |x: ArrayView1<MyFloat>| array![2.0 * (&x[0] - 1.0), 2.0 * (&x[1] - 2.0)];
         let obj = MultiDimGradFn::new(func, grad);
         let mut quasinewton = QuasiNewton::new(obj);
 
         let result = quasinewton
-            .minimize_bfgs(&array![0.0.into(), 0.0.into()])
+            .minimize_bfgs(array![0.0.into(), 0.0.into()].view())
             .unwrap();
 
         assert!((&result.x_min[0] - 1.0).abs() < 1e-8);
@@ -871,8 +871,8 @@ mod minimize_quasinewton_tests {
     #[test]
     fn test_rosenbrock_bfgs() {
         let rosenbrock =
-            |x: &Array1<MyFloat>| (1.0 - &x[0]).powi(2) + 100.0 * (&x[1] - x[0].powi(2)).powi(2);
-        let rosenbrock_grad = |x: &Array1<MyFloat>| {
+            |x: ArrayView1<MyFloat>| (1.0 - &x[0]).powi(2) + 100.0 * (&x[1] - x[0].powi(2)).powi(2);
+        let rosenbrock_grad = |x: ArrayView1<MyFloat>| {
             array![
                 -2.0 * (1.0 - &x[0]) - 400.0 * &x[0] * (&x[1] - x[0].powi(2)),
                 200.0 * (&x[1] - x[0].powi(2)),
@@ -884,7 +884,7 @@ mod minimize_quasinewton_tests {
         // The Rosenbrock function is extremely challenging for BFGS
         // We'll test that it makes reasonable progress rather than finding the exact solution
         let result = quasinewton.quasi_newton(
-            &array![MyFloat::new(-1.2), 1.0.into()], // Standard starting point
+            array![MyFloat::new(-1.2), 1.0.into()].view(), // Standard starting point
             QuasiNewtonMethod::BFGS,
             Some(1e-3.into()), // Relaxed tolerance - Rosenbrock is genuinely hard
             Some(5000),        // Many iterations may be needed
@@ -893,7 +893,7 @@ mod minimize_quasinewton_tests {
         match result {
             Ok(res) => {
                 // Check that we made significant progress (function value decreased substantially)
-                let initial_f = rosenbrock(&array![MyFloat::new(-1.2), 1.0.into()]);
+                let initial_f = rosenbrock(array![MyFloat::new(-1.2), 1.0.into()].view());
                 println!(
                     "Initial f: {}, Final f: {}, Progress: {:.1}%",
                     initial_f,
@@ -924,15 +924,15 @@ mod minimize_quasinewton_tests {
             Err(_) => {
                 // If BFGS struggles with Rosenbrock, try a simpler test to verify the implementation
                 let simple_func =
-                    |x: &Array1<MyFloat>| (&x[0] - 1.0).powi(2) + (&x[1] - 2.0).powi(2);
+                    |x: ArrayView1<MyFloat>| (&x[0] - 1.0).powi(2) + (&x[1] - 2.0).powi(2);
                 let simple_grad =
-                    |x: &Array1<MyFloat>| array![2.0 * (&x[0] - 1.0), 2.0 * (&x[1] - 2.0)];
+                    |x: ArrayView1<MyFloat>| array![2.0 * (&x[0] - 1.0), 2.0 * (&x[1] - 2.0)];
                 let obj = MultiDimGradFn::new(simple_func, simple_grad);
                 let mut quasinewton = QuasiNewton::new(obj);
 
                 let simple_result = quasinewton
                     .quasi_newton(
-                        &array![0.0.into(), 0.0.into()],
+                        array![0.0.into(), 0.0.into()].view(),
                         QuasiNewtonMethod::BFGS,
                         Some(1e-8.into()),
                         Some(100),
@@ -948,8 +948,8 @@ mod minimize_quasinewton_tests {
 
     #[test]
     fn test_different_quasi_newton_methods() {
-        let func = |x: &Array1<MyFloat>| x[0].powi(2) + 2.0 * x[1].powi(2) + &x[0] * &x[1];
-        let grad = |x: &Array1<MyFloat>| array![2.0 * &x[0] + &x[1], 4.0 * &x[1] + &x[0]];
+        let func = |x: ArrayView1<MyFloat>| x[0].powi(2) + 2.0 * x[1].powi(2) + &x[0] * &x[1];
+        let grad = |x: ArrayView1<MyFloat>| array![2.0 * &x[0] + &x[1], 4.0 * &x[1] + &x[0]];
         let obj = MultiDimGradFn::new(func, grad);
         let mut quasinewton = QuasiNewton::new(obj);
 
@@ -961,7 +961,7 @@ mod minimize_quasinewton_tests {
 
         for &method in &methods {
             let result = quasinewton.quasi_newton(
-                &array![1.0.into(), 1.0.into()],
+                array![1.0.into(), 1.0.into()].view(),
                 method,
                 Some(1e-6.into()), // Reasonable tolerance
                 Some(200),         // More iterations for robustness
@@ -986,13 +986,13 @@ mod minimize_quasinewton_tests {
                 Err(_) => {
                     // Some methods might struggle with this coupled quadratic
                     // Try a simpler separable quadratic to verify the method works
-                    let simple_func = |x: &Array1<MyFloat>| x[0].powi(2) + x[1].powi(2);
-                    let simple_grad = |x: &Array1<MyFloat>| array![2.0 * &x[0], 2.0 * &x[1]];
+                    let simple_func = |x: ArrayView1<MyFloat>| x[0].powi(2) + x[1].powi(2);
+                    let simple_grad = |x: ArrayView1<MyFloat>| array![2.0 * &x[0], 2.0 * &x[1]];
                     let obj = MultiDimGradFn::new(simple_func, simple_grad);
                     let mut quasinewton = QuasiNewton::new(obj);
 
                     let simple_result = quasinewton.quasi_newton(
-                        &array![1.0.into(), 1.0.into()],
+                        array![1.0.into(), 1.0.into()].view(),
                         method,
                         Some(1e-8.into()),
                         Some(100),
@@ -1015,13 +1015,18 @@ mod minimize_quasinewton_tests {
                     } else {
                         // If even the simple case fails, there might be a fundamental issue
                         // Let's try with a very simple 1D problem
-                        let simple_1d = |x: &Array1<MyFloat>| x[0].powi(2);
-                        let grad_1d = |x: &Array1<MyFloat>| array![2.0 * &x[0]];
+                        let simple_1d = |x: ArrayView1<MyFloat>| x[0].powi(2);
+                        let grad_1d = |x: ArrayView1<MyFloat>| array![2.0 * &x[0]];
                         let obj = MultiDimGradFn::new(simple_1d, grad_1d);
                         let mut quasinewton = QuasiNewton::new(obj);
 
                         let result_1d = quasinewton
-                            .quasi_newton(&array![2.0.into()], method, Some(1e-6.into()), Some(50))
+                            .quasi_newton(
+                                array![2.0.into()].view(),
+                                method,
+                                Some(1e-6.into()),
+                                Some(50),
+                            )
                             .expect(&format!("Method {:?} should work on 1D quadratic", method));
 
                         assert!(result_1d.x_min[0].abs() < 1e-5);
@@ -1035,13 +1040,14 @@ mod minimize_quasinewton_tests {
     #[test]
     fn test_lbfgs_memory() {
         // Use a simpler function that L-BFGS should handle well
-        let func = |x: &Array1<MyFloat>| x.iter().map(|xi| xi.powi(2)).sum::<MyFloat>();
-        let grad = |x: &Array1<MyFloat>| x.iter().map(|xi| 2.0 * xi).collect::<Array1<MyFloat>>();
+        let func = |x: ArrayView1<MyFloat>| x.iter().map(|xi| xi.powi(2)).sum::<MyFloat>();
+        let grad =
+            |x: ArrayView1<MyFloat>| x.iter().map(|xi| 2.0 * xi).collect::<Array1<MyFloat>>();
         let obj = MultiDimGradFn::new(func, grad);
         let mut quasinewton = QuasiNewton::new(obj);
 
         let result = quasinewton.quasi_newton(
-            &Array1::ones(10), // 10D instead of higher dimension to be more reliable
+            Array1::ones(10).view(), // 10D instead of higher dimension to be more reliable
             QuasiNewtonMethod::LimitedBFGS(5),
             Some(1e-6.into()), // Reasonable tolerance
             Some(200),         // Sufficient iterations
@@ -1056,15 +1062,16 @@ mod minimize_quasinewton_tests {
             }
             Err(_) => {
                 // If L-BFGS fails, let's try an even simpler case
-                let simple_func = |x: &Array1<MyFloat>| x[0].powi(2) + x[1].powi(2) + x[2].powi(2);
+                let simple_func =
+                    |x: ArrayView1<MyFloat>| x[0].powi(2) + x[1].powi(2) + x[2].powi(2);
                 let simple_grad =
-                    |x: &Array1<MyFloat>| array![2.0 * &x[0], 2.0 * &x[1], 2.0 * &x[2]];
+                    |x: ArrayView1<MyFloat>| array![2.0 * &x[0], 2.0 * &x[1], 2.0 * &x[2]];
                 let obj = MultiDimGradFn::new(simple_func, simple_grad);
                 let mut quasinewton = QuasiNewton::new(obj);
 
                 let simple_result = quasinewton
                     .quasi_newton(
-                        &array![1.0.into(), 2.0.into(), 3.0.into()],
+                        array![1.0.into(), 2.0.into(), 3.0.into()].view(),
                         QuasiNewtonMethod::LimitedBFGS(3),
                         Some(1e-6.into()),
                         Some(100),
@@ -1081,13 +1088,13 @@ mod minimize_quasinewton_tests {
 
     #[test]
     fn test_numerical_gradients() {
-        let func = |x: &Array1<MyFloat>| (&x[0] - 3.0).powi(2) + (&x[1] + 1.0).powi(2);
+        let func = |x: ArrayView1<MyFloat>| (&x[0] - 3.0).powi(2) + (&x[1] + 1.0).powi(2);
         let obj = MultiDimNumGradFn::new(func, Some(1e-8.into()), 2);
         let mut quasinewton = QuasiNewton::new(obj);
 
         let result = quasinewton
             .quasi_newton(
-                &array![0.0.into(), 0.0.into()],
+                array![0.0.into(), 0.0.into()].view(),
                 QuasiNewtonMethod::BFGS,
                 Some(1e-6.into()),
                 Some(100),
@@ -1101,13 +1108,13 @@ mod minimize_quasinewton_tests {
 
     #[test]
     fn test_method_comparison() {
-        let func = |x: &Array1<MyFloat>| x.iter().map(|xi| xi.powi(2)).sum::<MyFloat>();
-        let grad = |x: &Array1<MyFloat>| x.iter().map(|xi| 2.0 * xi).collect();
+        let func = |x: ArrayView1<MyFloat>| x.iter().map(|xi| xi.powi(2)).sum::<MyFloat>();
+        let grad = |x: ArrayView1<MyFloat>| x.iter().map(|xi| 2.0 * xi).collect();
         let obj = MultiDimGradFn::new(func, grad);
         let mut quasinewton = QuasiNewton::new(obj);
 
         let results = quasinewton.compare_quasi_newton_methods(
-            &array![1.0.into(), 2.0.into(), 3.0.into()],
+            array![1.0.into(), 2.0.into(), 3.0.into()].view(),
             Some(1e-8.into()),
             Some(50),
         );
@@ -1133,14 +1140,16 @@ mod minimize_quasinewton_tests {
     #[test]
     fn test_bfgs_hessian_approximation() {
         // Test that BFGS builds good Hessian approximation
-        let quadratic_2d = |x: &Array1<MyFloat>| 2.0 * x[0].powi(2) + x[1].powi(2) + &x[0] * &x[1];
-        let quadratic_grad = |x: &Array1<MyFloat>| array![4.0 * &x[0] + &x[1], 2.0 * &x[1] + &x[0]];
+        let quadratic_2d =
+            |x: ArrayView1<MyFloat>| 2.0 * x[0].powi(2) + x[1].powi(2) + &x[0] * &x[1];
+        let quadratic_grad =
+            |x: ArrayView1<MyFloat>| array![4.0 * &x[0] + &x[1], 2.0 * &x[1] + &x[0]];
         let obj = MultiDimGradFn::new(quadratic_2d, quadratic_grad);
         let mut quasinewton = QuasiNewton::new(obj);
 
         let result = quasinewton
             .quasi_newton(
-                &array![1.0.into(), 1.0.into()],
+                array![1.0.into(), 1.0.into()].view(),
                 QuasiNewtonMethod::BFGS,
                 Some(1e-8.into()),
                 Some(100),
@@ -1158,7 +1167,7 @@ mod minimize_quasinewton_tests {
     #[test]
     fn test_lbfgs_memory_efficiency() {
         // Test L-BFGS on higher dimensional problem
-        let high_dim_objective = |x: &Array1<MyFloat>| {
+        let high_dim_objective = |x: ArrayView1<MyFloat>| {
             x.iter()
                 .enumerate()
                 .map(|(i, xi)| {
@@ -1172,7 +1181,7 @@ mod minimize_quasinewton_tests {
                 })
                 .sum::<MyFloat>()
         };
-        let high_dim_grad = |x: &Array1<MyFloat>| {
+        let high_dim_grad = |x: ArrayView1<MyFloat>| {
             x.iter()
                 .enumerate()
                 .map(|(i, xi)| {
@@ -1193,7 +1202,7 @@ mod minimize_quasinewton_tests {
 
         let result = quasinewton
             .quasi_newton(
-                &Array1::ones(20),
+                Array1::ones(20).view(),
                 QuasiNewtonMethod::LimitedBFGS(10),
                 Some(1e-6.into()),
                 Some(200),
@@ -1210,8 +1219,8 @@ mod minimize_quasinewton_tests {
     fn test_quasi_newton_method_comparison() {
         // Compare different quasi-Newton methods
         let rosenbrock =
-            |x: &Array1<MyFloat>| (1.0 - &x[0]).powi(2) + 100.0 * (&x[1] - x[0].powi(2)).powi(2);
-        let rosenbrock_grad = |x: &Array1<MyFloat>| {
+            |x: ArrayView1<MyFloat>| (1.0 - &x[0]).powi(2) + 100.0 * (&x[1] - x[0].powi(2)).powi(2);
+        let rosenbrock_grad = |x: ArrayView1<MyFloat>| {
             array![
                 -2.0 * (1.0 - &x[0]) - 400.0 * &x[0] * (&x[1] - x[0].powi(2)),
                 200.0 * (&x[1] - x[0].powi(2)),
@@ -1228,7 +1237,7 @@ mod minimize_quasinewton_tests {
 
         for &method in &methods {
             let result = quasinewton.quasi_newton(
-                &array![MyFloat::new(-1.2), 1.0.into()],
+                array![MyFloat::new(-1.2), 1.0.into()].view(),
                 method,
                 Some(1e-4.into()),
                 Some(1000),
@@ -1255,7 +1264,7 @@ mod minimize_quasinewton_tests {
 
         let result = qn
             .quasi_newton(
-                &array![3.0.into(), 4.0.into()],
+                array![3.0.into(), 4.0.into()].view(),
                 QuasiNewtonMethod::BFGS,
                 Some(1e-6.into()), // More realistic tolerance
                 Some(100),
@@ -1273,14 +1282,14 @@ mod minimize_quasinewton_tests {
     #[test]
     fn test_bfgs_hessian_approximation_realistic() {
         let quadratic_2d =
-            |x: &Array1<MyFloat>| 2.0 * x[0].powi(2) + x[1].powi(2) + 0.5 * &x[0] * &x[1]; // Less coupling
+            |x: ArrayView1<MyFloat>| 2.0 * x[0].powi(2) + x[1].powi(2) + 0.5 * &x[0] * &x[1]; // Less coupling
         let quadratic_grad =
-            |x: &Array1<MyFloat>| array![4.0 * &x[0] + 0.5 * &x[1], 2.0 * &x[1] + 0.5 * &x[0]];
+            |x: ArrayView1<MyFloat>| array![4.0 * &x[0] + 0.5 * &x[1], 2.0 * &x[1] + 0.5 * &x[0]];
         let obj = MultiDimGradFn::new(quadratic_2d, quadratic_grad);
         let mut quasinewton = QuasiNewton::new(obj);
 
         let result = quasinewton.quasi_newton(
-            &array![1.0.into(), 1.0.into()],
+            array![1.0.into(), 1.0.into()].view(),
             QuasiNewtonMethod::BFGS,
             Some(1e-6.into()), // Relaxed tolerance
             Some(200),         // More iterations
@@ -1302,10 +1311,10 @@ mod minimize_quasinewton_tests {
 
     #[test]
     fn test_coupled_quadratic_system_realistic() {
-        let func = |x: &Array1<MyFloat>| {
+        let func = |x: ArrayView1<MyFloat>| {
             x[0].powi(2) + 2.0 * x[1].powi(2) + 0.5 * &x[0] * &x[1] + &x[0] + &x[1] // Simpler coupling
         };
-        let grad = |x: &Array1<MyFloat>| {
+        let grad = |x: ArrayView1<MyFloat>| {
             array![
                 2.0 * &x[0] + 0.5 * &x[1] + 1.0,
                 4.0 * &x[1] + 0.5 * &x[0] + 1.0
@@ -1315,7 +1324,7 @@ mod minimize_quasinewton_tests {
         let mut qn = QuasiNewton::new(obj);
 
         let result = qn.quasi_newton(
-            &array![0.0.into(), 0.0.into()],
+            array![0.0.into(), 0.0.into()].view(),
             QuasiNewtonMethod::BFGS,
             Some(1e-4.into()), // More relaxed tolerance
             Some(300),         // More iterations
@@ -1337,13 +1346,13 @@ mod minimize_quasinewton_tests {
 
     #[test]
     fn test_line_search_conditions_realistic() {
-        let func = |x: &Array1<MyFloat>| x[0].powi(2) + x[1].powi(2); // Simpler function
-        let grad = |x: &Array1<MyFloat>| array![2.0 * &x[0], 2.0 * &x[1]];
+        let func = |x: ArrayView1<MyFloat>| x[0].powi(2) + x[1].powi(2); // Simpler function
+        let grad = |x: ArrayView1<MyFloat>| array![2.0 * &x[0], 2.0 * &x[1]];
         let obj = MultiDimGradFn::new(func, grad);
         let mut qn = QuasiNewton::new(obj);
 
         let result = qn.quasi_newton(
-            &array![2.0.into(), 2.0.into()],
+            array![2.0.into(), 2.0.into()].view(),
             QuasiNewtonMethod::BFGS,
             Some(1e-4.into()), // Relaxed tolerance
             Some(200),         // More iterations
@@ -1366,13 +1375,13 @@ mod minimize_quasinewton_tests {
         // Test with very realistic expectations
 
         // Simple quadratic - should work well
-        let simple_func = |x: &Array1<MyFloat>| x[0].powi(2) + x[1].powi(2);
-        let simple_grad = |x: &Array1<MyFloat>| array![2.0 * &x[0], 2.0 * &x[1]];
+        let simple_func = |x: ArrayView1<MyFloat>| x[0].powi(2) + x[1].powi(2);
+        let simple_grad = |x: ArrayView1<MyFloat>| array![2.0 * &x[0], 2.0 * &x[1]];
         let obj = MultiDimGradFn::new(simple_func, simple_grad);
         let mut qn = QuasiNewton::new(obj);
 
         let result = qn.quasi_newton(
-            &array![2.0.into(), 3.0.into()],
+            array![2.0.into(), 3.0.into()].view(),
             QuasiNewtonMethod::BFGS,
             Some(1e-4.into()), // Very reasonable tolerance
             Some(100),
@@ -1391,8 +1400,8 @@ mod minimize_quasinewton_tests {
     #[test]
     fn test_quasi_newton_method_comparison_realistic() {
         // Use a much simpler function for comparison
-        let simple_func = |x: &Array1<MyFloat>| (&x[0] - 1.0).powi(2) + (&x[1] - 1.0).powi(2);
-        let simple_grad = |x: &Array1<MyFloat>| array![2.0 * (&x[0] - 1.0), 2.0 * (&x[1] - 1.0)];
+        let simple_func = |x: ArrayView1<MyFloat>| (&x[0] - 1.0).powi(2) + (&x[1] - 1.0).powi(2);
+        let simple_grad = |x: ArrayView1<MyFloat>| array![2.0 * (&x[0] - 1.0), 2.0 * (&x[1] - 1.0)];
 
         let methods = [
             QuasiNewtonMethod::BFGS,
@@ -1405,7 +1414,7 @@ mod minimize_quasinewton_tests {
             let mut qn = QuasiNewton::new(obj);
 
             let result = qn.quasi_newton(
-                &array![0.0.into(), 0.0.into()],
+                array![0.0.into(), 0.0.into()].view(),
                 method,
                 Some(1e-3.into()), // Very relaxed
                 Some(300),         // Plenty of iterations
@@ -1429,10 +1438,10 @@ mod minimize_quasinewton_tests {
 
     #[test]
     fn test_all_methods_on_separable_function_realistic() {
-        let func = |x: &Array1<MyFloat>| {
+        let func = |x: ArrayView1<MyFloat>| {
             x.iter().map(|xi| xi.powi(2)).sum::<MyFloat>() // Simple separable
         };
-        let grad = |x: &Array1<MyFloat>| x.iter().map(|xi| 2.0 * xi).collect();
+        let grad = |x: ArrayView1<MyFloat>| x.iter().map(|xi| 2.0 * xi).collect();
 
         let methods = [QuasiNewtonMethod::BFGS, QuasiNewtonMethod::LimitedBFGS(3)];
 
@@ -1441,7 +1450,7 @@ mod minimize_quasinewton_tests {
             let mut qn = QuasiNewton::new(obj);
 
             let result = qn.quasi_newton(
-                &array![1.0.into(), 2.0.into()],
+                array![1.0.into(), 2.0.into()].view(),
                 method,
                 Some(1e-3.into()), // Relaxed tolerance
                 Some(200),         // More iterations
@@ -1468,12 +1477,12 @@ mod minimize_quasinewton_tests {
 
     #[test]
     fn test_numerical_gradients_realistic() {
-        let func = |x: &Array1<MyFloat>| (&x[0] - 1.0).powi(2) + (&x[1] + 0.5).powi(2); // Simple target
+        let func = |x: ArrayView1<MyFloat>| (&x[0] - 1.0).powi(2) + (&x[1] + 0.5).powi(2); // Simple target
         let obj = MultiDimNumGradFn::new(func, Some(1e-6.into()), 2); // Larger epsilon
         let mut qn = QuasiNewton::new(obj);
 
         let result = qn.quasi_newton(
-            &array![0.0.into(), 0.0.into()],
+            array![0.0.into(), 0.0.into()].view(),
             QuasiNewtonMethod::BFGS,
             Some(1e-2.into()), // Very relaxed for numerical gradients
             Some(300),         // More iterations
@@ -1499,24 +1508,24 @@ mod minimize_quasinewton_tests {
             // Well-conditioned
             (
                 GF1dim::new(MultiDimGradFn::new(
-                    |x: &Array1<MyFloat>| x[0].powi(2) + x[1].powi(2),
-                    |x: &Array1<MyFloat>| array![2.0 * &x[0], 2.0 * &x[1]]
+                    |x: ArrayView1<MyFloat>| x[0].powi(2) + x[1].powi(2),
+                    |x: ArrayView1<MyFloat>| array![2.0 * &x[0], 2.0 * &x[1]]
                 )),
                 array![1.0.into(), 1.0.into()],
             ),
             // Mildly ill-conditioned
             (
                 GF1dim::new(MultiDimGradFn::new(
-                    |x: &Array1<MyFloat>| 5.0 * x[0].powi(2) + x[1].powi(2),
-                    |x: &Array1<MyFloat>| array![10.0 * &x[0], 2.0 * &x[1]]
+                    |x: ArrayView1<MyFloat>| 5.0 * x[0].powi(2) + x[1].powi(2),
+                    |x: ArrayView1<MyFloat>| array![10.0 * &x[0], 2.0 * &x[1]]
                 )),
                 array![1.0.into(), 1.0.into()],
             ),
             // With linear terms
             (
                 GF1dim::new(MultiDimGradFn::new(
-                    |x: &Array1<MyFloat>| x[0].powi(2) + x[1].powi(2) + &x[0] + 2.0 * &x[1],
-                    |x: &Array1<MyFloat>| array![2.0 * &x[0] + 1.0, 2.0 * &x[1] + 2.0]
+                    |x: ArrayView1<MyFloat>| x[0].powi(2) + x[1].powi(2) + &x[0] + 2.0 * &x[1],
+                    |x: ArrayView1<MyFloat>| array![2.0 * &x[0] + 1.0, 2.0 * &x[1] + 2.0]
                 )),
                 array![0.0.into(), 0.0.into()],
             ),
@@ -1526,7 +1535,7 @@ mod minimize_quasinewton_tests {
             let mut qn = QuasiNewton::new(obj);
 
             let result = qn.quasi_newton(
-                &initial_point,
+                initial_point.view(),
                 QuasiNewtonMethod::BFGS,
                 Some(1e-3.into()),
                 Some(200),
@@ -1579,7 +1588,7 @@ mod minimize_quasinewton_tests {
 
         let result = qn
             .quasi_newton(
-                &array![1.0.into(), 1.0.into()],
+                array![1.0.into(), 1.0.into()].view(),
                 QuasiNewtonMethod::BFGS,
                 Some(1e-4.into()),
                 Some(100),
@@ -1595,7 +1604,7 @@ mod minimize_quasinewton_tests {
         let mut qn = QuasiNewton::new(obj);
 
         let result = qn.quasi_newton(
-            &array![2.0.into(), 3.0.into()],
+            array![2.0.into(), 3.0.into()].view(),
             QuasiNewtonMethod::DFP,
             Some(1e-3.into()), // Relaxed tolerance
             Some(200),         // More iterations
@@ -1619,7 +1628,7 @@ mod minimize_quasinewton_tests {
         let mut qn = QuasiNewton::new(obj);
 
         let result = qn.quasi_newton(
-            &array![2.0.into(), 3.0.into()],
+            array![2.0.into(), 3.0.into()].view(),
             QuasiNewtonMethod::LimitedBFGS(5),
             Some(1e-3.into()),
             Some(200),
@@ -1647,7 +1656,7 @@ mod minimize_quasinewton_tests {
 
         let result = qn
             .quasi_newton(
-                &array![0.0.into(), 0.0.into()], // Start at minimum
+                array![0.0.into(), 0.0.into()].view(), // Start at minimum
                 QuasiNewtonMethod::BFGS,
                 Some(1e-6.into()),
                 Some(50),
@@ -1663,7 +1672,7 @@ mod minimize_quasinewton_tests {
 
         let result2 = qn2
             .quasi_newton(
-                &array![1e-6.into(), 1e-6.into()], // Very close to minimum
+                array![1e-6.into(), 1e-6.into()].view(), // Very close to minimum
                 QuasiNewtonMethod::BFGS,
                 Some(1e-8.into()),
                 Some(50),
@@ -1682,7 +1691,7 @@ mod minimize_quasinewton_tests {
 
         let result = qn
             .quasi_newton(
-                &array![3.0.into(), 4.0.into()],
+                array![3.0.into(), 4.0.into()].view(),
                 QuasiNewtonMethod::BFGS,
                 Some(1e-10.into()),
                 Some(100),
@@ -1706,7 +1715,7 @@ mod minimize_quasinewton_tests {
         let mut qn = QuasiNewton::new(obj);
 
         let result = qn.quasi_newton(
-            &array![MyFloat::new(-1.2), 1.0.into()],
+            array![MyFloat::new(-1.2), 1.0.into()].view(),
             QuasiNewtonMethod::BFGS,
             Some(1e-6.into()),
             Some(1000),
@@ -1732,7 +1741,7 @@ mod minimize_quasinewton_tests {
                 let mut simple_qn = QuasiNewton::new(simple_obj);
                 let simple_result = simple_qn
                     .quasi_newton(
-                        &array![1.0.into(), 1.0.into()],
+                        array![1.0.into(), 1.0.into()].view(),
                         QuasiNewtonMethod::BFGS,
                         Some(1e-8.into()),
                         Some(50),
@@ -1753,7 +1762,7 @@ mod minimize_quasinewton_tests {
 
         let result = qn
             .quasi_newton(
-                &array![2.0.into(), 3.0.into()],
+                array![2.0.into(), 3.0.into()].view(),
                 QuasiNewtonMethod::DFP,
                 Some(1e-8.into()),
                 Some(100),
@@ -1774,7 +1783,7 @@ mod minimize_quasinewton_tests {
 
         let result = qn
             .quasi_newton(
-                &array![1.5.into(), MyFloat::new(-2.0)],
+                array![1.5.into(), MyFloat::new(-2.0)].view(),
                 QuasiNewtonMethod::SR1,
                 Some(1e-8.into()),
                 Some(100),
@@ -1796,7 +1805,7 @@ mod minimize_quasinewton_tests {
             let mut qn = QuasiNewton::new(obj.clone());
             let result = qn
                 .quasi_newton(
-                    &array![4.0.into(), MyFloat::new(-3.0)],
+                    array![4.0.into(), MyFloat::new(-3.0)].view(),
                     QuasiNewtonMethod::LimitedBFGS(memory_size),
                     Some(1e-8.into()),
                     Some(100),
@@ -1817,8 +1826,9 @@ mod minimize_quasinewton_tests {
     #[test]
     fn test_lbfgs_high_dimensional() {
         let n = 20;
-        let func = |x: &Array1<MyFloat>| x.iter().map(|xi| xi.powi(2)).sum::<MyFloat>();
-        let grad = |x: &Array1<MyFloat>| x.iter().map(|xi| 2.0 * xi).collect::<Array1<MyFloat>>();
+        let func = |x: ArrayView1<MyFloat>| x.iter().map(|xi| xi.powi(2)).sum::<MyFloat>();
+        let grad =
+            |x: ArrayView1<MyFloat>| x.iter().map(|xi| 2.0 * xi).collect::<Array1<MyFloat>>();
         let obj = MultiDimGradFn::new(func, grad);
         let mut qn = QuasiNewton::new(obj);
 
@@ -1828,7 +1838,7 @@ mod minimize_quasinewton_tests {
 
         let result = qn
             .quasi_newton(
-                &initial_point,
+                initial_point.view(),
                 QuasiNewtonMethod::LimitedBFGS(10),
                 Some(1e-8.into()),
                 Some(200),
@@ -1849,7 +1859,7 @@ mod minimize_quasinewton_tests {
 
         let result = qn
             .quasi_newton(
-                &array![1.0.into(), 1.0.into()],
+                array![1.0.into(), 1.0.into()].view(),
                 QuasiNewtonMethod::BFGS,
                 Some(1e-6.into()),
                 Some(200),
@@ -1869,7 +1879,7 @@ mod minimize_quasinewton_tests {
         let mut qn = QuasiNewton::new(obj);
 
         let result = qn
-            .minimize_bfgs(&array![5.0.into(), MyFloat::new(-3.0)])
+            .minimize_bfgs(array![5.0.into(), MyFloat::new(-3.0)].view())
             .unwrap();
 
         assert!(result.converged);
@@ -1884,7 +1894,7 @@ mod minimize_quasinewton_tests {
         let mut qn = QuasiNewton::new(obj);
 
         let results = qn.compare_quasi_newton_methods(
-            &array![2.0.into(), 3.0.into()],
+            array![2.0.into(), 3.0.into()].view(),
             Some(1e-8.into()),
             Some(100),
         );
@@ -1919,7 +1929,7 @@ mod minimize_quasinewton_tests {
         let mut qn = QuasiNewton::new(obj);
 
         let result = qn.quasi_newton(
-            &array![],
+            array![].view(),
             QuasiNewtonMethod::BFGS,
             Some(1e-8.into()),
             Some(100),
@@ -1934,7 +1944,7 @@ mod minimize_quasinewton_tests {
         let mut qn = QuasiNewton::new(obj);
 
         let result = qn.quasi_newton(
-            &array![1.0.into(), 1.0.into()],
+            array![1.0.into(), 1.0.into()].view(),
             QuasiNewtonMethod::BFGS,
             Some(MyFloat::new(-1e-8)), // Negative tolerance
             Some(100),
@@ -1943,7 +1953,7 @@ mod minimize_quasinewton_tests {
         assert!(matches!(result, Err(MinimizerError::InvalidTolerance)));
 
         let result2 = qn.quasi_newton(
-            &array![1.0.into(), 1.0.into()],
+            array![1.0.into(), 1.0.into()].view(),
             QuasiNewtonMethod::BFGS,
             Some(0.0.into()), // Zero tolerance
             Some(100),
@@ -1954,19 +1964,19 @@ mod minimize_quasinewton_tests {
 
     #[test]
     fn test_function_evaluation_error() {
-        let func = |x: &Array1<MyFloat>| {
+        let func = |x: ArrayView1<MyFloat>| {
             if x[0] > 10.0 {
                 f64::NAN.into()
             } else {
                 x[0].powi(2) + x[1].powi(2)
             }
         };
-        let grad = |x: &Array1<MyFloat>| array![2.0 * &x[0], 2.0 * &x[1]];
+        let grad = |x: ArrayView1<MyFloat>| array![2.0 * &x[0], 2.0 * &x[1]];
         let obj = MultiDimGradFn::new(func, grad);
         let mut qn = QuasiNewton::new(obj);
 
         let result = qn.quasi_newton(
-            &array![20.0.into(), 1.0.into()], // Start with point that gives NaN
+            array![20.0.into(), 1.0.into()].view(), // Start with point that gives NaN
             QuasiNewtonMethod::BFGS,
             Some(1e-8.into()),
             Some(100),
@@ -1985,7 +1995,7 @@ mod minimize_quasinewton_tests {
 
         let result = qn
             .quasi_newton(
-                &array![3.0.into(), 4.0.into()],
+                array![3.0.into(), 4.0.into()].view(),
                 QuasiNewtonMethod::BFGS,
                 Some(1e-10.into()),
                 Some(100),
@@ -2020,7 +2030,7 @@ mod minimize_quasinewton_tests {
 
         let result = qn
             .quasi_newton(
-                &array![MyFloat::new(-1.2), 1.0.into()],
+                array![MyFloat::new(-1.2), 1.0.into()].view(),
                 QuasiNewtonMethod::BFGS,
                 Some(1e-12.into()), // Very tight tolerance
                 Some(5),            // Very few iterations
@@ -2039,7 +2049,7 @@ mod minimize_quasinewton_tests {
         let mut qn1 = QuasiNewton::new(obj.clone());
         let result1 = qn1
             .quasi_newton(
-                &array![1.0.into(), 1.0.into()],
+                array![1.0.into(), 1.0.into()].view(),
                 QuasiNewtonMethod::LimitedBFGS(0),
                 Some(1e-8.into()),
                 Some(100),
@@ -2053,7 +2063,7 @@ mod minimize_quasinewton_tests {
         let mut qn2 = QuasiNewton::new(obj.clone());
         let result2 = qn2
             .quasi_newton(
-                &array![1.0.into(), 1.0.into()],
+                array![1.0.into(), 1.0.into()].view(),
                 QuasiNewtonMethod::LimitedBFGS(100), // Much larger than dimension
                 Some(1e-8.into()),
                 Some(100),
@@ -2067,14 +2077,14 @@ mod minimize_quasinewton_tests {
     #[test]
     fn test_line_search_conditions() {
         // Test with a function that has a challenging line search
-        let func = |x: &Array1<MyFloat>| x[0].powi(4) + x[1].powi(4);
-        let grad = |x: &Array1<MyFloat>| array![4.0 * x[0].powi(3), 4.0 * x[1].powi(3)];
+        let func = |x: ArrayView1<MyFloat>| x[0].powi(4) + x[1].powi(4);
+        let grad = |x: ArrayView1<MyFloat>| array![4.0 * x[0].powi(3), 4.0 * x[1].powi(3)];
         let obj = MultiDimGradFn::new(func, grad);
         let mut qn = QuasiNewton::new(obj);
 
         let result = qn
             .quasi_newton(
-                &array![2.0.into(), 2.0.into()],
+                array![2.0.into(), 2.0.into()].view(),
                 QuasiNewtonMethod::BFGS,
                 Some(1e-8.into()),
                 Some(200),
@@ -2094,7 +2104,7 @@ mod minimize_quasinewton_tests {
 
         let result = qn
             .quasi_newton(
-                &array![1.0.into(), 1.0.into()],
+                array![1.0.into(), 1.0.into()].view(),
                 QuasiNewtonMethod::BFGS,
                 Some(1e-8.into()),
                 Some(100),
@@ -2112,7 +2122,7 @@ mod minimize_quasinewton_tests {
 
         let result = qn
             .quasi_newton(
-                &array![1.0.into(), 1.0.into()],
+                array![1.0.into(), 1.0.into()].view(),
                 QuasiNewtonMethod::BFGS,
                 Some(1e-8.into()),
                 Some(100),
@@ -2160,13 +2170,13 @@ mod minimize_quasinewton_tests {
     #[test]
     fn test_restart_behavior_sr1() {
         // SR1 can have numerical issues, test that it handles them gracefully
-        let func = |x: &Array1<MyFloat>| 1e6 * x[0].powi(2) + x[1].powi(2); // Very ill-conditioned
-        let grad = |x: &Array1<MyFloat>| array![2e6 * &x[0], 2.0 * &x[1]];
+        let func = |x: ArrayView1<MyFloat>| 1e6 * x[0].powi(2) + x[1].powi(2); // Very ill-conditioned
+        let grad = |x: ArrayView1<MyFloat>| array![2e6 * &x[0], 2.0 * &x[1]];
         let obj = MultiDimGradFn::new(func, grad);
         let mut qn = QuasiNewton::new(obj);
 
         let result = qn.quasi_newton(
-            &array![1.0.into(), 1.0.into()],
+            array![1.0.into(), 1.0.into()].view(),
             QuasiNewtonMethod::SR1,
             Some(1e-6.into()),
             Some(500), // May need more iterations for ill-conditioned problems
@@ -2188,14 +2198,14 @@ mod minimize_quasinewton_tests {
     #[test]
     fn test_zero_gradient_edge_case() {
         // Test behavior when starting at or very close to the minimum
-        let func = |x: &Array1<MyFloat>| x[0].powi(2) + x[1].powi(2);
-        let grad = |x: &Array1<MyFloat>| array![2.0 * &x[0], 2.0 * &x[1]];
+        let func = |x: ArrayView1<MyFloat>| x[0].powi(2) + x[1].powi(2);
+        let grad = |x: ArrayView1<MyFloat>| array![2.0 * &x[0], 2.0 * &x[1]];
         let obj = MultiDimGradFn::new(func, grad);
         let mut qn = QuasiNewton::new(obj);
 
         let result = qn
             .quasi_newton(
-                &array![0.0.into(), 0.0.into()], // Start at minimum
+                array![0.0.into(), 0.0.into()].view(), // Start at minimum
                 QuasiNewtonMethod::BFGS,
                 Some(1e-8.into()),
                 Some(100),

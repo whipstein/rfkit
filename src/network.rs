@@ -1,13 +1,15 @@
 #![allow(unused)]
-use crate::frequency::Frequency;
-use crate::impedance::ComplexNumberType;
-use crate::math::*;
-use crate::mycomplex::MyComplex;
-use crate::myfloat::MyFloat;
-use crate::parameter::RFParameter;
-use crate::point::{Point, Pt};
-use crate::points::Points;
-use crate::unit::Unit;
+use crate::{
+    frequency::Frequency,
+    impedance::ComplexNumberType,
+    math::*,
+    mycomplex::MyComplex,
+    myfloat::MyFloat,
+    parameter::RFParameter,
+    point::{Point, Pt},
+    pts::Points,
+    unit::Unit,
+};
 use ndarray::OwnedRepr;
 use ndarray::prelude::*;
 use ndarray_linalg::*;
@@ -19,13 +21,17 @@ use rug::az::UnwrappedAs;
 use rug::ops::{Pow, PowAssign};
 use rug::{Complex, Float};
 use simple_error::SimpleError;
-use std::error::Error;
-use std::f64::consts::PI;
-use std::iter::Iterator;
-use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, Sub, SubAssign};
-use std::process::Child;
-use std::slice::Iter;
-use std::{fmt, fs, mem, process};
+use std::{
+    error::Error,
+    f64::consts::PI,
+    fmt, fs,
+    iter::Iterator,
+    mem,
+    ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, Sub, SubAssign},
+    process,
+    process::Child,
+    slice::Iter,
+};
 
 pub mod builder;
 pub mod network;
@@ -128,11 +134,11 @@ pub trait NetworkPoint<T, U, V> {
     where
         Self: Sized;
 
-    fn a_to_s(&self, z0: &Array1<V>) -> Option<Self>
+    fn a_to_s(&self, z0: ArrayView1<V>) -> Option<Self>
     where
         Self: Sized;
 
-    fn a_to_t(&self, z0: &Array1<V>) -> Option<Self>
+    fn a_to_t(&self, z0: ArrayView1<V>) -> Option<Self>
     where
         Self: Sized;
 
@@ -166,11 +172,11 @@ pub trait NetworkPoint<T, U, V> {
     where
         Self: Sized;
 
-    fn g_to_s(&self, z0: &Array1<V>) -> Option<Self>
+    fn g_to_s(&self, z0: ArrayView1<V>) -> Option<Self>
     where
         Self: Sized;
 
-    fn g_to_t(&self, z0: &Array1<V>) -> Option<Self>
+    fn g_to_t(&self, z0: ArrayView1<V>) -> Option<Self>
     where
         Self: Sized;
 
@@ -190,11 +196,11 @@ pub trait NetworkPoint<T, U, V> {
     where
         Self: Sized;
 
-    fn h_to_s(&self, z0: &Array1<V>) -> Option<Self>
+    fn h_to_s(&self, z0: ArrayView1<V>) -> Option<Self>
     where
         Self: Sized;
 
-    fn h_to_t(&self, z0: &Array1<V>) -> Option<Self>
+    fn h_to_t(&self, z0: ArrayView1<V>) -> Option<Self>
     where
         Self: Sized;
 
@@ -224,19 +230,19 @@ pub trait NetworkPoint<T, U, V> {
 
     fn reciprocity(&self) -> Option<T>;
 
-    fn s_to_a(&self, z0: &Array1<V>) -> Option<Self>
+    fn s_to_a(&self, z0: ArrayView1<V>) -> Option<Self>
     where
         Self: Sized;
 
-    fn s_to_g(&self, z0: &Array1<V>) -> Option<Self>
+    fn s_to_g(&self, z0: ArrayView1<V>) -> Option<Self>
     where
         Self: Sized;
 
-    fn s_to_h(&self, z0: &Array1<V>) -> Option<Self>
+    fn s_to_h(&self, z0: ArrayView1<V>) -> Option<Self>
     where
         Self: Sized;
 
-    fn s_to_s(&self, z0: &Array1<V>, from: WaveType, to: WaveType) -> Option<Self>
+    fn s_to_s(&self, z0: ArrayView1<V>, from: WaveType, to: WaveType) -> Option<Self>
     where
         Self: Sized;
 
@@ -244,23 +250,23 @@ pub trait NetworkPoint<T, U, V> {
     where
         Self: Sized;
 
-    fn s_to_y(&self, z0: &Array1<V>) -> Option<Self>
+    fn s_to_y(&self, z0: ArrayView1<V>) -> Option<Self>
     where
         Self: Sized;
 
-    fn s_to_z(&self, z0: &Array1<V>) -> Option<Self>
+    fn s_to_z(&self, z0: ArrayView1<V>) -> Option<Self>
     where
         Self: Sized;
 
-    fn t_to_a(&self, z0: &Array1<V>) -> Option<Self>
+    fn t_to_a(&self, z0: ArrayView1<V>) -> Option<Self>
     where
         Self: Sized;
 
-    fn t_to_g(&self, z0: &Array1<V>) -> Option<Self>
+    fn t_to_g(&self, z0: ArrayView1<V>) -> Option<Self>
     where
         Self: Sized;
 
-    fn t_to_h(&self, z0: &Array1<V>) -> Option<Self>
+    fn t_to_h(&self, z0: ArrayView1<V>) -> Option<Self>
     where
         Self: Sized;
 
@@ -268,11 +274,11 @@ pub trait NetworkPoint<T, U, V> {
     where
         Self: Sized;
 
-    fn t_to_y(&self, z0: &Array1<V>) -> Option<Self>
+    fn t_to_y(&self, z0: ArrayView1<V>) -> Option<Self>
     where
         Self: Sized;
 
-    fn t_to_z(&self, z0: &Array1<V>) -> Option<Self>
+    fn t_to_z(&self, z0: ArrayView1<V>) -> Option<Self>
     where
         Self: Sized;
 
@@ -288,11 +294,11 @@ pub trait NetworkPoint<T, U, V> {
     where
         Self: Sized;
 
-    fn y_to_s(&self, z0: &Array1<V>) -> Option<Self>
+    fn y_to_s(&self, z0: ArrayView1<V>) -> Option<Self>
     where
         Self: Sized;
 
-    fn y_to_t(&self, z0: &Array1<V>) -> Option<Self>
+    fn y_to_t(&self, z0: ArrayView1<V>) -> Option<Self>
     where
         Self: Sized;
 
@@ -312,11 +318,11 @@ pub trait NetworkPoint<T, U, V> {
     where
         Self: Sized;
 
-    fn z_to_s(&self, z0: &Array1<V>) -> Option<Self>
+    fn z_to_s(&self, z0: ArrayView1<V>) -> Option<Self>
     where
         Self: Sized;
 
-    fn z_to_t(&self, z0: &Array1<V>) -> Option<Self>
+    fn z_to_t(&self, z0: ArrayView1<V>) -> Option<Self>
     where
         Self: Sized;
 

@@ -44,6 +44,26 @@ where
 impl<T> Brent<T>
 where
     T: RFFloat,
+    for<'a, 'b> &'a T: std::ops::Add<&'b T, Output = T>,
+    for<'a, 'b> &'a T: std::ops::Sub<&'b T, Output = T>,
+    for<'a, 'b> &'a T: std::ops::Mul<&'b T, Output = T>,
+    for<'a, 'b> &'a T: std::ops::Div<&'b T, Output = T>,
+    for<'a> &'a T: std::ops::Add<T, Output = T>,
+    for<'a> &'a T: std::ops::Sub<T, Output = T>,
+    for<'a> &'a T: std::ops::Mul<T, Output = T>,
+    for<'a> &'a T: std::ops::Div<T, Output = T>,
+    for<'a> &'a T: std::ops::Add<f64, Output = T>,
+    for<'a> &'a T: std::ops::Sub<f64, Output = T>,
+    for<'a> &'a T: std::ops::Mul<f64, Output = T>,
+    for<'a> &'a T: std::ops::Div<f64, Output = T>,
+    f64: std::ops::Add<T, Output = T>,
+    f64: std::ops::Sub<T, Output = T>,
+    f64: std::ops::Mul<T, Output = T>,
+    f64: std::ops::Div<T, Output = T>,
+    for<'a> f64: std::ops::Add<&'a T, Output = T>,
+    for<'a> f64: std::ops::Sub<&'a T, Output = T>,
+    for<'a> f64: std::ops::Mul<&'a T, Output = T>,
+    for<'a> f64: std::ops::Div<&'a T, Output = T>,
 {
     pub fn new<F>(f: F) -> Self
     where
@@ -71,8 +91,8 @@ where
     /// Brent's method for more robust line search
     pub fn line_search(
         &mut self,
-        point: &Array1<T>,
-        direction: &Array1<T>,
+        point: ArrayView1<T>,
+        direction: ArrayView1<T>,
         initial_step: &T,
         tol: &T,
         max_evaluations: usize,
@@ -99,25 +119,24 @@ where
             std::mem::swap(&mut fa, &mut fb);
         }
 
-        cx = bx.clone() + T::from_f64(1.618034) * (bx.clone() - ax.clone());
+        cx = &bx + 1.618034 * (&bx - &ax);
         let mut fc = func.eval(point, direction, &cx)?;
         evaluations += 1;
 
         while fb > fc && evaluations < max_evaluations / 3 {
-            let r = (bx.clone() - ax.clone()) * (fb.clone() - fc.clone());
-            let q = (bx.clone() - cx.clone()) * (fb.clone() - fa.clone());
-            let u = bx.clone()
-                - ((bx.clone() - cx.clone()) * q.clone() - (bx.clone() - ax.clone()) * r.clone())
+            let r = (&bx - &ax) * (&fb - &fc);
+            let q = (&bx - &cx) * (&fb - &fa);
+            let u = &bx
+                - ((&bx - &cx) * &q - (&bx - &ax) * &r)
                     / (T::from_f64(2.0)
-                        * if q.clone() - r.clone() > T::zero() {
-                            (q.clone() - r.clone()).max(&T::from_f64(ZEPS))
+                        * if &q - &r > T::zero() {
+                            (&q - &r).max(&ZEPS.into())
                         } else {
-                            (q.clone() - r.clone()).min(&T::from_f64(-ZEPS))
+                            (&q - &r).min(&(-ZEPS).into())
                         });
-            let ulim = bx.clone() + T::from_f64(100.0) * (cx.clone() - bx.clone());
+            let ulim = &bx + 100.0 * (&cx - &bx);
 
-            let (new_u, new_fu) = if (bx.clone() - u.clone()) * (u.clone() - cx.clone()) > T::zero()
-            {
+            let (new_u, new_fu) = if (&bx - &u) * (&u - &cx) > T::zero() {
                 let fu = func.eval(point, direction, &u)?;
                 evaluations += 1;
                 if fu < fc {
@@ -125,22 +144,22 @@ where
                 } else if fu > fb {
                     (u.clone(), fu.clone())
                 } else {
-                    let u_new = cx.clone() + T::from_f64(1.618034) * (cx.clone() - bx.clone());
+                    let u_new = &cx + 1.618034 * (&cx - &bx);
                     (u_new.clone(), func.eval(point, direction, &u_new)?)
                 }
-            } else if (cx.clone() - u.clone()) * (u.clone() - ulim.clone()) > T::zero() {
+            } else if (&cx - &u) * (&u - &ulim) > T::zero() {
                 let fu = func.eval(point, direction, &u)?;
                 evaluations += 1;
                 if fu < fc {
-                    let u_new = u.clone() + T::from_f64(1.618034) * (u.clone() - cx.clone());
+                    let u_new = &u + 1.618034 * (&u - &cx);
                     (u_new.clone(), func.eval(point, direction, &u_new)?)
                 } else {
                     (u.clone(), fu.clone())
                 }
-            } else if (u.clone() - ulim.clone()) * (ulim.clone() - cx.clone()) >= T::zero() {
+            } else if (&u - &ulim) * (&ulim - &cx) >= T::zero() {
                 (ulim.clone(), func.eval(point, direction, &ulim)?)
             } else {
-                let u_new = cx.clone() + T::from_f64(1.618034) * (cx.clone() - bx.clone());
+                let u_new = &cx + 1.618034 * (&cx - &bx);
                 (u_new.clone(), func.eval(point, direction, &u_new)?)
             };
 
@@ -170,13 +189,11 @@ where
         let tol1 = tol.clone();
 
         while evaluations < max_evaluations {
-            let xm = T::from_f64(0.5) * (a.clone() + b.clone());
-            let tol1_x = tol1.clone() * x.abs() + T::from_f64(ZEPS);
-            let tol2_x = T::from_f64(2.0) * tol1_x.clone();
+            let xm = 0.5 * (&a + &b);
+            let tol1_x = &tol1 * x.abs() + ZEPS;
+            let tol2_x = 2.0 * &tol1_x;
 
-            if (x.clone() - xm.clone()).abs()
-                <= tol2_x.clone() - T::from_f64(0.5) * (b.clone() - a.clone())
-            {
+            if (&x - &xm).abs() <= &tol2_x - 0.5 * (&b - &a) {
                 break;
             }
 
@@ -185,23 +202,23 @@ where
 
             if e.abs() > tol1_x {
                 // Try parabolic fit
-                let r = (x.clone() - w.clone()) * (fx.clone() - fv.clone());
-                let q = (x.clone() - v.clone()) * (fx.clone() - fw.clone());
-                let p = (x.clone() - v.clone()) * q.clone() - (x.clone() - w.clone()) * r.clone();
-                let q_final = T::from_f64(2.0) * (q.clone() - r.clone());
+                let r = (&x - &w) * (&fx - &fv);
+                let q = (&x - &v) * (&fx - &fw);
+                let p = (&x - &v) * &q - (&x - &w) * &r;
+                let q_final = 2.0 * (&q - &r);
 
                 if q_final != T::zero() {
-                    let p_over_q = p.clone() / q_final.clone();
+                    let p_over_q = &p / &q_final;
                     if q_final > T::zero()
                         && p > T::zero()
-                        && p_over_q > (a.clone() - x.clone())
-                        && p_over_q < (b.clone() - x.clone())
+                        && p_over_q > (&a - &x)
+                        && p_over_q < (&b - &x)
                     {
                         e = d.clone();
                         d = p_over_q.clone();
-                        u = x.clone() + d.clone();
-                        if u.clone() - a.clone() < tol2_x || b.clone() - u.clone() < tol2_x {
-                            d = if xm.clone() - x.clone() > T::zero() {
+                        u = &x + &d;
+                        if &u - &a < tol2_x || &b - &u < tol2_x {
+                            d = if &xm - &x > T::zero() {
                                 tol1_x.clone()
                             } else {
                                 -tol1_x.clone()
@@ -213,15 +230,11 @@ where
             }
 
             if use_golden {
-                e = if x >= xm {
-                    a.clone() - x.clone()
-                } else {
-                    b.clone() - x.clone()
-                };
-                d = T::from_f64(CGOLD) * e.clone();
+                e = if x >= xm { &a - &x } else { &b - &x };
+                d = CGOLD * &e;
             }
 
-            u = x.clone()
+            u = &x
                 + if d.abs() >= tol1_x {
                     d.clone()
                 } else {
@@ -275,7 +288,7 @@ where
             fn_evals: evaluations,
             iters: self.iters,
             converged: self.converged,
-            final_bracket_size: (b.clone() - a.clone()).abs(),
+            final_bracket_size: (&b - &a).abs(),
         })
     }
 
@@ -322,7 +335,7 @@ where
         max_iters: Option<usize>,
     ) -> Result<BrentResult<T>, MinimizerError> {
         self.converged = false;
-        let tol = tol.unwrap_or(T::from_f64(1e-12));
+        let tol = tol.unwrap_or(1e-12.into());
         let max_iter = max_iters.unwrap_or(100);
 
         // Validate inputs
@@ -357,40 +370,31 @@ where
 
         self.iters = 0;
 
-        while fb.abs() > tol && (bx.clone() - ax.clone()).abs() > tol && self.iters < max_iter {
+        while fb.abs() > tol && (&bx - &ax).abs() > tol && self.iters < max_iter {
             self.iters += 1;
 
             let mut s = if fa != fc && fb != fc {
                 // Inverse quadratic interpolation
-                ax.clone() * fb.clone() * fc.clone()
-                    / ((fa.clone() - fb.clone()) * (fa.clone() - fc.clone()))
-                    + bx.clone() * fa.clone() * fc.clone()
-                        / ((fb.clone() - fa.clone()) * (fb.clone() - fc.clone()))
-                    + c.clone() * fa.clone() * fb.clone()
-                        / ((fc.clone() - fa.clone()) * (fc.clone() - fb.clone()))
+                &ax * &fb * &fc / ((&fa - &fb) * (&fa - &fc))
+                    + &bx * &fa * &fc / ((&fb - &fa) * (&fb - &fc))
+                    + &c * &fa * &fb / ((&fc - &fa) * (&fc - &fb))
             } else {
                 // Secant method
-                bx.clone() - fb.clone() * (bx.clone() - ax.clone()) / (fb.clone() - fa.clone())
+                &bx - &fb * (&bx - &ax) / (&fb - &fa)
             };
 
             // Check conditions for using bisection instead
-            let condition1 = !(((T::from_f64(3.0) * ax.clone() + bx.clone()) / T::from_f64(4.0))
-                ..=bx.clone())
-                .contains(&s);
-            let condition2 = mflag
-                && (s.clone() - bx.clone()).abs()
-                    >= (bx.clone() - c.clone()).abs() / T::from_f64(2.0);
-            let condition3 = !mflag
-                && (s.clone() - bx.clone()).abs()
-                    >= (c.clone() - d.clone()).abs() / T::from_f64(2.0);
-            let condition4 = mflag && (bx.clone() - c.clone()).abs() < tol;
-            let condition5 = !mflag && (c.clone() - d.clone()).abs() < tol;
+            let condition1 = !(((3.0 * &ax + &bx) / 4.0)..=bx.clone()).contains(&s);
+            let condition2 = mflag && (&s - &bx).abs() >= (&bx - &c).abs() / T::from_f64(2.0);
+            let condition3 = !mflag && (&s - &bx).abs() >= (&c - &d).abs() / T::from_f64(2.0);
+            let condition4 = mflag && (&bx - &c).abs() < tol;
+            let condition5 = !mflag && (&c - &d).abs() < tol;
 
             let use_bisection = condition1 || condition2 || condition3 || condition4 || condition5;
 
             if use_bisection {
                 // Bisection method
-                s = (ax.clone() + bx.clone()) / T::from_f64(2.0);
+                s = (&ax + &bx) / 2.0;
                 mflag = true;
             } else {
                 mflag = false;
@@ -404,7 +408,7 @@ where
             c = bx.clone();
             fc = fb.clone();
 
-            if fa.clone() * fs.clone() < T::zero() {
+            if &fa * &fs < T::zero() {
                 bx = s.clone();
                 fb = fs.clone();
             } else {
@@ -432,7 +436,7 @@ where
             fn_evals: evaluations,
             iters: self.iters,
             converged: self.converged,
-            final_bracket_size: (bx.clone() - ax.clone()).abs(),
+            final_bracket_size: (&bx - &ax).abs(),
         })
     }
 
@@ -460,25 +464,24 @@ where
         tol: Option<T>,
     ) -> Array1<T> {
         let n_sub = subdivisions.unwrap_or(100);
-        let tol = tol.unwrap_or(T::from_f64(1e-12));
+        let tol = tol.unwrap_or(1e-12.into());
         let mut roots = Vec::new();
 
-        let dx = (b.clone() - a.clone()) / T::from_f64(n_sub as f64);
+        let dx = (b - a) / n_sub as f64;
 
         for i in 0..n_sub {
-            let x1 = a.clone() + T::from_f64(i as f64) * dx.clone();
-            let x2 = a.clone() + T::from_f64((i + 1) as f64) * dx.clone();
+            let x1 = a + i as f64 * &dx;
+            let x2 = a + (i + 1) as f64 * &dx;
 
             let f1 = self.f.call_scalar(&x1);
             let f2 = self.f.call_scalar(&x2);
 
             // Check for sign change
-            if f1.clone() * f2.clone() < T::zero() {
+            if &f1 * &f2 < T::zero() {
                 if let Ok(result) = self.minimize(&x1, &x2, Some(tol.clone()), None) {
                     // Check if this root is unique (not too close to existing roots)
                     let is_unique = roots.iter().all(|existing_root: &T| {
-                        (result.xmin.clone() - existing_root.clone()).abs()
-                            > tol.clone() * T::from_f64(10.0)
+                        (&result.xmin - existing_root).abs() > &tol * 10.0
                     });
 
                     if is_unique {
@@ -489,9 +492,9 @@ where
 
             // Check for exact zero
             if f1.abs() < tol {
-                let is_unique = roots.iter().all(|existing_root: &T| {
-                    (x1.clone() - existing_root.clone()).abs() > tol.clone() * T::from_f64(10.0)
-                });
+                let is_unique = roots
+                    .iter()
+                    .all(|existing_root: &T| (&x1 - existing_root).abs() > &tol * 10.0);
                 if is_unique {
                     roots.push(x1.clone());
                 }
@@ -500,9 +503,9 @@ where
 
         // Check the right endpoint
         if self.f.call_scalar(&b).abs() < tol {
-            let is_unique = roots.iter().all(|existing_root: &T| {
-                (b.clone() - existing_root.clone()).abs() > tol.clone() * T::from_f64(10.0)
-            });
+            let is_unique = roots
+                .iter()
+                .all(|existing_root: &T| (b - existing_root).abs() > &tol * 10.0);
             if is_unique {
                 roots.push(b.clone());
             }
@@ -1172,7 +1175,13 @@ mod minimize_brent_tests {
             let direction = array![MyFloat::new(-1.0)]; // Search towards x = 0
 
             let result = brent
-                .line_search(&point, &direction, &0.1.into(), &1e-6.into(), 100)
+                .line_search(
+                    point.view(),
+                    direction.view(),
+                    &0.1.into(),
+                    &1e-6.into(),
+                    100,
+                )
                 .unwrap();
 
             // The line search finds optimal step size
@@ -1191,7 +1200,13 @@ mod minimize_brent_tests {
             let direction = array![MyFloat::new(-1.0), 0.0.into()]; // Search in x-direction only
 
             // Test that line search doesn't crash with multidimensional inputs
-            let result = brent.line_search(&point, &direction, &0.5.into(), &1e-6.into(), 50);
+            let result = brent.line_search(
+                point.view(),
+                direction.view(),
+                &0.5.into(),
+                &1e-6.into(),
+                50,
+            );
 
             // The behavior depends on how F1dim handles multidimensional inputs
             // At minimum, it should not panic

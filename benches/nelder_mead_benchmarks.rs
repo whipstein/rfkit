@@ -47,13 +47,13 @@ struct TestProblem {
 
 // Test Functions
 fn sphere_function() -> F1dim<f64> {
-    F1dim::new(MultiDimFn::new(move |x: &Array1<f64>| {
+    F1dim::new(MultiDimFn::new(move |x: ArrayView1<f64>| {
         x.iter().map(|xi| xi * xi).sum()
     }))
 }
 
 fn rosenbrock_function() -> F1dim<f64> {
-    F1dim::new(MultiDimFn::new(|x: &Array1<f64>| {
+    F1dim::new(MultiDimFn::new(|x: ArrayView1<f64>| {
         if x.len() < 2 {
             return 0.0;
         }
@@ -69,7 +69,7 @@ fn rosenbrock_function() -> F1dim<f64> {
 }
 
 fn rastrigin_function() -> F1dim<f64> {
-    F1dim::new(MultiDimFn::new(|x: &Array1<f64>| {
+    F1dim::new(MultiDimFn::new(|x: ArrayView1<f64>| {
         let a = 10.0;
         let n = x.len() as f64;
         let pi = std::f64::consts::PI;
@@ -83,7 +83,7 @@ fn rastrigin_function() -> F1dim<f64> {
 }
 
 fn ackley_function() -> F1dim<f64> {
-    F1dim::new(MultiDimFn::new(|x: &Array1<f64>| {
+    F1dim::new(MultiDimFn::new(|x: ArrayView1<f64>| {
         let a = 20.0;
         let b = 0.2;
         let c = 2.0 * std::f64::consts::PI;
@@ -98,7 +98,7 @@ fn ackley_function() -> F1dim<f64> {
 }
 
 fn himmelblau_function() -> F1dim<f64> {
-    F1dim::new(MultiDimFn::new(|x: &Array1<f64>| {
+    F1dim::new(MultiDimFn::new(|x: ArrayView1<f64>| {
         if x.len() != 2 {
             // Extend to n-dimensions by summing pairs
             let mut result = 0.0;

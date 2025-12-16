@@ -31,10 +31,11 @@ where
 impl<T> BracketResult<T>
 where
     T: RFFloat,
+    for<'a, 'b> &'a T: std::ops::Sub<&'b T, Output = T>,
 {
     /// Get the width of the bracket
     pub fn width(&self) -> T {
-        (self.c.clone() - self.a.clone()).abs()
+        (&self.c - &self.a).abs()
     }
 
     /// Get the best point in the bracket
@@ -105,6 +106,26 @@ where
 impl<T> Bracket<T>
 where
     T: RFFloat,
+    for<'a, 'b> &'a T: std::ops::Add<&'b T, Output = T>,
+    for<'a, 'b> &'a T: std::ops::Sub<&'b T, Output = T>,
+    for<'a, 'b> &'a T: std::ops::Mul<&'b T, Output = T>,
+    for<'a, 'b> &'a T: std::ops::Div<&'b T, Output = T>,
+    for<'a> &'a T: std::ops::Add<T, Output = T>,
+    for<'a> &'a T: std::ops::Sub<T, Output = T>,
+    for<'a> &'a T: std::ops::Mul<T, Output = T>,
+    for<'a> &'a T: std::ops::Div<T, Output = T>,
+    for<'a> &'a T: std::ops::Add<f64, Output = T>,
+    for<'a> &'a T: std::ops::Sub<f64, Output = T>,
+    for<'a> &'a T: std::ops::Mul<f64, Output = T>,
+    for<'a> &'a T: std::ops::Div<f64, Output = T>,
+    f64: std::ops::Add<T, Output = T>,
+    f64: std::ops::Sub<T, Output = T>,
+    f64: std::ops::Mul<T, Output = T>,
+    f64: std::ops::Div<T, Output = T>,
+    for<'a> f64: std::ops::Add<&'a T, Output = T>,
+    for<'a> f64: std::ops::Sub<&'a T, Output = T>,
+    for<'a> f64: std::ops::Mul<&'a T, Output = T>,
+    for<'a> f64: std::ops::Div<&'a T, Output = T>,
 {
     /// Golden ratio constant for bracket expansion
     pub const GOLDEN_RATIO_F64: f64 = 1.618033988749895;
@@ -116,9 +137,9 @@ where
         F: ObjFn<T> + 'static,
     {
         Bracket {
-            a: T::from_f64(-1.0),
-            b: T::from_f64(1.0),
-            c: T::from_f64(2.0),
+            a: (-1.0).into(),
+            b: T::one(),
+            c: 2.0.into(),
             fa: T::zero(),
             fb: T::zero(),
             fc: T::zero(),
@@ -130,9 +151,9 @@ where
 
     pub fn new_boxed(f: Box<dyn ObjFn<T>>) -> Self {
         Bracket {
-            a: T::from_f64(-1.0),
+            a: (-1.0).into(),
             b: T::from_f64(1.0),
-            c: T::from_f64(2.0),
+            c: 2.0.into(),
             fa: T::zero(),
             fb: T::zero(),
             fc: T::zero(),
@@ -149,12 +170,9 @@ where
         b: &T,
         max_iters: Option<usize>,
     ) -> Result<BracketResult<T>, MinimizerError> {
-        let golden_ratio = T::from_f64(Self::GOLDEN_RATIO_F64);
-        let limit = T::from_f64(Self::LIMIT_F64);
-        let tiny = T::from_f64(Self::TINY_F64);
-        let zero = T::zero();
-        let one = T::one();
-        let two = T::from_f64(2.0);
+        let golden_ratio = Self::GOLDEN_RATIO_F64;
+        let limit = Self::LIMIT_F64;
+        let tiny = Self::TINY_F64;
 
         self.converged = false;
         let max_iter = max_iters.unwrap_or(100);
@@ -188,7 +206,7 @@ where
         }
 
         // First guess for c using golden ratio
-        let mut c = bx.clone() + golden_ratio.clone() * (bx.clone() - ax.clone());
+        let mut c = &bx + golden_ratio * (&bx - &ax);
         let mut fc = self.f.call_scalar(&c);
         function_evaluations += 1;
 
@@ -203,120 +221,117 @@ where
             self.iters += 1;
 
             // Compute the parabolic extrapolation point
-            let r = (bx.clone() - ax.clone()) * (fb.clone() - fc.clone());
-            let q = (bx.clone() - c.clone()) * (fb.clone() - fa.clone());
-            let q_minus_r = q.clone() - r.clone();
+            let r = (&bx - &ax) * (&fb - &fc);
+            let q = (&bx - &c) * (&fb - &fa);
+            let q_minus_r = &q - &r;
 
-            let denom = two.clone()
-                * if q_minus_r != zero {
-                    q_minus_r.abs().max(&tiny)
-                        * if q_minus_r > zero {
-                            one.clone()
+            let denom = 2.0
+                * if q_minus_r != 0.0 {
+                    q_minus_r.abs().max(&tiny.into())
+                        * if q_minus_r > 0.0.into() {
+                            <f64 as Into<T>>::into(1.0)
                         } else {
-                            -one.clone()
+                            (-1.0).into()
                         }
                 } else {
-                    tiny.clone()
+                    tiny.into()
                 };
 
-            let u = bx.clone()
-                - ((bx.clone() - c.clone()) * q.clone() - (bx.clone() - ax.clone()) * r.clone())
-                    / denom.clone();
-            let ulim = bx.clone() + limit.clone() * (c.clone() - bx.clone());
+            let u = &bx - ((&bx - &c) * &q - (&bx - &ax) * &r) / &denom;
+            let ulim = &bx + limit * (&c - &bx);
 
-            let (new_point, new_value) =
-                if (bx.clone() - u.clone()) * (u.clone() - c.clone()) > zero {
-                    // Parabolic u is between b and c: try it
-                    let fu = self.f.call_scalar(&u);
-                    function_evaluations += 1;
+            let (new_point, new_value) = if (&bx - &u) * (&u - &c) > 0.0.into() {
+                // Parabolic u is between b and c: try it
+                let fu = self.f.call_scalar(&u);
+                function_evaluations += 1;
 
-                    if !fu.is_finite() {
-                        return Err(MinimizerError::FunctionEvaluationError);
-                    }
+                if !fu.is_finite() {
+                    return Err(MinimizerError::FunctionEvaluationError);
+                }
 
-                    if fu < fc {
-                        // Got a minimum between b and c
-                        (self.a, self.c) = if ax <= c {
-                            (ax.clone(), c.clone())
-                        } else {
-                            (c.clone(), ax.clone())
-                        };
-                        self.b = u.clone();
-                        self.fa = fa.clone();
-                        self.fb = fu.clone();
-                        self.fc = fc.clone();
-                        return Ok(BracketResult {
-                            a: self.a.clone(),
-                            b: self.b.clone(),
-                            c: self.c.clone(),
-                            fa: self.fa.clone(),
-                            fb: self.fb.clone(),
-                            fc: self.fc.clone(),
-                            iterations: self.iters,
-                            function_evaluations,
-                            bracket_width: (c.clone() - ax.clone()).abs(),
-                            expansion_ratio: if (bx.clone() - ax.clone()).abs() > zero {
-                                (c.clone() - ax.clone()).abs() / (bx.clone() - ax.clone()).abs()
-                            } else {
-                                one.clone()
-                            },
-                        });
-                    } else if fu > fb {
-                        // Got a minimum between a and u
-                        (self.a, self.c) = if ax <= c {
-                            (ax.clone(), u.clone())
-                        } else {
-                            (u.clone(), ax.clone())
-                        };
-                        self.b = bx.clone();
-                        self.fa = fa.clone();
-                        self.fb = fb.clone();
-                        self.fc = fu.clone();
-                        return Ok(BracketResult {
-                            a: self.a.clone(),
-                            b: self.b.clone(),
-                            c: self.c.clone(),
-                            fa: self.fa.clone(),
-                            fb: self.fb.clone(),
-                            fc: self.fc.clone(),
-                            iterations: self.iters,
-                            function_evaluations,
-                            bracket_width: (u.clone() - ax.clone()).abs(),
-                            expansion_ratio: if (bx.clone() - ax.clone()).abs() > zero {
-                                (u.clone() - ax.clone()).abs() / (bx.clone() - ax.clone()).abs()
-                            } else {
-                                one.clone()
-                            },
-                        });
-                    }
-
-                    // Parabolic fit didn't help; use golden ratio
-                    let new_pt = c.clone() + golden_ratio.clone() * (c.clone() - bx.clone());
-                    (new_pt.clone(), self.f.call_scalar(&new_pt))
-                } else if (c.clone() - u.clone()) * (u.clone() - ulim.clone()) > zero {
-                    // Parabolic fit is between c and its allowed limit
-                    let fu = self.f.call_scalar(&u);
-                    function_evaluations += 1;
-
-                    if !fu.is_finite() {
-                        return Err(MinimizerError::FunctionEvaluationError);
-                    }
-
-                    if fu < fc {
-                        // Keep expanding
-                        let new_u = u.clone() + golden_ratio.clone() * (u.clone() - c.clone());
-                        (new_u.clone(), self.f.call_scalar(&new_u))
+                if fu < fc {
+                    // Got a minimum between b and c
+                    (self.a, self.c) = if ax <= c {
+                        (ax.clone(), c.clone())
                     } else {
-                        (u.clone(), fu.clone())
-                    }
-                } else if (u.clone() - ulim.clone()) * (ulim.clone() - c.clone()) >= zero {
-                    // Limit parabolic u to maximum allowed value
-                    (ulim.clone(), self.f.call_scalar(&ulim))
+                        (c.clone(), ax.clone())
+                    };
+                    self.b = u.clone();
+                    self.fa = fa.clone();
+                    self.fb = fu.clone();
+                    self.fc = fc.clone();
+                    return Ok(BracketResult {
+                        a: self.a.clone(),
+                        b: self.b.clone(),
+                        c: self.c.clone(),
+                        fa: self.fa.clone(),
+                        fb: self.fb.clone(),
+                        fc: self.fc.clone(),
+                        iterations: self.iters,
+                        function_evaluations,
+                        bracket_width: (&c - &ax).abs(),
+                        expansion_ratio: if (&bx - &ax).abs() > 0.0.into() {
+                            (&c - &ax).abs() / (&bx - &ax).abs()
+                        } else {
+                            1.0.into()
+                        },
+                    });
+                } else if fu > fb {
+                    // Got a minimum between a and u
+                    (self.a, self.c) = if ax <= c {
+                        (ax.clone(), u.clone())
+                    } else {
+                        (u.clone(), ax.clone())
+                    };
+                    self.b = bx.clone();
+                    self.fa = fa.clone();
+                    self.fb = fb.clone();
+                    self.fc = fu.clone();
+                    return Ok(BracketResult {
+                        a: self.a.clone(),
+                        b: self.b.clone(),
+                        c: self.c.clone(),
+                        fa: self.fa.clone(),
+                        fb: self.fb.clone(),
+                        fc: self.fc.clone(),
+                        iterations: self.iters,
+                        function_evaluations,
+                        bracket_width: (&u - &ax).abs(),
+                        expansion_ratio: if (&bx - &ax).abs() > 0.0.into() {
+                            (&u - &ax).abs() / (&bx - &ax).abs()
+                        } else {
+                            1.0.into()
+                        },
+                    });
+                }
+
+                // Parabolic fit didn't help; use golden ratio
+                let new_pt = &c + golden_ratio * (&c - &bx);
+                (new_pt.clone(), self.f.call_scalar(&new_pt))
+            } else if (&c - &u) * (&u - &ulim) > 0.0.into() {
+                // Parabolic fit is between c and its allowed limit
+                let fu = self.f.call_scalar(&u);
+                function_evaluations += 1;
+
+                if !fu.is_finite() {
+                    return Err(MinimizerError::FunctionEvaluationError);
+                }
+
+                if fu < fc {
+                    // Keep expanding
+                    let new_u = &u + golden_ratio * (&u - &c);
+                    (new_u.clone(), self.f.call_scalar(&new_u))
                 } else {
-                    // Reject parabolic u, use golden section
-                    let new_pt = c.clone() + golden_ratio.clone() * (c.clone() - bx.clone());
-                    (new_pt.clone(), self.f.call_scalar(&new_pt))
-                };
+                    (u.clone(), fu.clone())
+                }
+            } else if (&u - &ulim) * (&ulim - &c) >= 0.0.into() {
+                // Limit parabolic u to maximum allowed value
+                (ulim.clone(), self.f.call_scalar(&ulim))
+            } else {
+                // Reject parabolic u, use golden section
+                let new_pt = &c + golden_ratio * (&c - &bx);
+                (new_pt.clone(), self.f.call_scalar(&new_pt))
+            };
 
             function_evaluations += 1;
 
@@ -404,12 +419,11 @@ where
             fc: self.fc.clone(),
             iterations: self.iters,
             function_evaluations,
-            bracket_width: (final_c.clone() - final_a.clone()).abs(),
-            expansion_ratio: if (final_b.clone() - final_a.clone()).abs() > zero {
-                (final_c.clone() - final_a.clone()).abs()
-                    / (final_b.clone() - final_a.clone()).abs()
+            bracket_width: (&final_c - &final_a).abs(),
+            expansion_ratio: if (&final_b - &final_a).abs() > 0.0.into() {
+                (&final_c - &final_a).abs() / (&final_b - &final_a).abs()
             } else {
-                one.clone()
+                1.0.into()
             },
         })
     }
@@ -427,7 +441,7 @@ where
         }
 
         let a = start_point.clone();
-        let b = start_point.clone() + initial_step.clone();
+        let b = start_point + initial_step;
 
         self.bracket_minimum(&a, &b, max_iters)
     }
@@ -466,7 +480,7 @@ where
         let step_factors = [1.0, 0.1, 10.0, 0.01, 100.0, 0.001];
 
         for &factor in &step_factors {
-            let current_step = step.clone() * T::from_f64(factor);
+            let current_step = &step * factor;
 
             // Try both directions
             for &direction in &[1.0, -1.0] {
@@ -514,13 +528,13 @@ where
         let step_multipliers = [0.01, 0.1, 0.5, 1.0, 2.0, 10.0, 100.0];
 
         for &mult in &step_multipliers {
-            let step = options.initial_step.clone() * T::from_f64(mult);
+            let step = &options.initial_step * mult;
 
             for &dir in &[1.0, -1.0] {
-                let dir_val = T::from_f64(dir);
+                let dir_val = dir;
                 let a = start_point.clone();
-                let b = start_point.clone() + dir_val.clone() * step.clone();
-                let c = start_point.clone() + dir_val.clone() * step.clone() * T::from_f64(2.0);
+                let b = start_point + dir_val * &step;
+                let c = start_point + dir_val * &step * 2.0;
 
                 let fa = f_start.clone();
                 let fb = self.f.call_scalar(&b);
@@ -555,7 +569,7 @@ where
 
         let mut brackets = Vec::new();
         let max_to_find = max_brackets.unwrap_or(10);
-        let dx = (end.clone() - start.clone()) / T::from_usize(num_points - 1);
+        let dx = (end - start) / T::from_usize(num_points - 1);
 
         for i in 0..num_points - 2 {
             if brackets.len() >= max_to_find {
@@ -563,9 +577,9 @@ where
             }
 
             let i_t = T::from_usize(i);
-            let x1 = start.clone() + i_t.clone() * dx.clone();
-            let x2 = start.clone() + (i_t.clone() + T::one()) * dx.clone();
-            let x3 = start.clone() + (i_t.clone() + T::from_f64(2.0)) * dx.clone();
+            let x1 = start + &i_t * &dx;
+            let x2 = start + (&i_t + 1.0) * &dx;
+            let x3 = start + (&i_t + 2.0) * &dx;
 
             let f1 = self.f.call_scalar(&x1);
             let f2 = self.f.call_scalar(&x2);
@@ -575,10 +589,10 @@ where
                 // Found a potential bracket
                 if let Ok(result) = self.bracket_minimum(&x1, &x2, Some(20)) {
                     // Check if this bracket is distinct from existing ones
-                    let dx_2 = dx.clone() * T::from_f64(2.0);
-                    let is_distinct = brackets.iter().all(|existing: &BracketResult<T>| {
-                        (result.b.clone() - existing.b.clone()).abs() > dx_2.clone()
-                    });
+                    let dx_2 = &dx * 2.0;
+                    let is_distinct = brackets
+                        .iter()
+                        .all(|existing: &BracketResult<T>| (&result.b - &existing.b).abs() > dx_2);
 
                     if is_distinct {
                         brackets.push(result);

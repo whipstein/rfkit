@@ -38,6 +38,26 @@ where
 impl<T> Golden<T>
 where
     T: RFFloat,
+    for<'a, 'b> &'a T: std::ops::Add<&'b T, Output = T>,
+    for<'a, 'b> &'a T: std::ops::Sub<&'b T, Output = T>,
+    for<'a, 'b> &'a T: std::ops::Mul<&'b T, Output = T>,
+    for<'a, 'b> &'a T: std::ops::Div<&'b T, Output = T>,
+    for<'a> &'a T: std::ops::Add<T, Output = T>,
+    for<'a> &'a T: std::ops::Sub<T, Output = T>,
+    for<'a> &'a T: std::ops::Mul<T, Output = T>,
+    for<'a> &'a T: std::ops::Div<T, Output = T>,
+    for<'a> &'a T: std::ops::Add<f64, Output = T>,
+    for<'a> &'a T: std::ops::Sub<f64, Output = T>,
+    for<'a> &'a T: std::ops::Mul<f64, Output = T>,
+    for<'a> &'a T: std::ops::Div<f64, Output = T>,
+    f64: std::ops::Add<T, Output = T>,
+    f64: std::ops::Sub<T, Output = T>,
+    f64: std::ops::Mul<T, Output = T>,
+    f64: std::ops::Div<T, Output = T>,
+    for<'a> f64: std::ops::Add<&'a T, Output = T>,
+    for<'a> f64: std::ops::Sub<&'a T, Output = T>,
+    for<'a> f64: std::ops::Mul<&'a T, Output = T>,
+    for<'a> f64: std::ops::Div<&'a T, Output = T>,
 {
     /// Golden ratio constant (φ - 1)
     const GOLDEN_RATIO: f64 = 0.618_033_988_749_895;
@@ -89,7 +109,7 @@ where
         max_iters: Option<usize>,
     ) -> Result<GoldenResult<T>, MinimizerError> {
         self.converged = false;
-        let tol = tol.unwrap_or(T::from_f64(1e-6));
+        let tol = tol.unwrap_or(1e-6.into());
         let max_iter = max_iters.unwrap_or(100);
 
         // Validate inputs
@@ -104,10 +124,8 @@ where
         let mut x4 = b.clone();
 
         // Initial interior points using golden ratio
-        let mut x2 =
-            x1.clone() + T::from_f64(1.0 - Golden::<T>::GOLDEN_RATIO) * (x4.clone() - x1.clone());
-        let mut x3 =
-            x1.clone() + T::from_f64(Golden::<T>::GOLDEN_RATIO) * (x4.clone() - x1.clone());
+        let mut x2 = x1.clone() + (1.0 - Golden::<T>::GOLDEN_RATIO) * (&x4 - &x1);
+        let mut x3 = x1.clone() + Golden::<T>::GOLDEN_RATIO * (&x4 - &x1);
 
         let mut f2 = self.f.call_scalar(&x2);
         let mut f3 = self.f.call_scalar(&x3);
@@ -115,7 +133,7 @@ where
         self.iters = 0;
 
         // Main iteration loop
-        while (x4.clone() - x1.clone()).abs() > tol && self.iters < max_iter {
+        while (&x4 - &x1).abs() > tol && self.iters < max_iter {
             self.iters += 1;
 
             if f2 < f3 {
@@ -123,16 +141,14 @@ where
                 x4 = x3.clone();
                 x3 = x2.clone();
                 f3 = f2.clone();
-                x2 = x1.clone()
-                    + T::from_f64(1.0 - Golden::<T>::GOLDEN_RATIO) * (x4.clone() - x1.clone());
+                x2 = x1.clone() + (1.0 - Golden::<T>::GOLDEN_RATIO) * (&x4 - &x1);
                 f2 = self.f.call_scalar(&x2);
             } else {
                 // Minimum is in [x2, x4]
                 x1 = x2.clone();
                 x2 = x3.clone();
                 f2 = f3.clone();
-                x3 =
-                    x1.clone() + T::from_f64(Golden::<T>::GOLDEN_RATIO) * (x4.clone() - x1.clone());
+                x3 = x1.clone() + Golden::<T>::GOLDEN_RATIO * (&x4 - &x1);
                 f3 = self.f.call_scalar(&x3);
             }
         }

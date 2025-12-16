@@ -1,13 +1,15 @@
 #![allow(unused)]
-use crate::element::{Distributed, Elem, ElemType, Lumped};
-use crate::frequency::Frequency;
-use crate::point;
-use crate::point::{Point, Pt};
-use crate::points::{Points, Pts};
-use crate::scale::Scale;
-use crate::unit::{Unit, UnitVal, UnitValBuilder, Unitized};
+use crate::{
+    element::{Distributed, Elem, ElemType, Lumped},
+    frequency::Frequency,
+    point,
+    point::{Point, Pt},
+    pts::{Points, Pts},
+    scale::Scale,
+    unit::{Unit, UnitVal, UnitValBuilder, Unitized},
+};
 use float_cmp::{F64Margin, approx_eq};
-use ndarray::prelude::*;
+use ndarray::{IntoDimension, prelude::*};
 use num::complex::{Complex, Complex64, c64};
 use num_traits::ConstZero;
 use serde::Serialize;
@@ -149,8 +151,8 @@ impl Elem for Msub {
         &self.id
     }
 
-    fn net(&self, freq: &Frequency) -> Points<Complex64> {
-        Points::zeros((freq.npts(), 2, 2))
+    fn net(&self, freq: &Frequency) -> Points<Complex64, Ix3> {
+        Points::<Complex64, Ix3>::zeros((freq.npts(), 2, 2).into_dimension())
     }
 
     fn nodes(&self) -> Vec<usize> {

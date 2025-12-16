@@ -1,11 +1,13 @@
-use crate::element::{Distributed, Elem, ElemType, msub::Msub};
-use crate::frequency::Frequency;
-use crate::point;
-use crate::point::Point;
-use crate::points::{Points, Pts};
-use crate::scale::Scale;
-use crate::unit::{Unit, UnitVal, UnitValBuilder, Unitized};
-use ndarray::prelude::*;
+use crate::{
+    element::{Distributed, Elem, ElemType, msub::Msub},
+    frequency::Frequency,
+    point,
+    point::Point,
+    pts::{Points, Pts},
+    scale::Scale,
+    unit::{Unit, UnitVal, UnitValBuilder, Unitized},
+};
+use ndarray::{IntoDimension, prelude::*};
 use num::complex::Complex64;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -126,8 +128,8 @@ impl Elem for Mbend {
         &self.id
     }
 
-    fn net(&self, freq: &Frequency) -> Points<Complex64> {
-        Points::zeros((freq.npts(), 2, 2))
+    fn net(&self, freq: &Frequency) -> Points<Complex64, Ix3> {
+        Points::<Complex64, Ix3>::zeros((freq.npts(), 2, 2).into_dimension())
     }
 
     fn nodes(&self) -> Vec<usize> {

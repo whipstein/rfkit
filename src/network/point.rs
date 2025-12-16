@@ -1,32 +1,39 @@
 #![allow(unused)]
-use crate::frequency::Frequency;
-use crate::impedance::ComplexNumberType;
-use crate::math::*;
-use crate::mycomplex::MyComplex;
-use crate::myfloat::MyFloat;
-use crate::network::{NetworkPoint, WaveType};
-use crate::parameter::RFParameter;
-use crate::point;
-use crate::point::{Point, Pt};
-use crate::unit::Unit;
-use ndarray::OwnedRepr;
-use ndarray::prelude::*;
+use crate::{
+    frequency::Frequency,
+    impedance::ComplexNumberType,
+    math::*,
+    mycomplex::MyComplex,
+    myfloat::MyFloat,
+    network::{NetworkPoint, WaveType},
+    parameter::RFParameter,
+    point,
+    point::{Point, Pt},
+    unit::Unit,
+};
+use ndarray::{OwnedRepr, prelude::*};
 use ndarray_linalg::*;
 use num::complex::{Complex64, c64};
 use num::zero;
 use num_traits::{ConstZero, Num, One, Zero};
 use regex::{Regex, RegexBuilder};
-use rug::az::UnwrappedAs;
-use rug::ops::{Pow, PowAssign};
-use rug::{Complex, Float};
+use rug::{
+    Complex, Float,
+    az::UnwrappedAs,
+    ops::{Pow, PowAssign},
+};
 use simple_error::SimpleError;
-use std::error::Error;
-use std::f64::consts::PI;
-use std::iter::Iterator;
-use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, Sub, SubAssign};
-use std::process::Child;
-use std::slice::Iter;
-use std::{fmt, fs, mem, process};
+use std::{
+    error::Error,
+    f64::consts::PI,
+    fmt, fs,
+    iter::Iterator,
+    mem,
+    ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, Sub, SubAssign},
+    process,
+    process::Child,
+    slice::Iter,
+};
 
 impl NetworkPoint<Point<f64>, (f64, f64), Complex64> for Point<Complex64> {
     fn a_to_g(&self) -> Option<Self> {
@@ -45,19 +52,19 @@ impl NetworkPoint<Point<f64>, (f64, f64), Complex64> for Point<Complex64> {
         }
     }
 
-    fn a_to_s(&self, z0: &Array1<Complex64>) -> Option<Self> {
+    fn a_to_s(&self, z0: ArrayView1<Complex64>) -> Option<Self> {
         let z0c = Array1::from_shape_fn(z0.len(), |i| MyComplex::from((z0[[i]].re, z0[[i]].im)));
         let val: Point<MyComplex> = self.into();
-        match val.a_to_s(&z0c) {
+        match val.a_to_s(z0c.view()) {
             Some(x) => Some(x.into()),
             None => None,
         }
     }
 
-    fn a_to_t(&self, z0: &Array1<Complex64>) -> Option<Self> {
+    fn a_to_t(&self, z0: ArrayView1<Complex64>) -> Option<Self> {
         let z0c = Array1::from_shape_fn(z0.len(), |i| MyComplex::from((z0[i].re, z0[i].im)));
         let val: Point<MyComplex> = self.into();
-        match val.a_to_t(&z0c) {
+        match val.a_to_t(z0c.view()) {
             Some(x) => Some(x.into()),
             None => None,
         }
@@ -144,19 +151,19 @@ impl NetworkPoint<Point<f64>, (f64, f64), Complex64> for Point<Complex64> {
         }
     }
 
-    fn g_to_s(&self, z0: &Array1<Complex64>) -> Option<Self> {
+    fn g_to_s(&self, z0: ArrayView1<Complex64>) -> Option<Self> {
         let z0c = Array1::from_shape_fn(z0.len(), |i| MyComplex::from((z0[i].re, z0[i].im)));
         let val: Point<MyComplex> = self.into();
-        match val.g_to_s(&z0c) {
+        match val.g_to_s(z0c.view()) {
             Some(x) => Some(x.into()),
             None => None,
         }
     }
 
-    fn g_to_t(&self, z0: &Array1<Complex64>) -> Option<Self> {
+    fn g_to_t(&self, z0: ArrayView1<Complex64>) -> Option<Self> {
         let z0c = Array1::from_shape_fn(z0.len(), |i| MyComplex::from((z0[i].re, z0[i].im)));
         let val: Point<MyComplex> = self.into();
-        match val.g_to_t(&z0c) {
+        match val.g_to_t(z0c.view()) {
             Some(x) => Some(x.into()),
             None => None,
         }
@@ -194,19 +201,19 @@ impl NetworkPoint<Point<f64>, (f64, f64), Complex64> for Point<Complex64> {
         }
     }
 
-    fn h_to_s(&self, z0: &Array1<Complex64>) -> Option<Self> {
+    fn h_to_s(&self, z0: ArrayView1<Complex64>) -> Option<Self> {
         let z0c = Array1::from_shape_fn(z0.len(), |i| MyComplex::from((z0[i].re, z0[i].im)));
         let val: Point<MyComplex> = self.into();
-        match val.h_to_s(&z0c) {
+        match val.h_to_s(z0c.view()) {
             Some(x) => Some(x.into()),
             None => None,
         }
     }
 
-    fn h_to_t(&self, z0: &Array1<Complex64>) -> Option<Self> {
+    fn h_to_t(&self, z0: ArrayView1<Complex64>) -> Option<Self> {
         let z0c = Array1::from_shape_fn(z0.len(), |i| MyComplex::from((z0[i].re, z0[i].im)));
         let val: Point<MyComplex> = self.into();
-        match val.h_to_t(&z0c) {
+        match val.h_to_t(z0c.view()) {
             Some(x) => Some(x.into()),
             None => None,
         }
@@ -267,40 +274,40 @@ impl NetworkPoint<Point<f64>, (f64, f64), Complex64> for Point<Complex64> {
         Some(out)
     }
 
-    fn s_to_a(&self, z0: &Array1<Complex64>) -> Option<Self> {
+    fn s_to_a(&self, z0: ArrayView1<Complex64>) -> Option<Self> {
         let z0c = Array1::from_shape_fn(z0.len(), |i| MyComplex::from((z0[i].re, z0[i].im)));
         let val: Point<MyComplex> = self.into();
-        match val.s_to_a(&z0c) {
+        match val.s_to_a(z0c.view()) {
             Some(x) => Some(x.into()),
             None => None,
         }
     }
 
-    fn s_to_g(&self, z0: &Array1<Complex64>) -> Option<Self> {
+    fn s_to_g(&self, z0: ArrayView1<Complex64>) -> Option<Self> {
         let z0c = Array1::from_shape_fn(z0.len(), |i| MyComplex::from((z0[i].re, z0[i].im)));
         let val: Point<MyComplex> = self.into();
-        match val.s_to_g(&z0c) {
+        match val.s_to_g(z0c.view()) {
             Some(x) => Some(x.into()),
             None => None,
         }
     }
 
-    fn s_to_h(&self, z0: &Array1<Complex64>) -> Option<Self> {
+    fn s_to_h(&self, z0: ArrayView1<Complex64>) -> Option<Self> {
         let z0c = Array1::from_shape_fn(z0.len(), |i| MyComplex::from((z0[i].re, z0[i].im)));
         let val: Point<MyComplex> = self.into();
-        match val.s_to_h(&z0c) {
+        match val.s_to_h(z0c.view()) {
             Some(x) => Some(x.into()),
             None => None,
         }
     }
 
-    fn s_to_s(&self, z0: &Array1<Complex64>, from: WaveType, to: WaveType) -> Option<Self>
+    fn s_to_s(&self, z0: ArrayView1<Complex64>, from: WaveType, to: WaveType) -> Option<Self>
     where
         Self: Sized,
     {
         let val: Point<MyComplex> = self.into();
         let z0c = Array1::<MyComplex>::from_shape_fn(z0.dim(), |j| z0[[j]].into());
-        match val.s_to_s(&z0c, from, to) {
+        match val.s_to_s(z0c.view(), from, to) {
             Some(x) => Some(x.into()),
             None => None,
         }
@@ -314,46 +321,46 @@ impl NetworkPoint<Point<f64>, (f64, f64), Complex64> for Point<Complex64> {
         }
     }
 
-    fn s_to_y(&self, z0: &Array1<Complex64>) -> Option<Self> {
+    fn s_to_y(&self, z0: ArrayView1<Complex64>) -> Option<Self> {
         let z0c = Array1::from_shape_fn(z0.len(), |i| MyComplex::from((z0[i].re, z0[i].im)));
         let val: Point<MyComplex> = self.into();
-        match val.s_to_y(&z0c) {
+        match val.s_to_y(z0c.view()) {
             Some(x) => Some(x.into()),
             None => None,
         }
     }
 
-    fn s_to_z(&self, z0: &Array1<Complex64>) -> Option<Self> {
+    fn s_to_z(&self, z0: ArrayView1<Complex64>) -> Option<Self> {
         let z0c = Array1::from_shape_fn(z0.len(), |i| MyComplex::from((z0[i].re, z0[i].im)));
         let val: Point<MyComplex> = self.into();
-        match val.s_to_z(&z0c) {
+        match val.s_to_z(z0c.view()) {
             Some(x) => Some(x.into()),
             None => None,
         }
     }
 
-    fn t_to_a(&self, z0: &Array1<Complex64>) -> Option<Self> {
+    fn t_to_a(&self, z0: ArrayView1<Complex64>) -> Option<Self> {
         let z0c = Array1::from_shape_fn(z0.len(), |i| MyComplex::from((z0[i].re, z0[i].im)));
         let val: Point<MyComplex> = self.into();
-        match val.t_to_a(&z0c) {
+        match val.t_to_a(z0c.view()) {
             Some(x) => Some(x.into()),
             None => None,
         }
     }
 
-    fn t_to_g(&self, z0: &Array1<Complex64>) -> Option<Self> {
+    fn t_to_g(&self, z0: ArrayView1<Complex64>) -> Option<Self> {
         let z0c = Array1::from_shape_fn(z0.len(), |i| MyComplex::from((z0[i].re, z0[i].im)));
         let val: Point<MyComplex> = self.into();
-        match val.t_to_g(&z0c) {
+        match val.t_to_g(z0c.view()) {
             Some(x) => Some(x.into()),
             None => None,
         }
     }
 
-    fn t_to_h(&self, z0: &Array1<Complex64>) -> Option<Self> {
+    fn t_to_h(&self, z0: ArrayView1<Complex64>) -> Option<Self> {
         let z0c = Array1::from_shape_fn(z0.len(), |i| MyComplex::from((z0[i].re, z0[i].im)));
         let val: Point<MyComplex> = self.into();
-        match val.t_to_h(&z0c) {
+        match val.t_to_h(z0c.view()) {
             Some(x) => Some(x.into()),
             None => None,
         }
@@ -367,19 +374,19 @@ impl NetworkPoint<Point<f64>, (f64, f64), Complex64> for Point<Complex64> {
         }
     }
 
-    fn t_to_y(&self, z0: &Array1<Complex64>) -> Option<Self> {
+    fn t_to_y(&self, z0: ArrayView1<Complex64>) -> Option<Self> {
         let z0c = Array1::from_shape_fn(z0.len(), |i| MyComplex::from((z0[i].re, z0[i].im)));
         let val: Point<MyComplex> = self.into();
-        match val.t_to_y(&z0c) {
+        match val.t_to_y(z0c.view()) {
             Some(x) => Some(x.into()),
             None => None,
         }
     }
 
-    fn t_to_z(&self, z0: &Array1<Complex64>) -> Option<Self> {
+    fn t_to_z(&self, z0: ArrayView1<Complex64>) -> Option<Self> {
         let z0c = Array1::from_shape_fn(z0.len(), |i| MyComplex::from((z0[i].re, z0[i].im)));
         let val: Point<MyComplex> = self.into();
-        match val.t_to_z(&z0c) {
+        match val.t_to_z(z0c.view()) {
             Some(x) => Some(x.into()),
             None => None,
         }
@@ -409,19 +416,19 @@ impl NetworkPoint<Point<f64>, (f64, f64), Complex64> for Point<Complex64> {
         }
     }
 
-    fn y_to_s(&self, z0: &Array1<Complex64>) -> Option<Self> {
+    fn y_to_s(&self, z0: ArrayView1<Complex64>) -> Option<Self> {
         let z0c = Array1::from_shape_fn(z0.len(), |i| MyComplex::from((z0[i].re, z0[i].im)));
         let val: Point<MyComplex> = self.into();
-        match val.y_to_s(&z0c) {
+        match val.y_to_s(z0c.view()) {
             Some(x) => Some(x.into()),
             None => None,
         }
     }
 
-    fn y_to_t(&self, z0: &Array1<Complex64>) -> Option<Self> {
+    fn y_to_t(&self, z0: ArrayView1<Complex64>) -> Option<Self> {
         let z0c = Array1::from_shape_fn(z0.len(), |i| MyComplex::from((z0[i].re, z0[i].im)));
         let val: Point<MyComplex> = self.into();
-        match val.y_to_t(&z0c) {
+        match val.y_to_t(z0c.view()) {
             Some(x) => Some(x.into()),
             None => None,
         }
@@ -459,19 +466,19 @@ impl NetworkPoint<Point<f64>, (f64, f64), Complex64> for Point<Complex64> {
         }
     }
 
-    fn z_to_s(&self, z0: &Array1<Complex64>) -> Option<Self> {
+    fn z_to_s(&self, z0: ArrayView1<Complex64>) -> Option<Self> {
         let z0c = Array1::from_shape_fn(z0.len(), |i| MyComplex::from((z0[i].re, z0[i].im)));
         let val: Point<MyComplex> = self.into();
-        match val.z_to_s(&z0c) {
+        match val.z_to_s(z0c.view()) {
             Some(x) => Some(x.into()),
             None => None,
         }
     }
 
-    fn z_to_t(&self, z0: &Array1<Complex64>) -> Option<Self> {
+    fn z_to_t(&self, z0: ArrayView1<Complex64>) -> Option<Self> {
         let z0c = Array1::from_shape_fn(z0.len(), |i| MyComplex::from((z0[i].re, z0[i].im)));
         let val: Point<MyComplex> = self.into();
-        match val.z_to_t(&z0c) {
+        match val.z_to_t(z0c.view()) {
             Some(x) => Some(x.into()),
             None => None,
         }
@@ -539,7 +546,7 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
         ))
     }
 
-    fn a_to_s(&self, z0: &Array1<MyComplex>) -> Option<Self> {
+    fn a_to_s(&self, z0: ArrayView1<MyComplex>) -> Option<Self> {
         if !self.is_square() || self.nrows() != 2 {
             return None;
         }
@@ -568,7 +575,7 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
         ))
     }
 
-    fn a_to_t(&self, z0: &Array1<MyComplex>) -> Option<Self> {
+    fn a_to_t(&self, z0: ArrayView1<MyComplex>) -> Option<Self> {
         if !self.is_square() || self.nrows() != 2 {
             return None;
         }
@@ -822,7 +829,7 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
         }
     }
 
-    fn g_to_s(&self, z0: &Array1<MyComplex>) -> Option<Self> {
+    fn g_to_s(&self, z0: ArrayView1<MyComplex>) -> Option<Self> {
         if !self.is_square() || self.nrows() != 2 {
             return None;
         }
@@ -856,7 +863,7 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
         ))
     }
 
-    fn g_to_t(&self, z0: &Array1<MyComplex>) -> Option<Self> {
+    fn g_to_t(&self, z0: ArrayView1<MyComplex>) -> Option<Self> {
         if !self.is_square() || self.nrows() != 2 {
             return None;
         }
@@ -1004,7 +1011,7 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
         }
     }
 
-    fn h_to_s(&self, z0: &Array1<MyComplex>) -> Option<Self> {
+    fn h_to_s(&self, z0: ArrayView1<MyComplex>) -> Option<Self> {
         if !self.is_square() || self.nrows() != 2 {
             return None;
         }
@@ -1036,7 +1043,7 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
         ))
     }
 
-    fn h_to_t(&self, z0: &Array1<MyComplex>) -> Option<Self> {
+    fn h_to_t(&self, z0: ArrayView1<MyComplex>) -> Option<Self> {
         if !self.is_square() || self.nrows() != 2 {
             return None;
         }
@@ -1221,7 +1228,7 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
         None
     }
 
-    fn s_to_a(&self, z0: &Array1<MyComplex>) -> Option<Self> {
+    fn s_to_a(&self, z0: ArrayView1<MyComplex>) -> Option<Self> {
         if !self.is_square() || self.nrows() != 2 {
             return None;
         }
@@ -1247,7 +1254,7 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
         out
     }
 
-    fn s_to_g(&self, z0: &Array1<MyComplex>) -> Option<Self> {
+    fn s_to_g(&self, z0: ArrayView1<MyComplex>) -> Option<Self> {
         if !self.is_square() || self.nrows() != 2 {
             return None;
         }
@@ -1310,7 +1317,7 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
         out
     }
 
-    fn s_to_h(&self, z0: &Array1<MyComplex>) -> Option<Self> {
+    fn s_to_h(&self, z0: ArrayView1<MyComplex>) -> Option<Self> {
         if !self.is_square() || self.nrows() != 2 {
             return None;
         }
@@ -1336,7 +1343,7 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
         out
     }
 
-    fn s_to_s(&self, z0: &Array1<MyComplex>, from: WaveType, to: WaveType) -> Option<Self>
+    fn s_to_s(&self, z0: ArrayView1<MyComplex>, from: WaveType, to: WaveType) -> Option<Self>
     where
         Self: Sized,
     {
@@ -1453,7 +1460,7 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
         out
     }
 
-    fn s_to_y(&self, z0: &Array1<MyComplex>) -> Option<Self> {
+    fn s_to_y(&self, z0: ArrayView1<MyComplex>) -> Option<Self> {
         if !self.is_square() {
             return None;
         }
@@ -1497,7 +1504,7 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
         }
     }
 
-    fn s_to_z(&self, z0: &Array1<MyComplex>) -> Option<Self> {
+    fn s_to_z(&self, z0: ArrayView1<MyComplex>) -> Option<Self> {
         if !self.is_square() {
             return None;
         }
@@ -1534,7 +1541,7 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
         }
     }
 
-    fn t_to_a(&self, z0: &Array1<MyComplex>) -> Option<Self> {
+    fn t_to_a(&self, z0: ArrayView1<MyComplex>) -> Option<Self> {
         if !self.is_square() || self.nrows() != 2 {
             return None;
         }
@@ -1560,7 +1567,7 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
         out
     }
 
-    fn t_to_g(&self, z0: &Array1<MyComplex>) -> Option<Self> {
+    fn t_to_g(&self, z0: ArrayView1<MyComplex>) -> Option<Self> {
         if !self.is_square() || self.nrows() != 2 {
             return None;
         }
@@ -1614,7 +1621,7 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
         out
     }
 
-    fn t_to_h(&self, z0: &Array1<MyComplex>) -> Option<Self> {
+    fn t_to_h(&self, z0: ArrayView1<MyComplex>) -> Option<Self> {
         if !self.is_square() || self.nrows() != 2 {
             return None;
         }
@@ -1663,7 +1670,7 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
         out
     }
 
-    fn t_to_y(&self, z0: &Array1<MyComplex>) -> Option<Self> {
+    fn t_to_y(&self, z0: ArrayView1<MyComplex>) -> Option<Self> {
         if !self.is_square() || self.nrows() != 2 {
             return None;
         }
@@ -1688,7 +1695,7 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
         out
     }
 
-    fn t_to_z(&self, z0: &Array1<MyComplex>) -> Option<Self> {
+    fn t_to_z(&self, z0: ArrayView1<MyComplex>) -> Option<Self> {
         if !self.is_square() || self.nrows() != 2 {
             return None;
         }
@@ -1780,7 +1787,7 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
         out
     }
 
-    fn y_to_s(&self, z0: &Array1<MyComplex>) -> Option<Self> {
+    fn y_to_s(&self, z0: ArrayView1<MyComplex>) -> Option<Self> {
         if !self.is_square() {
             return None;
         }
@@ -1798,7 +1805,7 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
         }
     }
 
-    fn y_to_t(&self, z0: &Array1<MyComplex>) -> Option<Self> {
+    fn y_to_t(&self, z0: ArrayView1<MyComplex>) -> Option<Self> {
         if !self.is_square() || self.nrows() != 2 {
             return None;
         }
@@ -1903,7 +1910,7 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
         out
     }
 
-    fn z_to_s(&self, z0: &Array1<MyComplex>) -> Option<Self> {
+    fn z_to_s(&self, z0: ArrayView1<MyComplex>) -> Option<Self> {
         if !self.is_square() {
             return None;
         }
@@ -1925,7 +1932,7 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
         }
     }
 
-    fn z_to_t(&self, z0: &Array1<MyComplex>) -> Option<Self> {
+    fn z_to_t(&self, z0: ArrayView1<MyComplex>) -> Option<Self> {
         if !self.is_square() || self.nrows() != 2 {
             return None;
         }

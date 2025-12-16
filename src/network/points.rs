@@ -1,36 +1,45 @@
 #![allow(unused)]
-use crate::frequency::Frequency;
-use crate::impedance::ComplexNumberType;
-use crate::math::*;
-use crate::mycomplex::MyComplex;
-use crate::myfloat::MyFloat;
-use crate::network::{NetworkPoint, WaveType};
-use crate::parameter::RFParameter;
-use crate::point::{Point, Pt};
-use crate::points::{Points, Pts};
-use crate::unit::Unit;
-use ndarray::OwnedRepr;
-use ndarray::prelude::*;
+use crate::{
+    frequency::Frequency,
+    impedance::ComplexNumberType,
+    math::*,
+    mycomplex::MyComplex,
+    myfloat::MyFloat,
+    network::{NetworkPoint, WaveType},
+    parameter::RFParameter,
+    point::{Point, Pt},
+    pts::{Points, Pts},
+    unit::Unit,
+};
+use ndarray::{Dimension, IntoDimension, OwnedRepr, prelude::*};
 use ndarray_linalg::*;
-use num::complex::{Complex64, c64};
-use num::zero;
+use num::{
+    complex::{Complex64, c64},
+    zero,
+};
 use num_traits::{ConstZero, Num, One, Zero};
 use regex::{Regex, RegexBuilder};
-use rug::az::UnwrappedAs;
-use rug::ops::{Pow, PowAssign};
-use rug::{Complex, Float};
+use rug::{
+    Complex, Float,
+    az::UnwrappedAs,
+    ops::{Pow, PowAssign},
+};
 use simple_error::SimpleError;
-use std::error::Error;
-use std::f64::consts::PI;
-use std::iter::Iterator;
-use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, Sub, SubAssign};
-use std::process::Child;
-use std::slice::Iter;
-use std::{fmt, fs, mem, process};
+use std::{
+    error::Error,
+    f64::consts::PI,
+    fmt, fs,
+    iter::Iterator,
+    mem,
+    ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, Sub, SubAssign},
+    process,
+    process::Child,
+    slice::Iter,
+};
 
-impl NetworkPoint<Points<f64>, &[(f64, f64)], Complex64> for Points<Complex64> {
-    fn a_to_g(&self) -> Option<Points<Complex64>> {
-        let mut out = Points::zeros(self.dim());
+impl NetworkPoint<Points<f64, Ix3>, &[(f64, f64)], Complex64> for Points<Complex64, Ix3> {
+    fn a_to_g(&self) -> Option<Points<Complex64, Ix3>> {
+        let mut out = Points::<Complex64, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<Complex64>::new(self.slice(s![i, .., ..]).to_owned()).a_to_g() {
@@ -43,8 +52,8 @@ impl NetworkPoint<Points<f64>, &[(f64, f64)], Complex64> for Points<Complex64> {
         Some(out)
     }
 
-    fn a_to_h(&self) -> Option<Points<Complex64>> {
-        let mut out = Points::zeros(self.dim());
+    fn a_to_h(&self) -> Option<Points<Complex64, Ix3>> {
+        let mut out = Points::<Complex64, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<Complex64>::new(self.slice(s![i, .., ..]).to_owned()).a_to_h() {
@@ -57,8 +66,8 @@ impl NetworkPoint<Points<f64>, &[(f64, f64)], Complex64> for Points<Complex64> {
         Some(out)
     }
 
-    fn a_to_s(&self, z0: &Array1<Complex64>) -> Option<Points<Complex64>> {
-        let mut out = Points::zeros(self.dim());
+    fn a_to_s(&self, z0: ArrayView1<Complex64>) -> Option<Points<Complex64, Ix3>> {
+        let mut out = Points::<Complex64, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<Complex64>::new(self.slice(s![i, .., ..]).to_owned()).a_to_s(z0) {
@@ -71,8 +80,8 @@ impl NetworkPoint<Points<f64>, &[(f64, f64)], Complex64> for Points<Complex64> {
         Some(out)
     }
 
-    fn a_to_t(&self, z0: &Array1<Complex64>) -> Option<Points<Complex64>> {
-        let mut out = Points::zeros(self.dim());
+    fn a_to_t(&self, z0: ArrayView1<Complex64>) -> Option<Points<Complex64, Ix3>> {
+        let mut out = Points::<Complex64, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<Complex64>::new(self.slice(s![i, .., ..]).to_owned()).a_to_t(z0) {
@@ -85,8 +94,8 @@ impl NetworkPoint<Points<f64>, &[(f64, f64)], Complex64> for Points<Complex64> {
         Some(out)
     }
 
-    fn a_to_y(&self) -> Option<Points<Complex64>> {
-        let mut out = Points::zeros(self.dim());
+    fn a_to_y(&self) -> Option<Points<Complex64, Ix3>> {
+        let mut out = Points::<Complex64, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<Complex64>::new(self.slice(s![i, .., ..]).to_owned()).a_to_y() {
@@ -99,8 +108,8 @@ impl NetworkPoint<Points<f64>, &[(f64, f64)], Complex64> for Points<Complex64> {
         Some(out)
     }
 
-    fn a_to_z(&self) -> Option<Points<Complex64>> {
-        let mut out = Points::zeros(self.dim());
+    fn a_to_z(&self) -> Option<Points<Complex64, Ix3>> {
+        let mut out = Points::<Complex64, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<Complex64>::new(self.slice(s![i, .., ..]).to_owned()).a_to_z() {
@@ -113,8 +122,13 @@ impl NetworkPoint<Points<f64>, &[(f64, f64)], Complex64> for Points<Complex64> {
         Some(out)
     }
 
-    fn connect(&self, p1: usize, net: &Points<Complex64>, p2: usize) -> Option<Points<Complex64>> {
-        let mut out = Points::zeros(self.dim());
+    fn connect(
+        &self,
+        p1: usize,
+        net: &Points<Complex64, Ix3>,
+        p2: usize,
+    ) -> Option<Points<Complex64, Ix3>> {
+        let mut out = Points::<Complex64, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let val = match Point::<Complex64>::new(self.slice(s![i, .., ..]).to_owned()).connect(
                 p1,
@@ -130,8 +144,8 @@ impl NetworkPoint<Points<f64>, &[(f64, f64)], Complex64> for Points<Complex64> {
         Some(out)
     }
 
-    fn db(&self) -> Points<f64> {
-        let mut out = Points::<f64>::zeros(self.dim());
+    fn db(&self) -> Points<f64, Ix3> {
+        let mut out = Points::<f64, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             pt.assign(
                 &Point::<Complex64>::new(self.slice(s![i, .., ..]).to_owned())
@@ -143,8 +157,8 @@ impl NetworkPoint<Points<f64>, &[(f64, f64)], Complex64> for Points<Complex64> {
         out
     }
 
-    fn deg(&self) -> Points<f64> {
-        let mut out = Points::<f64>::zeros(self.dim());
+    fn deg(&self) -> Points<f64, Ix3> {
+        let mut out = Points::<f64, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             pt.assign(
                 &Point::<Complex64>::new(self.slice(s![i, .., ..]).to_owned())
@@ -156,10 +170,10 @@ impl NetworkPoint<Points<f64>, &[(f64, f64)], Complex64> for Points<Complex64> {
         out
     }
 
-    fn from_db(data: &[&[(f64, f64)]]) -> Points<Complex64> {
+    fn from_db(data: &[&[(f64, f64)]]) -> Points<Complex64, Ix3> {
         let nports = (data[0].len() as f64).sqrt() as usize;
         let npoints = data.len();
-        Points::from_shape_fn((npoints, nports, nports), |(i, j, k)| {
+        Points::<Complex64, Ix3>::from_shape_fn((npoints, nports, nports).into_dimension(), |(i, j, k)| {
             c64::from_polar(
                 10_f64.powf(data[i][j * nports + k].0 / 20.0),
                 f64::to_radians(data[i][j * nports + k].1),
@@ -167,10 +181,10 @@ impl NetworkPoint<Points<f64>, &[(f64, f64)], Complex64> for Points<Complex64> {
         })
     }
 
-    fn from_ma(data: &[&[(f64, f64)]]) -> Points<Complex64> {
+    fn from_ma(data: &[&[(f64, f64)]]) -> Points<Complex64, Ix3> {
         let nports = (data[0].len() as f64).sqrt() as usize;
         let npoints = data.len();
-        Points::from_shape_fn((npoints, nports, nports), |(i, j, k)| {
+        Points::<Complex64, Ix3>::from_shape_fn((npoints, nports, nports).into_dimension(), |(i, j, k)| {
             c64::from_polar(
                 data[i][j * nports + k].0,
                 f64::to_radians(data[i][j * nports + k].1),
@@ -178,10 +192,10 @@ impl NetworkPoint<Points<f64>, &[(f64, f64)], Complex64> for Points<Complex64> {
         })
     }
 
-    fn from_ri(data: &[&[(f64, f64)]]) -> Points<Complex64> {
+    fn from_ri(data: &[&[(f64, f64)]]) -> Points<Complex64, Ix3> {
         let nports = (data[0].len() as f64).sqrt() as usize;
         let npoints = data.len();
-        Points::from_shape_fn((npoints, nports, nports), |(i, j, k)| {
+        Points::<Complex64, Ix3>::from_shape_fn((npoints, nports, nports).into_dimension(), |(i, j, k)| {
             c64(data[i][j * nports + k].0, data[i][j * nports + k].1)
         })
     }
@@ -202,8 +216,8 @@ impl NetworkPoint<Points<f64>, &[(f64, f64)], Complex64> for Points<Complex64> {
     //     Point::<Complex64>::from_vec(data)
     // }
 
-    fn g_to_a(&self) -> Option<Points<Complex64>> {
-        let mut out = Points::zeros(self.dim());
+    fn g_to_a(&self) -> Option<Points<Complex64, Ix3>> {
+        let mut out = Points::<Complex64, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<Complex64>::new(self.slice(s![i, .., ..]).to_owned()).g_to_a() {
@@ -216,8 +230,8 @@ impl NetworkPoint<Points<f64>, &[(f64, f64)], Complex64> for Points<Complex64> {
         Some(out)
     }
 
-    fn g_to_h(&self) -> Option<Points<Complex64>> {
-        let mut out = Points::zeros(self.dim());
+    fn g_to_h(&self) -> Option<Points<Complex64, Ix3>> {
+        let mut out = Points::<Complex64, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<Complex64>::new(self.slice(s![i, .., ..]).to_owned()).g_to_h() {
@@ -230,8 +244,8 @@ impl NetworkPoint<Points<f64>, &[(f64, f64)], Complex64> for Points<Complex64> {
         Some(out)
     }
 
-    fn g_to_s(&self, z0: &Array1<Complex64>) -> Option<Points<Complex64>> {
-        let mut out = Points::zeros(self.dim());
+    fn g_to_s(&self, z0: ArrayView1<Complex64>) -> Option<Points<Complex64, Ix3>> {
+        let mut out = Points::<Complex64, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<Complex64>::new(self.slice(s![i, .., ..]).to_owned()).g_to_s(z0) {
@@ -244,8 +258,8 @@ impl NetworkPoint<Points<f64>, &[(f64, f64)], Complex64> for Points<Complex64> {
         Some(out)
     }
 
-    fn g_to_t(&self, z0: &Array1<Complex64>) -> Option<Points<Complex64>> {
-        let mut out = Points::zeros(self.dim());
+    fn g_to_t(&self, z0: ArrayView1<Complex64>) -> Option<Points<Complex64, Ix3>> {
+        let mut out = Points::<Complex64, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<Complex64>::new(self.slice(s![i, .., ..]).to_owned()).g_to_t(z0) {
@@ -258,8 +272,8 @@ impl NetworkPoint<Points<f64>, &[(f64, f64)], Complex64> for Points<Complex64> {
         Some(out)
     }
 
-    fn g_to_y(&self) -> Option<Points<Complex64>> {
-        let mut out = Points::zeros(self.dim());
+    fn g_to_y(&self) -> Option<Points<Complex64, Ix3>> {
+        let mut out = Points::<Complex64, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<Complex64>::new(self.slice(s![i, .., ..]).to_owned()).g_to_y() {
@@ -272,8 +286,8 @@ impl NetworkPoint<Points<f64>, &[(f64, f64)], Complex64> for Points<Complex64> {
         Some(out)
     }
 
-    fn g_to_z(&self) -> Option<Points<Complex64>> {
-        let mut out = Points::zeros(self.dim());
+    fn g_to_z(&self) -> Option<Points<Complex64, Ix3>> {
+        let mut out = Points::<Complex64, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<Complex64>::new(self.slice(s![i, .., ..]).to_owned()).g_to_z() {
@@ -286,8 +300,8 @@ impl NetworkPoint<Points<f64>, &[(f64, f64)], Complex64> for Points<Complex64> {
         Some(out)
     }
 
-    fn h_to_a(&self) -> Option<Points<Complex64>> {
-        let mut out = Points::zeros(self.dim());
+    fn h_to_a(&self) -> Option<Points<Complex64, Ix3>> {
+        let mut out = Points::<Complex64, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<Complex64>::new(self.slice(s![i, .., ..]).to_owned()).h_to_a() {
@@ -300,8 +314,8 @@ impl NetworkPoint<Points<f64>, &[(f64, f64)], Complex64> for Points<Complex64> {
         Some(out)
     }
 
-    fn h_to_g(&self) -> Option<Points<Complex64>> {
-        let mut out = Points::zeros(self.dim());
+    fn h_to_g(&self) -> Option<Points<Complex64, Ix3>> {
+        let mut out = Points::<Complex64, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<Complex64>::new(self.slice(s![i, .., ..]).to_owned()).h_to_g() {
@@ -314,8 +328,8 @@ impl NetworkPoint<Points<f64>, &[(f64, f64)], Complex64> for Points<Complex64> {
         Some(out)
     }
 
-    fn h_to_s(&self, z0: &Array1<Complex64>) -> Option<Points<Complex64>> {
-        let mut out = Points::zeros(self.dim());
+    fn h_to_s(&self, z0: ArrayView1<Complex64>) -> Option<Points<Complex64, Ix3>> {
+        let mut out = Points::<Complex64, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<Complex64>::new(self.slice(s![i, .., ..]).to_owned()).h_to_s(z0) {
@@ -328,8 +342,8 @@ impl NetworkPoint<Points<f64>, &[(f64, f64)], Complex64> for Points<Complex64> {
         Some(out)
     }
 
-    fn h_to_t(&self, z0: &Array1<Complex64>) -> Option<Points<Complex64>> {
-        let mut out = Points::zeros(self.dim());
+    fn h_to_t(&self, z0: ArrayView1<Complex64>) -> Option<Points<Complex64, Ix3>> {
+        let mut out = Points::<Complex64, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<Complex64>::new(self.slice(s![i, .., ..]).to_owned()).h_to_t(z0) {
@@ -342,8 +356,8 @@ impl NetworkPoint<Points<f64>, &[(f64, f64)], Complex64> for Points<Complex64> {
         Some(out)
     }
 
-    fn h_to_y(&self) -> Option<Points<Complex64>> {
-        let mut out = Points::zeros(self.dim());
+    fn h_to_y(&self) -> Option<Points<Complex64, Ix3>> {
+        let mut out = Points::<Complex64, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<Complex64>::new(self.slice(s![i, .., ..]).to_owned()).h_to_y() {
@@ -356,8 +370,8 @@ impl NetworkPoint<Points<f64>, &[(f64, f64)], Complex64> for Points<Complex64> {
         Some(out)
     }
 
-    fn h_to_z(&self) -> Option<Points<Complex64>> {
-        let mut out = Points::zeros(self.dim());
+    fn h_to_z(&self) -> Option<Points<Complex64, Ix3>> {
+        let mut out = Points::<Complex64, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<Complex64>::new(self.slice(s![i, .., ..]).to_owned()).h_to_z() {
@@ -374,8 +388,8 @@ impl NetworkPoint<Points<f64>, &[(f64, f64)], Complex64> for Points<Complex64> {
     //     Point::<Complex64>::one()
     // }
 
-    fn im(&self) -> Points<f64> {
-        let mut out = Points::<f64>::zeros(self.dim());
+    fn im(&self) -> Points<f64, Ix3> {
+        let mut out = Points::<f64, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             pt.assign(
                 &Point::<Complex64>::new(self.slice(s![i, .., ..]).to_owned())
@@ -391,8 +405,8 @@ impl NetworkPoint<Points<f64>, &[(f64, f64)], Complex64> for Points<Complex64> {
         true
     }
 
-    fn mag(&self) -> Points<f64> {
-        let mut out = Points::<f64>::zeros(self.dim());
+    fn mag(&self) -> Points<f64, Ix3> {
+        let mut out = Points::<f64, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             pt.assign(
                 &Point::<Complex64>::new(self.slice(s![i, .., ..]).to_owned())
@@ -404,8 +418,8 @@ impl NetworkPoint<Points<f64>, &[(f64, f64)], Complex64> for Points<Complex64> {
         out
     }
 
-    fn new_like(pt: &Points<Complex64>) -> Points<Complex64> {
-        Points::zeros(pt.dim())
+    fn new_like(pt: &Points<Complex64, Ix3>) -> Points<Complex64, Ix3> {
+        Points::<Complex64, Ix3>::zeros(pt.dim().into_dimension())
     }
 
     // fn ones() -> Point {
@@ -414,8 +428,8 @@ impl NetworkPoint<Points<f64>, &[(f64, f64)], Complex64> for Points<Complex64> {
     //     val
     // }
 
-    fn rad(&self) -> Points<f64> {
-        let mut out = Points::<f64>::zeros(self.dim());
+    fn rad(&self) -> Points<f64, Ix3> {
+        let mut out = Points::<f64, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             pt.assign(
                 &Point::<Complex64>::new(self.slice(s![i, .., ..]).to_owned())
@@ -427,8 +441,8 @@ impl NetworkPoint<Points<f64>, &[(f64, f64)], Complex64> for Points<Complex64> {
         out
     }
 
-    fn re(&self) -> Points<f64> {
-        let mut out = Points::<f64>::zeros(self.dim());
+    fn re(&self) -> Points<f64, Ix3> {
+        let mut out = Points::<f64, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             pt.assign(
                 &Point::<Complex64>::new(self.slice(s![i, .., ..]).to_owned())
@@ -440,8 +454,8 @@ impl NetworkPoint<Points<f64>, &[(f64, f64)], Complex64> for Points<Complex64> {
         out
     }
 
-    fn reciprocity(&self) -> Option<Points<f64>> {
-        let mut out = Points::<f64>::zeros(self.dim());
+    fn reciprocity(&self) -> Option<Points<f64, Ix3>> {
+        let mut out = Points::<f64, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let val =
                 match Point::<Complex64>::new(self.slice(s![i, .., ..]).to_owned()).reciprocity() {
@@ -453,8 +467,8 @@ impl NetworkPoint<Points<f64>, &[(f64, f64)], Complex64> for Points<Complex64> {
         Some(out)
     }
 
-    fn s_to_a(&self, z0: &Array1<Complex64>) -> Option<Points<Complex64>> {
-        let mut out = Points::zeros(self.dim());
+    fn s_to_a(&self, z0: ArrayView1<Complex64>) -> Option<Points<Complex64, Ix3>> {
+        let mut out = Points::<Complex64, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<Complex64>::new(self.slice(s![i, .., ..]).to_owned()).s_to_a(z0) {
@@ -467,8 +481,8 @@ impl NetworkPoint<Points<f64>, &[(f64, f64)], Complex64> for Points<Complex64> {
         Some(out)
     }
 
-    fn s_to_g(&self, z0: &Array1<Complex64>) -> Option<Points<Complex64>> {
-        let mut out = Points::zeros(self.dim());
+    fn s_to_g(&self, z0: ArrayView1<Complex64>) -> Option<Points<Complex64, Ix3>> {
+        let mut out = Points::<Complex64, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<Complex64>::new(self.slice(s![i, .., ..]).to_owned()).s_to_g(z0) {
@@ -481,8 +495,8 @@ impl NetworkPoint<Points<f64>, &[(f64, f64)], Complex64> for Points<Complex64> {
         Some(out)
     }
 
-    fn s_to_h(&self, z0: &Array1<Complex64>) -> Option<Points<Complex64>> {
-        let mut out = Points::zeros(self.dim());
+    fn s_to_h(&self, z0: ArrayView1<Complex64>) -> Option<Points<Complex64, Ix3>> {
+        let mut out = Points::<Complex64, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<Complex64>::new(self.slice(s![i, .., ..]).to_owned()).s_to_h(z0) {
@@ -495,11 +509,11 @@ impl NetworkPoint<Points<f64>, &[(f64, f64)], Complex64> for Points<Complex64> {
         Some(out)
     }
 
-    fn s_to_s(&self, z0: &Array1<c64>, from: WaveType, to: WaveType) -> Option<Self>
+    fn s_to_s(&self, z0: ArrayView1<c64>, from: WaveType, to: WaveType) -> Option<Self>
     where
         Self: Sized,
     {
-        let mut out = Points::zeros(self.dim());
+        let mut out = Points::<Complex64, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val = match Point::<Complex64>::new(self.slice(s![i, .., ..]).to_owned())
                 .s_to_s(z0, from, to)
@@ -513,8 +527,8 @@ impl NetworkPoint<Points<f64>, &[(f64, f64)], Complex64> for Points<Complex64> {
         Some(out)
     }
 
-    fn s_to_t(&self) -> Option<Points<Complex64>> {
-        let mut out = Points::zeros(self.dim());
+    fn s_to_t(&self) -> Option<Points<Complex64, Ix3>> {
+        let mut out = Points::<Complex64, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<Complex64>::new(self.slice(s![i, .., ..]).to_owned()).s_to_t() {
@@ -527,8 +541,8 @@ impl NetworkPoint<Points<f64>, &[(f64, f64)], Complex64> for Points<Complex64> {
         Some(out)
     }
 
-    fn s_to_y(&self, z0: &Array1<Complex64>) -> Option<Points<Complex64>> {
-        let mut out = Points::zeros(self.dim());
+    fn s_to_y(&self, z0: ArrayView1<Complex64>) -> Option<Points<Complex64, Ix3>> {
+        let mut out = Points::<Complex64, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<Complex64>::new(self.slice(s![i, .., ..]).to_owned()).s_to_y(z0) {
@@ -541,8 +555,8 @@ impl NetworkPoint<Points<f64>, &[(f64, f64)], Complex64> for Points<Complex64> {
         Some(out)
     }
 
-    fn s_to_z(&self, z0: &Array1<Complex64>) -> Option<Points<Complex64>> {
-        let mut out = Points::zeros(self.dim());
+    fn s_to_z(&self, z0: ArrayView1<Complex64>) -> Option<Points<Complex64, Ix3>> {
+        let mut out = Points::<Complex64, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<Complex64>::new(self.slice(s![i, .., ..]).to_owned()).s_to_z(z0) {
@@ -555,8 +569,8 @@ impl NetworkPoint<Points<f64>, &[(f64, f64)], Complex64> for Points<Complex64> {
         Some(out)
     }
 
-    fn t_to_a(&self, z0: &Array1<Complex64>) -> Option<Points<Complex64>> {
-        let mut out = Points::zeros(self.dim());
+    fn t_to_a(&self, z0: ArrayView1<Complex64>) -> Option<Points<Complex64, Ix3>> {
+        let mut out = Points::<Complex64, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<Complex64>::new(self.slice(s![i, .., ..]).to_owned()).t_to_a(z0) {
@@ -569,8 +583,8 @@ impl NetworkPoint<Points<f64>, &[(f64, f64)], Complex64> for Points<Complex64> {
         Some(out)
     }
 
-    fn t_to_g(&self, z0: &Array1<Complex64>) -> Option<Points<Complex64>> {
-        let mut out = Points::zeros(self.dim());
+    fn t_to_g(&self, z0: ArrayView1<Complex64>) -> Option<Points<Complex64, Ix3>> {
+        let mut out = Points::<Complex64, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<Complex64>::new(self.slice(s![i, .., ..]).to_owned()).t_to_g(z0) {
@@ -583,8 +597,8 @@ impl NetworkPoint<Points<f64>, &[(f64, f64)], Complex64> for Points<Complex64> {
         Some(out)
     }
 
-    fn t_to_h(&self, z0: &Array1<Complex64>) -> Option<Points<Complex64>> {
-        let mut out = Points::zeros(self.dim());
+    fn t_to_h(&self, z0: ArrayView1<Complex64>) -> Option<Points<Complex64, Ix3>> {
+        let mut out = Points::<Complex64, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<Complex64>::new(self.slice(s![i, .., ..]).to_owned()).t_to_h(z0) {
@@ -597,8 +611,8 @@ impl NetworkPoint<Points<f64>, &[(f64, f64)], Complex64> for Points<Complex64> {
         Some(out)
     }
 
-    fn t_to_s(&self) -> Option<Points<Complex64>> {
-        let mut out = Points::zeros(self.dim());
+    fn t_to_s(&self) -> Option<Points<Complex64, Ix3>> {
+        let mut out = Points::<Complex64, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<Complex64>::new(self.slice(s![i, .., ..]).to_owned()).t_to_s() {
@@ -611,8 +625,8 @@ impl NetworkPoint<Points<f64>, &[(f64, f64)], Complex64> for Points<Complex64> {
         Some(out)
     }
 
-    fn t_to_y(&self, z0: &Array1<Complex64>) -> Option<Points<Complex64>> {
-        let mut out = Points::zeros(self.dim());
+    fn t_to_y(&self, z0: ArrayView1<Complex64>) -> Option<Points<Complex64, Ix3>> {
+        let mut out = Points::<Complex64, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<Complex64>::new(self.slice(s![i, .., ..]).to_owned()).t_to_y(z0) {
@@ -625,8 +639,8 @@ impl NetworkPoint<Points<f64>, &[(f64, f64)], Complex64> for Points<Complex64> {
         Some(out)
     }
 
-    fn t_to_z(&self, z0: &Array1<Complex64>) -> Option<Points<Complex64>> {
-        let mut out = Points::zeros(self.dim());
+    fn t_to_z(&self, z0: ArrayView1<Complex64>) -> Option<Points<Complex64, Ix3>> {
+        let mut out = Points::<Complex64, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<Complex64>::new(self.slice(s![i, .., ..]).to_owned()).t_to_z(z0) {
@@ -639,8 +653,8 @@ impl NetworkPoint<Points<f64>, &[(f64, f64)], Complex64> for Points<Complex64> {
         Some(out)
     }
 
-    fn y_to_a(&self) -> Option<Points<Complex64>> {
-        let mut out = Points::zeros(self.dim());
+    fn y_to_a(&self) -> Option<Points<Complex64, Ix3>> {
+        let mut out = Points::<Complex64, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<Complex64>::new(self.slice(s![i, .., ..]).to_owned()).y_to_a() {
@@ -653,8 +667,8 @@ impl NetworkPoint<Points<f64>, &[(f64, f64)], Complex64> for Points<Complex64> {
         Some(out)
     }
 
-    fn y_to_g(&self) -> Option<Points<Complex64>> {
-        let mut out = Points::zeros(self.dim());
+    fn y_to_g(&self) -> Option<Points<Complex64, Ix3>> {
+        let mut out = Points::<Complex64, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<Complex64>::new(self.slice(s![i, .., ..]).to_owned()).y_to_g() {
@@ -667,8 +681,8 @@ impl NetworkPoint<Points<f64>, &[(f64, f64)], Complex64> for Points<Complex64> {
         Some(out)
     }
 
-    fn y_to_h(&self) -> Option<Points<Complex64>> {
-        let mut out = Points::zeros(self.dim());
+    fn y_to_h(&self) -> Option<Points<Complex64, Ix3>> {
+        let mut out = Points::<Complex64, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<Complex64>::new(self.slice(s![i, .., ..]).to_owned()).y_to_h() {
@@ -681,8 +695,8 @@ impl NetworkPoint<Points<f64>, &[(f64, f64)], Complex64> for Points<Complex64> {
         Some(out)
     }
 
-    fn y_to_s(&self, z0: &Array1<Complex64>) -> Option<Points<Complex64>> {
-        let mut out = Points::zeros(self.dim());
+    fn y_to_s(&self, z0: ArrayView1<Complex64>) -> Option<Points<Complex64, Ix3>> {
+        let mut out = Points::<Complex64, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<Complex64>::new(self.slice(s![i, .., ..]).to_owned()).y_to_s(z0) {
@@ -695,8 +709,8 @@ impl NetworkPoint<Points<f64>, &[(f64, f64)], Complex64> for Points<Complex64> {
         Some(out)
     }
 
-    fn y_to_t(&self, z0: &Array1<Complex64>) -> Option<Points<Complex64>> {
-        let mut out = Points::zeros(self.dim());
+    fn y_to_t(&self, z0: ArrayView1<Complex64>) -> Option<Points<Complex64, Ix3>> {
+        let mut out = Points::<Complex64, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<Complex64>::new(self.slice(s![i, .., ..]).to_owned()).y_to_t(z0) {
@@ -709,8 +723,8 @@ impl NetworkPoint<Points<f64>, &[(f64, f64)], Complex64> for Points<Complex64> {
         Some(out)
     }
 
-    fn y_to_z(&self) -> Option<Points<Complex64>> {
-        let mut out = Points::zeros(self.dim());
+    fn y_to_z(&self) -> Option<Points<Complex64, Ix3>> {
+        let mut out = Points::<Complex64, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<Complex64>::new(self.slice(s![i, .., ..]).to_owned()).y_to_z() {
@@ -723,8 +737,8 @@ impl NetworkPoint<Points<f64>, &[(f64, f64)], Complex64> for Points<Complex64> {
         Some(out)
     }
 
-    fn z_to_a(&self) -> Option<Points<Complex64>> {
-        let mut out = Points::zeros(self.dim());
+    fn z_to_a(&self) -> Option<Points<Complex64, Ix3>> {
+        let mut out = Points::<Complex64, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<Complex64>::new(self.slice(s![i, .., ..]).to_owned()).z_to_a() {
@@ -737,8 +751,8 @@ impl NetworkPoint<Points<f64>, &[(f64, f64)], Complex64> for Points<Complex64> {
         Some(out)
     }
 
-    fn z_to_g(&self) -> Option<Points<Complex64>> {
-        let mut out = Points::zeros(self.dim());
+    fn z_to_g(&self) -> Option<Points<Complex64, Ix3>> {
+        let mut out = Points::<Complex64, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<Complex64>::new(self.slice(s![i, .., ..]).to_owned()).z_to_g() {
@@ -751,8 +765,8 @@ impl NetworkPoint<Points<f64>, &[(f64, f64)], Complex64> for Points<Complex64> {
         Some(out)
     }
 
-    fn z_to_h(&self) -> Option<Points<Complex64>> {
-        let mut out = Points::zeros(self.dim());
+    fn z_to_h(&self) -> Option<Points<Complex64, Ix3>> {
+        let mut out = Points::<Complex64, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<Complex64>::new(self.slice(s![i, .., ..]).to_owned()).z_to_h() {
@@ -765,8 +779,8 @@ impl NetworkPoint<Points<f64>, &[(f64, f64)], Complex64> for Points<Complex64> {
         Some(out)
     }
 
-    fn z_to_s(&self, z0: &Array1<Complex64>) -> Option<Points<Complex64>> {
-        let mut out = Points::zeros(self.dim());
+    fn z_to_s(&self, z0: ArrayView1<Complex64>) -> Option<Points<Complex64, Ix3>> {
+        let mut out = Points::<Complex64, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<Complex64>::new(self.slice(s![i, .., ..]).to_owned()).z_to_s(z0) {
@@ -779,8 +793,8 @@ impl NetworkPoint<Points<f64>, &[(f64, f64)], Complex64> for Points<Complex64> {
         Some(out)
     }
 
-    fn z_to_t(&self, z0: &Array1<Complex64>) -> Option<Points<Complex64>> {
-        let mut out = Points::zeros(self.dim());
+    fn z_to_t(&self, z0: ArrayView1<Complex64>) -> Option<Points<Complex64, Ix3>> {
+        let mut out = Points::<Complex64, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<Complex64>::new(self.slice(s![i, .., ..]).to_owned()).z_to_t(z0) {
@@ -793,8 +807,8 @@ impl NetworkPoint<Points<f64>, &[(f64, f64)], Complex64> for Points<Complex64> {
         Some(out)
     }
 
-    fn z_to_y(&self) -> Option<Points<Complex64>> {
-        let mut out = Points::zeros(self.dim());
+    fn z_to_y(&self) -> Option<Points<Complex64, Ix3>> {
+        let mut out = Points::<Complex64, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<Complex64>::new(self.slice(s![i, .., ..]).to_owned()).z_to_y() {
@@ -808,9 +822,11 @@ impl NetworkPoint<Points<f64>, &[(f64, f64)], Complex64> for Points<Complex64> {
     }
 }
 
-impl NetworkPoint<Points<MyFloat>, &[(MyFloat, MyFloat)], MyComplex> for Points<MyComplex> {
-    fn a_to_g(&self) -> Option<Points<MyComplex>> {
-        let mut out = Points::zeros(self.dim());
+impl NetworkPoint<Points<MyFloat, Ix3>, &[(MyFloat, MyFloat)], MyComplex>
+    for Points<MyComplex, Ix3>
+{
+    fn a_to_g(&self) -> Option<Points<MyComplex, Ix3>> {
+        let mut out = Points::<MyComplex, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<MyComplex>::new(self.slice(s![i, .., ..]).to_owned()).a_to_g() {
@@ -823,8 +839,8 @@ impl NetworkPoint<Points<MyFloat>, &[(MyFloat, MyFloat)], MyComplex> for Points<
         Some(out)
     }
 
-    fn a_to_h(&self) -> Option<Points<MyComplex>> {
-        let mut out = Points::zeros(self.dim());
+    fn a_to_h(&self) -> Option<Points<MyComplex, Ix3>> {
+        let mut out = Points::<MyComplex, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<MyComplex>::new(self.slice(s![i, .., ..]).to_owned()).a_to_h() {
@@ -837,8 +853,8 @@ impl NetworkPoint<Points<MyFloat>, &[(MyFloat, MyFloat)], MyComplex> for Points<
         Some(out)
     }
 
-    fn a_to_s(&self, z0: &Array1<MyComplex>) -> Option<Points<MyComplex>> {
-        let mut out = Points::zeros(self.dim());
+    fn a_to_s(&self, z0: ArrayView1<MyComplex>) -> Option<Points<MyComplex, Ix3>> {
+        let mut out = Points::<MyComplex, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<MyComplex>::new(self.slice(s![i, .., ..]).to_owned()).a_to_s(z0) {
@@ -851,8 +867,8 @@ impl NetworkPoint<Points<MyFloat>, &[(MyFloat, MyFloat)], MyComplex> for Points<
         Some(out)
     }
 
-    fn a_to_t(&self, z0: &Array1<MyComplex>) -> Option<Points<MyComplex>> {
-        let mut out = Points::zeros(self.dim());
+    fn a_to_t(&self, z0: ArrayView1<MyComplex>) -> Option<Points<MyComplex, Ix3>> {
+        let mut out = Points::<MyComplex, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<MyComplex>::new(self.slice(s![i, .., ..]).to_owned()).a_to_t(z0) {
@@ -865,8 +881,8 @@ impl NetworkPoint<Points<MyFloat>, &[(MyFloat, MyFloat)], MyComplex> for Points<
         Some(out)
     }
 
-    fn a_to_y(&self) -> Option<Points<MyComplex>> {
-        let mut out = Points::zeros(self.dim());
+    fn a_to_y(&self) -> Option<Points<MyComplex, Ix3>> {
+        let mut out = Points::<MyComplex, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<MyComplex>::new(self.slice(s![i, .., ..]).to_owned()).a_to_y() {
@@ -879,8 +895,8 @@ impl NetworkPoint<Points<MyFloat>, &[(MyFloat, MyFloat)], MyComplex> for Points<
         Some(out)
     }
 
-    fn a_to_z(&self) -> Option<Points<MyComplex>> {
-        let mut out = Points::zeros(self.dim());
+    fn a_to_z(&self) -> Option<Points<MyComplex, Ix3>> {
+        let mut out = Points::<MyComplex, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<MyComplex>::new(self.slice(s![i, .., ..]).to_owned()).a_to_z() {
@@ -893,8 +909,13 @@ impl NetworkPoint<Points<MyFloat>, &[(MyFloat, MyFloat)], MyComplex> for Points<
         Some(out)
     }
 
-    fn connect(&self, p1: usize, net: &Points<MyComplex>, p2: usize) -> Option<Points<MyComplex>> {
-        let mut out = Points::zeros(self.dim());
+    fn connect(
+        &self,
+        p1: usize,
+        net: &Points<MyComplex, Ix3>,
+        p2: usize,
+    ) -> Option<Points<MyComplex, Ix3>> {
+        let mut out = Points::<MyComplex, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let val = match Point::<MyComplex>::new(self.slice(s![i, .., ..]).to_owned()).connect(
                 p1,
@@ -910,8 +931,8 @@ impl NetworkPoint<Points<MyFloat>, &[(MyFloat, MyFloat)], MyComplex> for Points<
         Some(out)
     }
 
-    fn db(&self) -> Points<MyFloat> {
-        let mut out = Points::<MyFloat>::zeros(self.dim());
+    fn db(&self) -> Points<MyFloat, Ix3> {
+        let mut out = Points::<MyFloat, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             pt.assign(
                 &Point::<MyComplex>::new(self.slice(s![i, .., ..]).to_owned())
@@ -923,8 +944,8 @@ impl NetworkPoint<Points<MyFloat>, &[(MyFloat, MyFloat)], MyComplex> for Points<
         out
     }
 
-    fn deg(&self) -> Points<MyFloat> {
-        let mut out = Points::<MyFloat>::zeros(self.dim());
+    fn deg(&self) -> Points<MyFloat, Ix3> {
+        let mut out = Points::<MyFloat, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             pt.assign(
                 &Point::<MyComplex>::new(self.slice(s![i, .., ..]).to_owned())
@@ -936,10 +957,10 @@ impl NetworkPoint<Points<MyFloat>, &[(MyFloat, MyFloat)], MyComplex> for Points<
         out
     }
 
-    fn from_db(data: &[&[(MyFloat, MyFloat)]]) -> Points<MyComplex> {
+    fn from_db(data: &[&[(MyFloat, MyFloat)]]) -> Points<MyComplex, Ix3> {
         let nports = (data[0].len() as f64).sqrt() as usize;
         let npoints = data.len();
-        Points::from_shape_fn((npoints, nports, nports), |(i, j, k)| {
+        Points::<MyComplex, Ix3>::from_shape_fn((npoints, nports, nports).into_dimension(), |(i, j, k)| {
             MyComplex::from_polar(
                 &MyFloat::new(10_f64).pow(&data[i][j * nports + k].0 / 20.0),
                 &MyFloat::to_radians(&data[i][j * nports + k].1),
@@ -947,10 +968,10 @@ impl NetworkPoint<Points<MyFloat>, &[(MyFloat, MyFloat)], MyComplex> for Points<
         })
     }
 
-    fn from_ma(data: &[&[(MyFloat, MyFloat)]]) -> Points<MyComplex> {
+    fn from_ma(data: &[&[(MyFloat, MyFloat)]]) -> Points<MyComplex, Ix3> {
         let nports = (data[0].len() as f64).sqrt() as usize;
         let npoints = data.len();
-        Points::from_shape_fn((npoints, nports, nports), |(i, j, k)| {
+        Points::<MyComplex, Ix3>::from_shape_fn((npoints, nports, nports).into_dimension(), |(i, j, k)| {
             MyComplex::from_polar(
                 &data[i][j * nports + k].0,
                 &MyFloat::to_radians(&data[i][j * nports + k].1),
@@ -958,10 +979,10 @@ impl NetworkPoint<Points<MyFloat>, &[(MyFloat, MyFloat)], MyComplex> for Points<
         })
     }
 
-    fn from_ri(data: &[&[(MyFloat, MyFloat)]]) -> Points<MyComplex> {
+    fn from_ri(data: &[&[(MyFloat, MyFloat)]]) -> Points<MyComplex, Ix3> {
         let nports = (data[0].len() as f64).sqrt() as usize;
         let npoints = data.len();
-        Points::from_shape_fn((npoints, nports, nports), |(i, j, k)| {
+        Points::<MyComplex, Ix3>::from_shape_fn((npoints, nports, nports).into_dimension(), |(i, j, k)| {
             MyComplex::from_tuple(&data[i][j * nports + k])
         })
     }
@@ -982,8 +1003,8 @@ impl NetworkPoint<Points<MyFloat>, &[(MyFloat, MyFloat)], MyComplex> for Points<
     //     Point::<MyComplex>::from_vec(data)
     // }
 
-    fn g_to_a(&self) -> Option<Points<MyComplex>> {
-        let mut out = Points::zeros(self.dim());
+    fn g_to_a(&self) -> Option<Points<MyComplex, Ix3>> {
+        let mut out = Points::<MyComplex, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<MyComplex>::new(self.slice(s![i, .., ..]).to_owned()).g_to_a() {
@@ -996,8 +1017,8 @@ impl NetworkPoint<Points<MyFloat>, &[(MyFloat, MyFloat)], MyComplex> for Points<
         Some(out)
     }
 
-    fn g_to_h(&self) -> Option<Points<MyComplex>> {
-        let mut out = Points::zeros(self.dim());
+    fn g_to_h(&self) -> Option<Points<MyComplex, Ix3>> {
+        let mut out = Points::<MyComplex, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<MyComplex>::new(self.slice(s![i, .., ..]).to_owned()).g_to_h() {
@@ -1010,8 +1031,8 @@ impl NetworkPoint<Points<MyFloat>, &[(MyFloat, MyFloat)], MyComplex> for Points<
         Some(out)
     }
 
-    fn g_to_s(&self, z0: &Array1<MyComplex>) -> Option<Points<MyComplex>> {
-        let mut out = Points::zeros(self.dim());
+    fn g_to_s(&self, z0: ArrayView1<MyComplex>) -> Option<Points<MyComplex, Ix3>> {
+        let mut out = Points::<MyComplex, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<MyComplex>::new(self.slice(s![i, .., ..]).to_owned()).g_to_s(z0) {
@@ -1024,8 +1045,8 @@ impl NetworkPoint<Points<MyFloat>, &[(MyFloat, MyFloat)], MyComplex> for Points<
         Some(out)
     }
 
-    fn g_to_t(&self, z0: &Array1<MyComplex>) -> Option<Points<MyComplex>> {
-        let mut out = Points::zeros(self.dim());
+    fn g_to_t(&self, z0: ArrayView1<MyComplex>) -> Option<Points<MyComplex, Ix3>> {
+        let mut out = Points::<MyComplex, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<MyComplex>::new(self.slice(s![i, .., ..]).to_owned()).g_to_t(z0) {
@@ -1038,8 +1059,8 @@ impl NetworkPoint<Points<MyFloat>, &[(MyFloat, MyFloat)], MyComplex> for Points<
         Some(out)
     }
 
-    fn g_to_y(&self) -> Option<Points<MyComplex>> {
-        let mut out = Points::zeros(self.dim());
+    fn g_to_y(&self) -> Option<Points<MyComplex, Ix3>> {
+        let mut out = Points::<MyComplex, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<MyComplex>::new(self.slice(s![i, .., ..]).to_owned()).g_to_y() {
@@ -1052,8 +1073,8 @@ impl NetworkPoint<Points<MyFloat>, &[(MyFloat, MyFloat)], MyComplex> for Points<
         Some(out)
     }
 
-    fn g_to_z(&self) -> Option<Points<MyComplex>> {
-        let mut out = Points::zeros(self.dim());
+    fn g_to_z(&self) -> Option<Points<MyComplex, Ix3>> {
+        let mut out = Points::<MyComplex, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<MyComplex>::new(self.slice(s![i, .., ..]).to_owned()).g_to_z() {
@@ -1066,8 +1087,8 @@ impl NetworkPoint<Points<MyFloat>, &[(MyFloat, MyFloat)], MyComplex> for Points<
         Some(out)
     }
 
-    fn h_to_a(&self) -> Option<Points<MyComplex>> {
-        let mut out = Points::zeros(self.dim());
+    fn h_to_a(&self) -> Option<Points<MyComplex, Ix3>> {
+        let mut out = Points::<MyComplex, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<MyComplex>::new(self.slice(s![i, .., ..]).to_owned()).h_to_a() {
@@ -1080,8 +1101,8 @@ impl NetworkPoint<Points<MyFloat>, &[(MyFloat, MyFloat)], MyComplex> for Points<
         Some(out)
     }
 
-    fn h_to_g(&self) -> Option<Points<MyComplex>> {
-        let mut out = Points::zeros(self.dim());
+    fn h_to_g(&self) -> Option<Points<MyComplex, Ix3>> {
+        let mut out = Points::<MyComplex, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<MyComplex>::new(self.slice(s![i, .., ..]).to_owned()).h_to_g() {
@@ -1094,8 +1115,8 @@ impl NetworkPoint<Points<MyFloat>, &[(MyFloat, MyFloat)], MyComplex> for Points<
         Some(out)
     }
 
-    fn h_to_s(&self, z0: &Array1<MyComplex>) -> Option<Points<MyComplex>> {
-        let mut out = Points::zeros(self.dim());
+    fn h_to_s(&self, z0: ArrayView1<MyComplex>) -> Option<Points<MyComplex, Ix3>> {
+        let mut out = Points::<MyComplex, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<MyComplex>::new(self.slice(s![i, .., ..]).to_owned()).h_to_s(z0) {
@@ -1108,8 +1129,8 @@ impl NetworkPoint<Points<MyFloat>, &[(MyFloat, MyFloat)], MyComplex> for Points<
         Some(out)
     }
 
-    fn h_to_t(&self, z0: &Array1<MyComplex>) -> Option<Points<MyComplex>> {
-        let mut out = Points::zeros(self.dim());
+    fn h_to_t(&self, z0: ArrayView1<MyComplex>) -> Option<Points<MyComplex, Ix3>> {
+        let mut out = Points::<MyComplex, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<MyComplex>::new(self.slice(s![i, .., ..]).to_owned()).h_to_t(z0) {
@@ -1122,8 +1143,8 @@ impl NetworkPoint<Points<MyFloat>, &[(MyFloat, MyFloat)], MyComplex> for Points<
         Some(out)
     }
 
-    fn h_to_y(&self) -> Option<Points<MyComplex>> {
-        let mut out = Points::zeros(self.dim());
+    fn h_to_y(&self) -> Option<Points<MyComplex, Ix3>> {
+        let mut out = Points::<MyComplex, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<MyComplex>::new(self.slice(s![i, .., ..]).to_owned()).h_to_y() {
@@ -1136,8 +1157,8 @@ impl NetworkPoint<Points<MyFloat>, &[(MyFloat, MyFloat)], MyComplex> for Points<
         Some(out)
     }
 
-    fn h_to_z(&self) -> Option<Points<MyComplex>> {
-        let mut out = Points::zeros(self.dim());
+    fn h_to_z(&self) -> Option<Points<MyComplex, Ix3>> {
+        let mut out = Points::<MyComplex, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<MyComplex>::new(self.slice(s![i, .., ..]).to_owned()).h_to_z() {
@@ -1154,8 +1175,8 @@ impl NetworkPoint<Points<MyFloat>, &[(MyFloat, MyFloat)], MyComplex> for Points<
     //     Point::<MyComplex>::one()
     // }
 
-    fn im(&self) -> Points<MyFloat> {
-        let mut out = Points::<MyFloat>::zeros(self.dim());
+    fn im(&self) -> Points<MyFloat, Ix3> {
+        let mut out = Points::<MyFloat, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             pt.assign(
                 &Point::<MyComplex>::new(self.slice(s![i, .., ..]).to_owned())
@@ -1171,8 +1192,8 @@ impl NetworkPoint<Points<MyFloat>, &[(MyFloat, MyFloat)], MyComplex> for Points<
         true
     }
 
-    fn mag(&self) -> Points<MyFloat> {
-        let mut out = Points::<MyFloat>::zeros(self.dim());
+    fn mag(&self) -> Points<MyFloat, Ix3> {
+        let mut out = Points::<MyFloat, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             pt.assign(
                 &Point::<MyComplex>::new(self.slice(s![i, .., ..]).to_owned())
@@ -1184,8 +1205,8 @@ impl NetworkPoint<Points<MyFloat>, &[(MyFloat, MyFloat)], MyComplex> for Points<
         out
     }
 
-    fn new_like(pt: &Points<MyComplex>) -> Points<MyComplex> {
-        Points::zeros(pt.dim())
+    fn new_like(pt: &Points<MyComplex, Ix3>) -> Points<MyComplex, Ix3> {
+        Points::<MyComplex, Ix3>::zeros(pt.dim().into_dimension())
     }
 
     // fn ones() -> Point {
@@ -1194,8 +1215,8 @@ impl NetworkPoint<Points<MyFloat>, &[(MyFloat, MyFloat)], MyComplex> for Points<
     //     val
     // }
 
-    fn rad(&self) -> Points<MyFloat> {
-        let mut out = Points::<MyFloat>::zeros(self.dim());
+    fn rad(&self) -> Points<MyFloat, Ix3> {
+        let mut out = Points::<MyFloat, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             pt.assign(
                 &Point::<MyComplex>::new(self.slice(s![i, .., ..]).to_owned())
@@ -1207,8 +1228,8 @@ impl NetworkPoint<Points<MyFloat>, &[(MyFloat, MyFloat)], MyComplex> for Points<
         out
     }
 
-    fn re(&self) -> Points<MyFloat> {
-        let mut out = Points::<MyFloat>::zeros(self.dim());
+    fn re(&self) -> Points<MyFloat, Ix3> {
+        let mut out = Points::<MyFloat, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             pt.assign(
                 &Point::<MyComplex>::new(self.slice(s![i, .., ..]).to_owned())
@@ -1220,8 +1241,8 @@ impl NetworkPoint<Points<MyFloat>, &[(MyFloat, MyFloat)], MyComplex> for Points<
         out
     }
 
-    fn reciprocity(&self) -> Option<Points<MyFloat>> {
-        let mut out = Points::<MyFloat>::zeros(self.dim());
+    fn reciprocity(&self) -> Option<Points<MyFloat, Ix3>> {
+        let mut out = Points::<MyFloat, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let val =
                 match Point::<MyComplex>::new(self.slice(s![i, .., ..]).to_owned()).reciprocity() {
@@ -1233,8 +1254,8 @@ impl NetworkPoint<Points<MyFloat>, &[(MyFloat, MyFloat)], MyComplex> for Points<
         Some(out)
     }
 
-    fn s_to_a(&self, z0: &Array1<MyComplex>) -> Option<Points<MyComplex>> {
-        let mut out = Points::zeros(self.dim());
+    fn s_to_a(&self, z0: ArrayView1<MyComplex>) -> Option<Points<MyComplex, Ix3>> {
+        let mut out = Points::<MyComplex, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<MyComplex>::new(self.slice(s![i, .., ..]).to_owned()).s_to_a(z0) {
@@ -1247,8 +1268,8 @@ impl NetworkPoint<Points<MyFloat>, &[(MyFloat, MyFloat)], MyComplex> for Points<
         Some(out)
     }
 
-    fn s_to_g(&self, z0: &Array1<MyComplex>) -> Option<Points<MyComplex>> {
-        let mut out = Points::zeros(self.dim());
+    fn s_to_g(&self, z0: ArrayView1<MyComplex>) -> Option<Points<MyComplex, Ix3>> {
+        let mut out = Points::<MyComplex, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<MyComplex>::new(self.slice(s![i, .., ..]).to_owned()).s_to_g(z0) {
@@ -1261,8 +1282,8 @@ impl NetworkPoint<Points<MyFloat>, &[(MyFloat, MyFloat)], MyComplex> for Points<
         Some(out)
     }
 
-    fn s_to_h(&self, z0: &Array1<MyComplex>) -> Option<Points<MyComplex>> {
-        let mut out = Points::zeros(self.dim());
+    fn s_to_h(&self, z0: ArrayView1<MyComplex>) -> Option<Points<MyComplex, Ix3>> {
+        let mut out = Points::<MyComplex, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<MyComplex>::new(self.slice(s![i, .., ..]).to_owned()).s_to_h(z0) {
@@ -1275,11 +1296,11 @@ impl NetworkPoint<Points<MyFloat>, &[(MyFloat, MyFloat)], MyComplex> for Points<
         Some(out)
     }
 
-    fn s_to_s(&self, z0: &Array1<MyComplex>, from: WaveType, to: WaveType) -> Option<Self>
+    fn s_to_s(&self, z0: ArrayView1<MyComplex>, from: WaveType, to: WaveType) -> Option<Self>
     where
         Self: Sized,
     {
-        let mut out = Points::zeros(self.dim());
+        let mut out = Points::<MyComplex, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val = match Point::<MyComplex>::new(self.slice(s![i, .., ..]).to_owned())
                 .s_to_s(z0, from, to)
@@ -1293,8 +1314,8 @@ impl NetworkPoint<Points<MyFloat>, &[(MyFloat, MyFloat)], MyComplex> for Points<
         Some(out)
     }
 
-    fn s_to_t(&self) -> Option<Points<MyComplex>> {
-        let mut out = Points::zeros(self.dim());
+    fn s_to_t(&self) -> Option<Points<MyComplex, Ix3>> {
+        let mut out = Points::<MyComplex, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<MyComplex>::new(self.slice(s![i, .., ..]).to_owned()).s_to_t() {
@@ -1307,8 +1328,8 @@ impl NetworkPoint<Points<MyFloat>, &[(MyFloat, MyFloat)], MyComplex> for Points<
         Some(out)
     }
 
-    fn s_to_y(&self, z0: &Array1<MyComplex>) -> Option<Points<MyComplex>> {
-        let mut out = Points::zeros(self.dim());
+    fn s_to_y(&self, z0: ArrayView1<MyComplex>) -> Option<Points<MyComplex, Ix3>> {
+        let mut out = Points::<MyComplex, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<MyComplex>::new(self.slice(s![i, .., ..]).to_owned()).s_to_y(z0) {
@@ -1321,8 +1342,8 @@ impl NetworkPoint<Points<MyFloat>, &[(MyFloat, MyFloat)], MyComplex> for Points<
         Some(out)
     }
 
-    fn s_to_z(&self, z0: &Array1<MyComplex>) -> Option<Points<MyComplex>> {
-        let mut out = Points::zeros(self.dim());
+    fn s_to_z(&self, z0: ArrayView1<MyComplex>) -> Option<Points<MyComplex, Ix3>> {
+        let mut out = Points::<MyComplex, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<MyComplex>::new(self.slice(s![i, .., ..]).to_owned()).s_to_z(z0) {
@@ -1335,8 +1356,8 @@ impl NetworkPoint<Points<MyFloat>, &[(MyFloat, MyFloat)], MyComplex> for Points<
         Some(out)
     }
 
-    fn t_to_a(&self, z0: &Array1<MyComplex>) -> Option<Points<MyComplex>> {
-        let mut out = Points::zeros(self.dim());
+    fn t_to_a(&self, z0: ArrayView1<MyComplex>) -> Option<Points<MyComplex, Ix3>> {
+        let mut out = Points::<MyComplex, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<MyComplex>::new(self.slice(s![i, .., ..]).to_owned()).t_to_a(z0) {
@@ -1349,8 +1370,8 @@ impl NetworkPoint<Points<MyFloat>, &[(MyFloat, MyFloat)], MyComplex> for Points<
         Some(out)
     }
 
-    fn t_to_g(&self, z0: &Array1<MyComplex>) -> Option<Points<MyComplex>> {
-        let mut out = Points::zeros(self.dim());
+    fn t_to_g(&self, z0: ArrayView1<MyComplex>) -> Option<Points<MyComplex, Ix3>> {
+        let mut out = Points::<MyComplex, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<MyComplex>::new(self.slice(s![i, .., ..]).to_owned()).t_to_g(z0) {
@@ -1363,8 +1384,8 @@ impl NetworkPoint<Points<MyFloat>, &[(MyFloat, MyFloat)], MyComplex> for Points<
         Some(out)
     }
 
-    fn t_to_h(&self, z0: &Array1<MyComplex>) -> Option<Points<MyComplex>> {
-        let mut out = Points::zeros(self.dim());
+    fn t_to_h(&self, z0: ArrayView1<MyComplex>) -> Option<Points<MyComplex, Ix3>> {
+        let mut out = Points::<MyComplex, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<MyComplex>::new(self.slice(s![i, .., ..]).to_owned()).t_to_h(z0) {
@@ -1377,8 +1398,8 @@ impl NetworkPoint<Points<MyFloat>, &[(MyFloat, MyFloat)], MyComplex> for Points<
         Some(out)
     }
 
-    fn t_to_s(&self) -> Option<Points<MyComplex>> {
-        let mut out = Points::zeros(self.dim());
+    fn t_to_s(&self) -> Option<Points<MyComplex, Ix3>> {
+        let mut out = Points::<MyComplex, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<MyComplex>::new(self.slice(s![i, .., ..]).to_owned()).t_to_s() {
@@ -1391,8 +1412,8 @@ impl NetworkPoint<Points<MyFloat>, &[(MyFloat, MyFloat)], MyComplex> for Points<
         Some(out)
     }
 
-    fn t_to_y(&self, z0: &Array1<MyComplex>) -> Option<Points<MyComplex>> {
-        let mut out = Points::zeros(self.dim());
+    fn t_to_y(&self, z0: ArrayView1<MyComplex>) -> Option<Points<MyComplex, Ix3>> {
+        let mut out = Points::<MyComplex, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<MyComplex>::new(self.slice(s![i, .., ..]).to_owned()).t_to_y(z0) {
@@ -1405,8 +1426,8 @@ impl NetworkPoint<Points<MyFloat>, &[(MyFloat, MyFloat)], MyComplex> for Points<
         Some(out)
     }
 
-    fn t_to_z(&self, z0: &Array1<MyComplex>) -> Option<Points<MyComplex>> {
-        let mut out = Points::zeros(self.dim());
+    fn t_to_z(&self, z0: ArrayView1<MyComplex>) -> Option<Points<MyComplex, Ix3>> {
+        let mut out = Points::<MyComplex, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<MyComplex>::new(self.slice(s![i, .., ..]).to_owned()).t_to_z(z0) {
@@ -1419,8 +1440,8 @@ impl NetworkPoint<Points<MyFloat>, &[(MyFloat, MyFloat)], MyComplex> for Points<
         Some(out)
     }
 
-    fn y_to_a(&self) -> Option<Points<MyComplex>> {
-        let mut out = Points::zeros(self.dim());
+    fn y_to_a(&self) -> Option<Points<MyComplex, Ix3>> {
+        let mut out = Points::<MyComplex, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<MyComplex>::new(self.slice(s![i, .., ..]).to_owned()).y_to_a() {
@@ -1433,8 +1454,8 @@ impl NetworkPoint<Points<MyFloat>, &[(MyFloat, MyFloat)], MyComplex> for Points<
         Some(out)
     }
 
-    fn y_to_g(&self) -> Option<Points<MyComplex>> {
-        let mut out = Points::zeros(self.dim());
+    fn y_to_g(&self) -> Option<Points<MyComplex, Ix3>> {
+        let mut out = Points::<MyComplex, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<MyComplex>::new(self.slice(s![i, .., ..]).to_owned()).y_to_g() {
@@ -1447,8 +1468,8 @@ impl NetworkPoint<Points<MyFloat>, &[(MyFloat, MyFloat)], MyComplex> for Points<
         Some(out)
     }
 
-    fn y_to_h(&self) -> Option<Points<MyComplex>> {
-        let mut out = Points::zeros(self.dim());
+    fn y_to_h(&self) -> Option<Points<MyComplex, Ix3>> {
+        let mut out = Points::<MyComplex, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<MyComplex>::new(self.slice(s![i, .., ..]).to_owned()).y_to_h() {
@@ -1461,8 +1482,8 @@ impl NetworkPoint<Points<MyFloat>, &[(MyFloat, MyFloat)], MyComplex> for Points<
         Some(out)
     }
 
-    fn y_to_s(&self, z0: &Array1<MyComplex>) -> Option<Points<MyComplex>> {
-        let mut out = Points::zeros(self.dim());
+    fn y_to_s(&self, z0: ArrayView1<MyComplex>) -> Option<Points<MyComplex, Ix3>> {
+        let mut out = Points::<MyComplex, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<MyComplex>::new(self.slice(s![i, .., ..]).to_owned()).y_to_s(z0) {
@@ -1475,8 +1496,8 @@ impl NetworkPoint<Points<MyFloat>, &[(MyFloat, MyFloat)], MyComplex> for Points<
         Some(out)
     }
 
-    fn y_to_t(&self, z0: &Array1<MyComplex>) -> Option<Points<MyComplex>> {
-        let mut out = Points::zeros(self.dim());
+    fn y_to_t(&self, z0: ArrayView1<MyComplex>) -> Option<Points<MyComplex, Ix3>> {
+        let mut out = Points::<MyComplex, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<MyComplex>::new(self.slice(s![i, .., ..]).to_owned()).y_to_t(z0) {
@@ -1489,8 +1510,8 @@ impl NetworkPoint<Points<MyFloat>, &[(MyFloat, MyFloat)], MyComplex> for Points<
         Some(out)
     }
 
-    fn y_to_z(&self) -> Option<Points<MyComplex>> {
-        let mut out = Points::zeros(self.dim());
+    fn y_to_z(&self) -> Option<Points<MyComplex, Ix3>> {
+        let mut out = Points::<MyComplex, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<MyComplex>::new(self.slice(s![i, .., ..]).to_owned()).y_to_z() {
@@ -1503,8 +1524,8 @@ impl NetworkPoint<Points<MyFloat>, &[(MyFloat, MyFloat)], MyComplex> for Points<
         Some(out)
     }
 
-    fn z_to_a(&self) -> Option<Points<MyComplex>> {
-        let mut out = Points::zeros(self.dim());
+    fn z_to_a(&self) -> Option<Points<MyComplex, Ix3>> {
+        let mut out = Points::<MyComplex, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<MyComplex>::new(self.slice(s![i, .., ..]).to_owned()).z_to_a() {
@@ -1517,8 +1538,8 @@ impl NetworkPoint<Points<MyFloat>, &[(MyFloat, MyFloat)], MyComplex> for Points<
         Some(out)
     }
 
-    fn z_to_g(&self) -> Option<Points<MyComplex>> {
-        let mut out = Points::zeros(self.dim());
+    fn z_to_g(&self) -> Option<Points<MyComplex, Ix3>> {
+        let mut out = Points::<MyComplex, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<MyComplex>::new(self.slice(s![i, .., ..]).to_owned()).z_to_g() {
@@ -1531,8 +1552,8 @@ impl NetworkPoint<Points<MyFloat>, &[(MyFloat, MyFloat)], MyComplex> for Points<
         Some(out)
     }
 
-    fn z_to_h(&self) -> Option<Points<MyComplex>> {
-        let mut out = Points::zeros(self.dim());
+    fn z_to_h(&self) -> Option<Points<MyComplex, Ix3>> {
+        let mut out = Points::<MyComplex, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<MyComplex>::new(self.slice(s![i, .., ..]).to_owned()).z_to_h() {
@@ -1545,8 +1566,8 @@ impl NetworkPoint<Points<MyFloat>, &[(MyFloat, MyFloat)], MyComplex> for Points<
         Some(out)
     }
 
-    fn z_to_s(&self, z0: &Array1<MyComplex>) -> Option<Points<MyComplex>> {
-        let mut out = Points::zeros(self.dim());
+    fn z_to_s(&self, z0: ArrayView1<MyComplex>) -> Option<Points<MyComplex, Ix3>> {
+        let mut out = Points::<MyComplex, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<MyComplex>::new(self.slice(s![i, .., ..]).to_owned()).z_to_s(z0) {
@@ -1559,8 +1580,8 @@ impl NetworkPoint<Points<MyFloat>, &[(MyFloat, MyFloat)], MyComplex> for Points<
         Some(out)
     }
 
-    fn z_to_t(&self, z0: &Array1<MyComplex>) -> Option<Points<MyComplex>> {
-        let mut out = Points::zeros(self.dim());
+    fn z_to_t(&self, z0: ArrayView1<MyComplex>) -> Option<Points<MyComplex, Ix3>> {
+        let mut out = Points::<MyComplex, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<MyComplex>::new(self.slice(s![i, .., ..]).to_owned()).z_to_t(z0) {
@@ -1573,8 +1594,8 @@ impl NetworkPoint<Points<MyFloat>, &[(MyFloat, MyFloat)], MyComplex> for Points<
         Some(out)
     }
 
-    fn z_to_y(&self) -> Option<Points<MyComplex>> {
-        let mut out = Points::zeros(self.dim());
+    fn z_to_y(&self) -> Option<Points<MyComplex, Ix3>> {
+        let mut out = Points::<MyComplex, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val =
                 match Point::<MyComplex>::new(self.slice(s![i, .., ..]).to_owned()).z_to_y() {

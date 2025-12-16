@@ -362,18 +362,23 @@ mod frequency_tests {
             "0",
         );
         comp_array_f64(
-            &vals,
-            &freq.freqs(),
+            vals.view(),
+            freq.freqs().view(),
             F64Margin::default(),
             "frequency::freqs()",
         );
         comp_array_f64(
-            &vals_scaled,
-            &freq.freqs_scaled(),
+            vals_scaled.view(),
+            freq.freqs_scaled().view(),
             F64Margin::default(),
             "frequency::freqs_scaled()",
         );
-        comp_array_f64(&w, &freq.w(), F64Margin::default(), "frequency::w()");
+        comp_array_f64(
+            w.view(),
+            freq.w().view(),
+            F64Margin::default(),
+            "frequency::w()",
+        );
         comp_f64(
             &w[0],
             &freq.w_pt(0),
@@ -382,8 +387,8 @@ mod frequency_tests {
             "0",
         );
         comp_array_f64(
-            &wavelength,
-            &freq.wavelengths(er),
+            wavelength.view(),
+            freq.wavelengths(er).view(),
             F64Margin::default(),
             "frequency::wavelengths()",
         );
@@ -397,21 +402,26 @@ mod frequency_tests {
 
         let freq = Frequency::new_scaled(vals_scaled.clone(), scale);
         comp_array_f64(
-            &vals,
-            &freq.freqs(),
+            vals.view(),
+            freq.freqs().view(),
             F64Margin::default(),
             "frequency_scaled::freqs()",
         );
         comp_array_f64(
-            &vals_scaled,
-            &freq.freqs_scaled(),
+            vals_scaled.view(),
+            freq.freqs_scaled().view(),
             F64Margin::default(),
             "frequency_scaled::freqs_scaled()",
         );
-        comp_array_f64(&freq.w(), &w, F64Margin::default(), "frequency::w()");
         comp_array_f64(
-            &wavelength,
-            &freq.wavelengths(er),
+            freq.w().view(),
+            w.view(),
+            F64Margin::default(),
+            "frequency::w()",
+        );
+        comp_array_f64(
+            wavelength.view(),
+            freq.wavelengths(er).view(),
             F64Margin::default(),
             "frequency_scaled::wavelengths()",
         );
@@ -420,8 +430,8 @@ mod frequency_tests {
         let freq_vals = array![290e9, 300e9, 350e9, 500e9];
         freq.set_freq(290e9, 0);
         comp_array_f64(
-            &freq_vals,
-            &freq.freqs(),
+            freq_vals.view(),
+            freq.freqs().view(),
             F64Margin::default(),
             "frequency::set_freq()",
         );
@@ -429,8 +439,8 @@ mod frequency_tests {
         let freq_vals2 = array![250e9, 300e9, 350e9, 500e9];
         freq.set_freq_scaled(250.0, 0);
         comp_array_f64(
-            &freq_vals2,
-            &freq.freqs(),
+            freq_vals2.view(),
+            freq.freqs().view(),
             F64Margin::default(),
             "frequency::set_freq_scaled()",
         );
@@ -438,8 +448,8 @@ mod frequency_tests {
         let freq_vals_new = array![200e9, 320e9, 310e9, 550e9];
         freq.set_freqs(freq_vals_new.clone());
         comp_array_f64(
-            &freq_vals_new,
-            &freq.freqs(),
+            freq_vals_new.view(),
+            freq.freqs().view(),
             F64Margin::default(),
             "frequency::set_freqs()",
         );
@@ -447,8 +457,8 @@ mod frequency_tests {
         let freq_vals_new_scaled = array![210.0, 340.0, 400.0, 510.0];
         freq.set_freqs_scaled(freq_vals_new_scaled.clone());
         comp_array_f64(
-            &freq_vals_new_scaled,
-            &freq.freqs_scaled(),
+            freq_vals_new_scaled.view(),
+            freq.freqs_scaled().view(),
             F64Margin::default(),
             "frequency::set_freqs_scaled()",
         );
@@ -456,8 +466,8 @@ mod frequency_tests {
         let freq_vals_new_scaled = array![210e3, 340e3, 400e3, 510e3];
         freq.set_unit(Scale::Mega);
         comp_array_f64(
-            &freq_vals_new_scaled,
-            &freq.freqs_scaled(),
+            freq_vals_new_scaled.view(),
+            freq.freqs_scaled().view(),
             F64Margin::default(),
             "frequency::set_unit()",
         );
@@ -465,8 +475,8 @@ mod frequency_tests {
         let freq_vals_new_scaled = array![210e6, 340e6, 400e6, 510e6];
         freq.set_unit_str("kHz");
         comp_array_f64(
-            &freq_vals_new_scaled,
-            &freq.freqs_scaled(),
+            freq_vals_new_scaled.view(),
+            freq.freqs_scaled().view(),
             F64Margin::default(),
             "frequency::set_unit_str()",
         );
@@ -476,8 +486,8 @@ mod frequency_tests {
         val.set_unit(Unit::Hz);
         let freq_unitval = Frequency::from_unitval(&val);
         comp_array_f64(
-            &array![300e9],
-            &freq_unitval.freqs(),
+            array![300e9].view(),
+            freq_unitval.freqs().view(),
             F64Margin::default(),
             "frequency::from_unitval()",
         );

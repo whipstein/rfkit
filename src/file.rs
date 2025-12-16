@@ -1,12 +1,15 @@
 #![allow(unused)]
-use crate::frequency::FrequencyBuilder;
-use crate::impedance::ComplexNumberType;
-use crate::network::{Network, NetworkBuilder};
-use crate::parameter::RFParameter;
-use crate::point::{Point, Pt};
-use crate::points::{Points, Pts};
-use crate::scale::Scale;
-use crate::unit::Unit;
+use crate::{
+    frequency::FrequencyBuilder,
+    impedance::ComplexNumberType,
+    network::{Network, NetworkBuilder},
+    parameter::RFParameter,
+    point::{Point, Pt},
+    pts::{Points, Pts},
+    scale::Scale,
+    unit::Unit,
+};
+use ndarray::IntoDimension;
 use ndarray::prelude::*;
 use num::complex::{Complex64, c64};
 use regex::{Regex, RegexBuilder};
@@ -165,7 +168,7 @@ pub fn read_touchstone(file_path: &String) -> Result<Network, Box<dyn Error>> {
     z0.fill(c64(50.0, 0.0));
     let mut freq_tmp: Vec<f64> = vec![];
     let mut point_tmp = Point::zeros((nports, nports));
-    let mut data = Points::zeros((0, nports, nports));
+    let mut data = Points::<Complex64, Ix3>::zeros((0, nports, nports).into_dimension());
     let mut comments = String::new();
 
     let mut caps: Option<regex::Captures>;
@@ -314,7 +317,7 @@ mod file_tests {
                 .build(),
             array![c64(50.0, 0.0)],
             RFParameter::S,
-            Points::<Complex64>::new(array![
+            Points::<Complex64, Ix3>::new(array![
                 [[c64(0.45345337996, 0.891279996524)]],
                 [[c64(0.464543921496, 0.885550080459)]],
                 [[c64(0.475521092896, 0.879704319764)]],
@@ -356,8 +359,8 @@ mod file_tests {
             assert_eq!(exemplar.freq().freq(i), net.freq().freq(i));
         }
         comp_points_c64(
-            &exemplar.net(RFParameter::S),
-            &net.net(RFParameter::S),
+            exemplar.net(RFParameter::S).view(),
+            net.net(RFParameter::S).view(),
             F64Margin::default(),
             "net(S)",
         );
@@ -373,7 +376,7 @@ mod file_tests {
                 .build(),
             array![c64(50.0, 0.0), c64(50.0, 0.0)],
             RFParameter::S,
-            Points::<Complex64>::new(array![
+            Points::<Complex64, Ix3>::new(array![
                 [
                     [
                         c64(0.9881388526914863, -0.13442709904013195),
@@ -483,8 +486,8 @@ mod file_tests {
             assert_eq!(exemplar.freq().freq(i), net.freq().freq(i));
         }
         comp_points_c64(
-            &exemplar.net(RFParameter::S),
-            &net.net(RFParameter::S),
+            exemplar.net(RFParameter::S).view(),
+            net.net(RFParameter::S).view(),
             F64Margin::default(),
             "net(test.s2p)",
         );
@@ -1892,8 +1895,8 @@ mod file_tests {
             assert_eq!(exemplar.freq().freq(i), net.freq().freq(i));
         }
         comp_points_c64(
-            &exemplar.net(RFParameter::S),
-            &net.net(RFParameter::S),
+            exemplar.net(RFParameter::S).view(),
+            net.net(RFParameter::S).view(),
             F64Margin::default(),
             "net(test_2.s2p)",
         );
@@ -3296,8 +3299,8 @@ mod file_tests {
             assert_eq!(exemplar.freq().freq(i), net.freq().freq(i));
         }
         comp_points_c64(
-            &exemplar.net(RFParameter::S),
-            &net.net(RFParameter::S),
+            exemplar.net(RFParameter::S).view(),
+            net.net(RFParameter::S).view(),
             F64Margin::default(),
             "net(test_3.s2p)",
         );
@@ -3313,7 +3316,7 @@ mod file_tests {
                 .build(),
             array![c64(50.0, 0.0), c64(50.0, 0.0), c64(50.0, 0.0)],
             RFParameter::S,
-            Points::<Complex64>::new(array![
+            Points::<Complex64, Ix3>::new(array![
                 [
                     [
                         c64(-0.333333333333, 0.0),
@@ -3419,8 +3422,8 @@ mod file_tests {
             assert_eq!(exemplar.freq().freq(i), net.freq().freq(i));
         }
         comp_points_c64(
-            &exemplar.net(RFParameter::S),
-            &net.net(RFParameter::S),
+            exemplar.net(RFParameter::S).view(),
+            net.net(RFParameter::S).view(),
             F64Margin::default(),
             "net(S)",
         );

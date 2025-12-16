@@ -2,8 +2,8 @@ use crate::element::{Elem, ElemType, Term};
 use crate::frequency::Frequency;
 use crate::point;
 use crate::point::Point;
-use crate::points::{Points, Pts};
-use ndarray::prelude::*;
+use crate::pts::{Points, Pts};
+use ndarray::{IntoDimension, prelude::*};
 use num::complex::Complex64;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -58,8 +58,8 @@ impl Elem for Ground {
         &self.id
     }
 
-    fn net(&self, freq: &Frequency) -> Points<Complex64> {
-        Points::zeros((freq.npts(), 1, 1))
+    fn net(&self, freq: &Frequency) -> Points<Complex64, Ix3> {
+        Points::<Complex64, Ix3>::zeros((freq.npts(), 1, 1).into_dimension())
     }
 
     fn nodes(&self) -> Vec<usize> {

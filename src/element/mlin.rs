@@ -1,14 +1,14 @@
 use crate::define_mlin_calcs;
-use crate::element::{Distributed, Elem, ElemType, mlin_exp, msub::Msub};
-use crate::frequency::Frequency;
-// use crate::minimize::{Minimizer, NelderMeadBounded};
-// use crate::myfloat::MyFloat;
-use crate::point;
-use crate::point::Point;
-use crate::points::{Points, Pts};
-use crate::scale::Scale;
-use crate::unit::{Unit, UnitVal, Unitized};
-use ndarray::prelude::*;
+use crate::{
+    element::{Distributed, Elem, ElemType, mlin_exp, msub::Msub},
+    frequency::Frequency,
+    point,
+    point::Point,
+    pts::{Points, Pts},
+    scale::Scale,
+    unit::{Unit, UnitVal, Unitized},
+};
+use ndarray::{IntoDimension, prelude::*};
 use num::complex::{Complex64, c64};
 use std::f64::consts::PI;
 
@@ -78,8 +78,8 @@ impl Elem for Mlin {
         &self.id
     }
 
-    fn net(&self, freq: &Frequency) -> Points<Complex64> {
-        Points::zeros((freq.npts(), 2, 2))
+    fn net(&self, freq: &Frequency) -> Points<Complex64, Ix3> {
+        Points::<Complex64, Ix3>::zeros((freq.npts(), 2, 2).into_dimension())
     }
 
     fn nodes(&self) -> Vec<usize> {
@@ -384,9 +384,12 @@ impl Default for MlinBuilder {
 #[cfg(test)]
 mod element_mlin_tests {
     use super::*;
-    use crate::element::msub::MsubBuilder;
-    use crate::unit::UnitValBuilder;
-    use crate::util::{comp_c64, comp_f64, comp_point_c64};
+    use crate::{
+        element::msub::MsubBuilder,
+        point::Pt,
+        unit::UnitValBuilder,
+        util::{comp_c64, comp_f64, comp_point_c64},
+    };
     use float_cmp::*;
 
     const DEFAULT_MARGIN: F64Margin = F64Margin {
@@ -460,7 +463,12 @@ mod element_mlin_tests {
         assert_eq!(&exemplar.unit(), &calc.unit());
         assert_eq!(&exemplar.gamma(&freq), &calc.gamma(&freq));
         assert_eq!(&exemplar.er(&freq), &calc.er(&freq));
-        comp_point_c64(&exemplar.c(&freq), &calc.c(&freq), margin, "calc.c()");
+        comp_point_c64(
+            exemplar.c(&freq).view(),
+            calc.c(&freq).view(),
+            margin,
+            "calc.c()",
+        );
 
         let margin = F64Margin {
             epsilon: 1e-4,

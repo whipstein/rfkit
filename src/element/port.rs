@@ -1,9 +1,11 @@
-use crate::element::{Elem, ElemType, Term};
-use crate::frequency::Frequency;
-use crate::point;
-use crate::point::{Point, Pt};
-use crate::points::{Points, Pts};
-use ndarray::prelude::*;
+use crate::{
+    element::{Elem, ElemType, Term},
+    frequency::Frequency,
+    point,
+    point::{Point, Pt},
+    pts::{Points, Pts},
+};
+use ndarray::{IntoDimension, prelude::*};
 use num::complex::{Complex64, c64};
 
 #[derive(Clone, Debug, PartialEq)]
@@ -61,8 +63,8 @@ impl Elem for Port {
         &self.id
     }
 
-    fn net(&self, freq: &Frequency) -> Points<Complex64> {
-        Points::zeros((freq.npts(), 1, 1))
+    fn net(&self, freq: &Frequency) -> Points<Complex64, Ix3> {
+        Points::<Complex64, Ix3>::zeros((freq.npts(), 1, 1).into_dimension())
     }
 
     fn nodes(&self) -> Vec<usize> {
@@ -145,9 +147,12 @@ impl Default for PortBuilder {
 #[cfg(test)]
 mod element_port_tests {
     use super::*;
-    use crate::scale::Scale;
-    use crate::unit::UnitValBuilder;
-    use crate::util::{comp_c64, comp_point_c64};
+    use crate::{
+        point::Pt,
+        scale::Scale,
+        unit::UnitValBuilder,
+        util::{comp_c64, comp_point_c64},
+    };
     use float_cmp::*;
 
     const DEFAULT_MARGIN: F64Margin = F64Margin {
@@ -176,7 +181,12 @@ mod element_port_tests {
         let margin = F64Margin::default();
 
         assert_eq!(&exemplar.id(), &calc.id());
-        comp_point_c64(&exemplar.c(&freq), &calc.c(&freq), margin, "calc.c()");
+        comp_point_c64(
+            exemplar.c(&freq).view(),
+            calc.c(&freq).view(),
+            margin,
+            "calc.c()",
+        );
         comp_c64(&exemplar_z.into(), &calc.z(&freq), margin, "calc.z()", "0");
     }
 

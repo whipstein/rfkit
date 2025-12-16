@@ -1,11 +1,13 @@
-use crate::element::{Elem, ElemType, Lumped, Q, QMode};
-use crate::frequency::Frequency;
-use crate::point;
-use crate::point::Point;
-use crate::points::{Points, Pts};
-use crate::scale::Scale;
-use crate::unit::{Unit, UnitVal, Unitized};
-use ndarray::prelude::*;
+use crate::{
+    element::{Elem, ElemType, Lumped, Q, QMode},
+    frequency::Frequency,
+    point,
+    point::Point,
+    pts::{Points, Pts},
+    scale::Scale,
+    unit::{Unit, UnitVal, Unitized},
+};
+use ndarray::{IntoDimension, prelude::*};
 use num::complex::{Complex, Complex64, c64};
 
 #[derive(Clone, Debug, PartialEq)]
@@ -91,12 +93,15 @@ impl Elem for Inductor {
         &self.id
     }
 
-    fn net(&self, freq: &Frequency) -> Points<Complex64> {
-        Points::from_shape_fn((freq.npts(), 2, 2), |(_, j, k)| match (j, k) {
-            (0, 0) | (1, 1) => c64(1.0 / 3.0, 0.0),
-            (1, 0) | (0, 1) => c64(2.0 / 3.0, 0.0),
-            _ => c64(0.0, 0.0),
-        })
+    fn net(&self, freq: &Frequency) -> Points<Complex64, Ix3> {
+        Points::<Complex64, Ix3>::from_shape_fn(
+            (freq.npts(), 2, 2).into_dimension(),
+            |(_, j, k)| match (j, k) {
+                (0, 0) | (1, 1) => c64(1.0 / 3.0, 0.0),
+                (1, 0) | (0, 1) => c64(2.0 / 3.0, 0.0),
+                _ => c64(0.0, 0.0),
+            },
+        )
     }
 
     fn nodes(&self) -> Vec<usize> {
@@ -282,8 +287,11 @@ impl Default for InductorBuilder {
 #[cfg(test)]
 mod element_inductor_tests {
     use super::*;
-    use crate::unit::UnitValBuilder;
-    use crate::util::{comp_c64, comp_point_c64};
+    use crate::{
+        point::Pt,
+        unit::UnitValBuilder,
+        util::{comp_c64, comp_point_c64},
+    };
     use float_cmp::*;
     use std::f64::consts::PI;
 
@@ -327,7 +335,12 @@ mod element_inductor_tests {
         assert_eq!(&exemplar.id(), &calc.id());
         assert_eq!(&exemplar.scale(), &calc.scale());
         assert_eq!(&Unit::Henry, &calc.unit());
-        comp_point_c64(&exemplar.c(&freq), &calc.c(&freq), margin, "calc.c()");
+        comp_point_c64(
+            exemplar.c(&freq).view(),
+            calc.c(&freq).view(),
+            margin,
+            "calc.c()",
+        );
         comp_c64(&exemplar_z.into(), &calc.z(&freq), margin, "calc.z()", "0");
     }
 

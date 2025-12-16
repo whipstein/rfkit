@@ -1,6 +1,243 @@
 #![allow(dead_code)]
 use std::fmt;
 
+pub trait RFNum:
+    Sized
+    + Clone
+    + PartialOrd
+    + fmt::Display
+    + fmt::Debug
+    + std::ops::Add<Output = Self>
+    + std::ops::Sub<Output = Self>
+    + std::ops::Mul<Output = Self>
+    + std::ops::Div<Output = Self>
+    + std::ops::Neg<Output = Self>
+    + std::ops::Add<f64, Output = Self>
+    + std::ops::Sub<f64, Output = Self>
+    + std::ops::Mul<f64, Output = Self>
+    + std::ops::Div<f64, Output = Self>
+    + std::ops::AddAssign
+    + std::ops::SubAssign
+    + std::ops::MulAssign
+    + std::ops::DivAssign
+    + std::ops::AddAssign<f64>
+    + std::ops::SubAssign<f64>
+    + std::ops::MulAssign<f64>
+    + std::ops::DivAssign<f64>
+    + for<'a> std::ops::Add<&'a Self, Output = Self>
+    + for<'a> std::ops::Sub<&'a Self, Output = Self>
+    + for<'a> std::ops::Mul<&'a Self, Output = Self>
+    + for<'a> std::ops::Div<&'a Self, Output = Self>
+    + for<'a> std::ops::AddAssign<&'a Self>
+    + for<'a> std::ops::SubAssign<&'a Self>
+    + for<'a> std::ops::MulAssign<&'a Self>
+    + for<'a> std::ops::DivAssign<&'a Self>
+    + for<'a> std::cmp::PartialEq<f64>
+    + num_traits::Zero
+    + num_traits::One
+    + std::iter::Sum
+    + for<'a> std::iter::Sum<&'a Self>
+    + std::convert::From<f64>
+{
+    // ========== Custom conversion methods ==========
+    /// Create from f64
+    fn from_f64(val: f64) -> Self;
+
+    /// Create from usize
+    fn from_usize(val: usize) -> Self;
+
+    /// Create to f64
+    fn to_f64(&self) -> f64;
+
+    // ========== Special values (constants) ==========
+    /// Returns the NaN value
+    fn nan() -> Self;
+
+    /// Returns positive infinity
+    fn infinity() -> Self;
+
+    /// Returns negative infinity
+    fn neg_infinity() -> Self;
+
+    /// Returns negative zero
+    fn neg_zero() -> Self;
+
+    /// Returns the smallest finite value that this type can represent
+    fn min_value() -> Self;
+
+    /// Returns the largest finite value that this type can represent
+    fn max_value() -> Self;
+
+    /// Returns the smallest positive, normalized value that this type can represent
+    fn min_positive_value() -> Self;
+
+    /// Returns the machine epsilon value for this type
+    fn epsilon() -> Self;
+
+    // ========== Classification methods ==========
+    /// Returns true if this value is NaN
+    fn is_nan(&self) -> bool;
+
+    /// Returns true if this value is positive infinity or negative infinity
+    fn is_infinite(&self) -> bool;
+
+    /// Returns true if this number is neither infinite nor NaN
+    fn is_finite(&self) -> bool;
+
+    /// Returns true if the number is neither zero, infinite, subnormal, or NaN
+    fn is_normal(&self) -> bool;
+
+    /// Returns true if the number is subnormal
+    fn is_subnormal(&self) -> bool;
+
+    /// Returns the floating point category of the number
+    fn classify(&self) -> std::num::FpCategory;
+
+    /// Returns true if the sign bit is positive
+    fn is_sign_positive(&self) -> bool;
+
+    /// Returns true if the sign bit is negative
+    fn is_sign_negative(&self) -> bool;
+
+    // ========== Rounding methods ==========
+    /// Returns the largest integer less than or equal to a number
+    fn floor(&self) -> Self;
+
+    /// Returns the smallest integer greater than or equal to a number
+    fn ceil(&self) -> Self;
+
+    /// Returns the nearest integer to a number (round half-way cases away from 0.0)
+    fn round(&self) -> Self;
+
+    /// Returns the integer part of a number
+    fn trunc(&self) -> Self;
+
+    /// Returns the fractional part of a number
+    fn fract(&self) -> Self;
+
+    // ========== Basic operations ==========
+    /// Computes the absolute value of self
+    fn abs(&self) -> Self;
+
+    /// Returns a number that represents the sign of self
+    fn signum(&self) -> Self;
+
+    /// Returns a number composed of the magnitude of self and the sign of sign
+    fn copysign(&self, sign: &Self) -> Self;
+
+    /// Fused multiply-add: (self * a) + b with only one rounding error
+    fn mul_add(&self, a: &Self, b: &Self) -> Self;
+
+    /// Takes the reciprocal (inverse) of a number, 1/x
+    fn recip(&self) -> Self;
+
+    /// Returns the maximum of the two numbers
+    fn max(&self, other: &Self) -> Self;
+
+    /// Returns the minimum of the two numbers
+    fn min(&self, other: &Self) -> Self;
+
+    /// The positive difference of two numbers
+    fn abs_sub(&self, other: &Self) -> Self;
+
+    /// Restrict a value to a certain interval
+    fn clamp(&self, min: &Self, max: &Self) -> Self;
+
+    // ========== Exponential and power functions ==========
+    /// Returns e^(self)
+    fn exp(&self) -> Self;
+
+    /// Returns 2^(self)
+    fn exp2(&self) -> Self;
+
+    /// Returns e^(self) - 1 in a way that is accurate even if the number is close to zero
+    fn exp_m1(&self) -> Self;
+
+    /// Returns the natural logarithm of the number
+    fn ln(&self) -> Self;
+
+    /// Returns ln(1+n) more accurately than if the operations were performed separately
+    fn ln_1p(&self) -> Self;
+
+    /// Returns the logarithm of the number with respect to an arbitrary base
+    fn log(&self, base: &Self) -> Self;
+
+    /// Returns the base 2 logarithm of the number
+    fn log2(&self) -> Self;
+
+    /// Returns the base 10 logarithm of the number
+    fn log10(&self) -> Self;
+
+    /// Raises self to the power of exp, using exponentiation by squaring
+    fn powi(&self, n: i32) -> Self;
+
+    /// Raises self to a floating point power
+    fn powf(&self, n: &Self) -> Self;
+
+    /// Returns the square root of a number
+    fn sqrt(&self) -> Self;
+
+    /// Returns the cube root of a number
+    fn cbrt(&self) -> Self;
+
+    // ========== Trigonometric functions ==========
+    /// Computes the sine of a number (in radians)
+    fn sin(&self) -> Self;
+
+    /// Computes the cosine of a number (in radians)
+    fn cos(&self) -> Self;
+
+    /// Computes the tangent of a number (in radians)
+    fn tan(&self) -> Self;
+
+    /// Computes the arcsine of a number
+    fn asin(&self) -> Self;
+
+    /// Computes the arccosine of a number
+    fn acos(&self) -> Self;
+
+    /// Computes the arctangent of a number
+    fn atan(&self) -> Self;
+
+    /// Computes the four quadrant arctangent of self (y) and other (x)
+    fn atan2(&self, other: &Self) -> Self;
+
+    /// Simultaneously computes the sine and cosine of the number
+    fn sin_cos(&self) -> (Self, Self);
+
+    /// Converts radians to degrees
+    fn to_degrees(&self) -> Self;
+
+    /// Converts degrees to radians
+    fn to_radians(&self) -> Self;
+
+    /// Computes the Euclidean distance: sqrt(self^2 + other^2)
+    fn hypot(&self, other: &Self) -> Self;
+
+    // ========== Hyperbolic functions ==========
+    /// Hyperbolic sine function
+    fn sinh(&self) -> Self;
+
+    /// Hyperbolic cosine function
+    fn cosh(&self) -> Self;
+
+    /// Hyperbolic tangent function
+    fn tanh(&self) -> Self;
+
+    /// Inverse hyperbolic sine function
+    fn asinh(&self) -> Self;
+
+    /// Inverse hyperbolic cosine function
+    fn acosh(&self) -> Self;
+
+    /// Inverse hyperbolic tangent function
+    fn atanh(&self) -> Self;
+
+    // ========== Other methods ==========
+    /// Returns the mantissa, exponent and sign as integers
+    fn integer_decode(&self) -> (u64, i16, i8);
+}
+
 /// Trait for numeric types that can be used in bracketing algorithms
 pub trait RFFloat:
     Sized
@@ -29,15 +266,16 @@ pub trait RFFloat:
     + for<'a> std::ops::Sub<&'a Self, Output = Self>
     + for<'a> std::ops::Mul<&'a Self, Output = Self>
     + for<'a> std::ops::Div<&'a Self, Output = Self>
-    + for<'a> std::ops::Add<f64, Output = Self>
-    + for<'a> std::ops::Sub<f64, Output = Self>
-    + for<'a> std::ops::Mul<f64, Output = Self>
-    + for<'a> std::ops::Div<f64, Output = Self>
+    + for<'a> std::ops::AddAssign<&'a Self>
+    + for<'a> std::ops::SubAssign<&'a Self>
+    + for<'a> std::ops::MulAssign<&'a Self>
+    + for<'a> std::ops::DivAssign<&'a Self>
     + for<'a> std::cmp::PartialEq<f64>
     + num_traits::Zero
     + num_traits::One
     + std::iter::Sum
     + for<'a> std::iter::Sum<&'a Self>
+    + std::convert::From<f64>
 {
     // ========== Custom conversion methods ==========
     /// Create from f64
@@ -803,6 +1041,8 @@ pub trait RFComplex:
     /// The underlying real type (e.g., f64 for Complex<f64>, MyFloat for MyComplex)
     type Real: RFFloat;
 
+    fn new(re: Self::Real, im: Self::Real) -> Self;
+
     // ========== Custom conversion methods ==========
     /// Create from real and imaginary f64 values
     fn from_f64(real: f64, imag: f64) -> Self;
@@ -821,9 +1061,11 @@ pub trait RFComplex:
 
     /// Get the real part
     fn re(&self) -> Self::Real;
+    fn real(&self) -> Self::Real;
 
     /// Get the imaginary part
     fn im(&self) -> Self::Real;
+    fn imag(&self) -> Self::Real;
 
     // ========== Special values (constants) ==========
     /// Returns a NaN complex number
@@ -916,6 +1158,10 @@ pub trait RFComplex:
 impl RFComplex for num::complex::Complex<f64> {
     type Real = f64;
 
+    fn new(re: Self::Real, im: Self::Real) -> Self {
+        num::complex::Complex::<f64>::new(re, im)
+    }
+
     // ========== Custom conversion methods ==========
     fn from_f64(real: f64, imag: f64) -> Self {
         num::complex::Complex::new(real, imag)
@@ -941,7 +1187,15 @@ impl RFComplex for num::complex::Complex<f64> {
         self.re
     }
 
+    fn real(&self) -> Self::Real {
+        self.re
+    }
+
     fn im(&self) -> Self::Real {
+        self.im
+    }
+
+    fn imag(&self) -> Self::Real {
         self.im
     }
 
@@ -1063,6 +1317,10 @@ impl RFComplex for num::complex::Complex<f64> {
 impl RFComplex for crate::mycomplex::MyComplex {
     type Real = crate::myfloat::MyFloat;
 
+    fn new(re: Self::Real, im: Self::Real) -> Self {
+        crate::mycomplex::MyComplex::new(re, im)
+    }
+
     // ========== Custom conversion methods ==========
     fn from_f64(real: f64, imag: f64) -> Self {
         crate::mycomplex::MyComplex::from_f64(real, imag)
@@ -1088,7 +1346,15 @@ impl RFComplex for crate::mycomplex::MyComplex {
         self.re()
     }
 
+    fn real(&self) -> Self::Real {
+        self.re()
+    }
+
     fn im(&self) -> Self::Real {
+        self.im()
+    }
+
+    fn imag(&self) -> Self::Real {
         self.im()
     }
 

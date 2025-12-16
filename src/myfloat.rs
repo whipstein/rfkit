@@ -1070,16 +1070,16 @@ impl Default for MyFloat {
 // Implement Display for pretty printing
 impl fmt::Display for MyFloat {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // write!(f, "{}", self.0)
-        write!(f, "{}", self.to_f64())
+        write!(f, "{}", self.0)
+        // write!(f, "{}", self.to_f64())
     }
 }
 
 // Implement Debug
 impl fmt::Debug for MyFloat {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // write!(f, "MyFloat({})", self.0)
-        write!(f, "{}", self.to_f64())
+        write!(f, "MyFloat({})", self.0)
+        // write!(f, "{}", self.to_f64())
     }
 }
 

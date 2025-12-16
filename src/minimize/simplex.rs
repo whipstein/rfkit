@@ -46,6 +46,10 @@ where
 impl<T> Simplex<T>
 where
     T: RFFloat,
+    for<'a, 'b> &'a T: std::ops::Sub<&'b T, Output = T>,
+    for<'a, 'b> &'a T: std::ops::Mul<&'b T, Output = T>,
+    for<'a> &'a T: std::ops::Add<T, Output = T>,
+    for<'a> &'a T: std::ops::Mul<T, Output = T>,
 {
     pub fn new<F>(f: F) -> Self
     where
@@ -70,11 +74,11 @@ where
         }
     }
 
-    fn reflect_point(&self, worst: &Array1<T>, centroid: &Array1<T>, coeff: &T) -> Array1<T> {
+    fn reflect_point(&self, worst: ArrayView1<T>, centroid: ArrayView1<T>, coeff: &T) -> Array1<T> {
         worst
             .iter()
             .zip(centroid.iter())
-            .map(|(w, c)| c.clone() + coeff.clone() * (c.clone() - w.clone()))
+            .map(|(w, c)| c + coeff * (c - w))
             .collect()
     }
 
@@ -84,7 +88,7 @@ where
 
         for vertex in vertices {
             for (i, coord) in vertex.point.iter().enumerate() {
-                centroid[i] += coord.clone();
+                centroid[i] += coord;
             }
         }
 
@@ -105,7 +109,7 @@ where
                     .point
                     .iter()
                     .zip(simplex[j].point.iter())
-                    .map(|(a, b)| (a.clone() - b.clone()).powi(2))
+                    .map(|(a, b)| (a - b).powi(2))
                     .sum::<T>()
                     .sqrt();
 
@@ -164,8 +168,8 @@ where
             let centroid = self.calculate_centroid(&simplex[..n]);
 
             // Standard Nelder-Mead operations
-            let reflected = self.reflect_point(&worst.point, &centroid, &alpha);
-            let f_reflected = self.f.call(&reflected);
+            let reflected = self.reflect_point(worst.point.view(), centroid.view(), &alpha);
+            let f_reflected = self.f.call(reflected.view());
             fn_evals += 1;
 
             if !f_reflected.is_finite() {
@@ -179,8 +183,8 @@ where
                 };
             } else if f_reflected < best.value {
                 let expanded =
-                    self.reflect_point(&worst.point, &centroid, &(alpha.clone() * gamma.clone()));
-                let f_expanded = self.f.call(&expanded);
+                    self.reflect_point(worst.point.view(), centroid.view(), &(&alpha * &gamma));
+                let f_expanded = self.f.call(expanded.view());
                 fn_evals += 1;
 
                 if !f_expanded.is_finite() {
@@ -201,12 +205,13 @@ where
             } else {
                 let (contracted, f_contracted) = if f_reflected < worst.value {
                     let point =
-                        self.reflect_point(&worst.point, &centroid, &(alpha.clone() * rho.clone()));
-                    let value = self.f.call(&point);
+                        self.reflect_point(worst.point.view(), centroid.view(), &(&alpha * &rho));
+                    let value = self.f.call(point.view());
                     (point, value)
                 } else {
-                    let point = self.reflect_point(&worst.point, &centroid, &-rho.clone());
-                    let value = self.f.call(&point);
+                    let point =
+                        self.reflect_point(worst.point.view(), centroid.view(), &-rho.clone());
+                    let value = self.f.call(point.view());
                     (point, value)
                 };
                 fn_evals += 1;
@@ -225,11 +230,10 @@ where
                     for i in 1..=n {
                         let mut new_point = Array1::zeros(n);
                         for j in 0..n {
-                            new_point[j] = best_point[j].clone()
-                                + sigma.clone()
-                                    * (simplex[i].point[j].clone() - best_point[j].clone());
+                            new_point[j] =
+                                &best_point[j] + &sigma * (&simplex[i].point[j] - &best_point[j]);
                         }
-                        let new_value = self.f.call(&new_point);
+                        let new_value = self.f.call(new_point.view());
                         fn_evals += 1;
 
                         if !new_value.is_finite() {
@@ -278,7 +282,7 @@ where
     /// * `SimplexResult` containing the minimum point and convergence information
     pub fn downhill_simplex(
         &mut self,
-        initial_point: &Array1<T>,
+        initial_point: ArrayView1<T>,
         initial_step: Option<T>,
         tol: Option<T>,
         max_iters: Option<usize>,
@@ -307,13 +311,13 @@ where
         let mut simplex = Vec::with_capacity(n + 1);
 
         // First vertex is the initial point
-        simplex.push(Vertex::new_boxed(initial_point.clone(), self.f.clone())?);
+        simplex.push(Vertex::new_boxed(initial_point.to_owned(), self.f.clone())?);
 
         // Create additional vertices by perturbing each coordinate
         for i in 0..n {
-            let mut point = initial_point.clone();
+            let mut point = initial_point.to_owned();
             point[i] += step.clone();
-            simplex.push(Vertex::new_boxed(point, self.f.clone())?);
+            simplex.push(Vertex::new_boxed(point.to_owned(), self.f.clone())?);
         }
 
         let mut fn_evals = n + 1;
@@ -353,8 +357,8 @@ where
             let centroid = self.calculate_centroid(&simplex[..n]);
 
             // Reflection
-            let reflected = self.reflect_point(&worst.point, &centroid, &alpha);
-            let f_reflected = self.f.call(&reflected);
+            let reflected = self.reflect_point(worst.point.view(), centroid.view(), &alpha);
+            let f_reflected = self.f.call(reflected.view());
             fn_evals += 1;
 
             if !f_reflected.is_finite() {
@@ -370,8 +374,8 @@ where
             } else if f_reflected < best.value {
                 // Try expansion
                 let expanded =
-                    self.reflect_point(&worst.point, &centroid, &(alpha.clone() * gamma.clone()));
-                let f_expanded = self.f.call(&expanded);
+                    self.reflect_point(worst.point.view(), centroid.view(), &(&alpha * &gamma));
+                let f_expanded = self.f.call(expanded.view());
                 fn_evals += 1;
 
                 if !f_expanded.is_finite() {
@@ -396,14 +400,15 @@ where
                 let (contracted, f_contracted) = if f_reflected < worst.value {
                     // Outside contraction
                     let point =
-                        self.reflect_point(&worst.point, &centroid, &(alpha.clone() * rho.clone()));
-                    let value = self.f.call(&point);
+                        self.reflect_point(worst.point.view(), centroid.view(), &(&alpha * &rho));
+                    let value = self.f.call(point.view());
                     fn_evals += 1;
                     (point, value)
                 } else {
                     // Inside contraction
-                    let point = self.reflect_point(&worst.point, &centroid, &-rho.clone());
-                    let value = self.f.call(&point);
+                    let point =
+                        self.reflect_point(worst.point.view(), centroid.view(), &-rho.clone());
+                    let value = self.f.call(point.view());
                     fn_evals += 1;
                     (point, value)
                 };
@@ -424,11 +429,10 @@ where
                     for i in 1..=n {
                         let mut new_point = Array1::zeros(n);
                         for j in 0..n {
-                            new_point[j] = best_point[j].clone()
-                                + sigma.clone()
-                                    * (simplex[i].point[j].clone() - best_point[j].clone());
+                            new_point[j] =
+                                &best_point[j] + &sigma * (&simplex[i].point[j] - &best_point[j]);
                         }
-                        let new_value = self.f.call(&new_point);
+                        let new_value = self.f.call(new_point.view());
                         fn_evals += 1;
 
                         if !new_value.is_finite() {
@@ -467,7 +471,7 @@ where
     /// characteristics for improved performance.
     pub fn adaptive_downhill_simplex(
         &mut self,
-        initial_point: &Array1<T>,
+        initial_point: ArrayView1<T>,
         initial_step: Option<T>,
         tol: Option<T>,
         max_iters: Option<usize>,
@@ -490,24 +494,24 @@ where
 
         // Initialize simplex using regular simplex construction
         let mut simplex = Vec::with_capacity(n + 1);
-        simplex.push(Vertex::new_boxed(initial_point.clone(), self.f.clone())?);
+        simplex.push(Vertex::new_boxed(initial_point.to_owned(), self.f.clone())?);
 
         // Use right-angled simplex construction for better performance
-        let delta_usual = step.clone()
+        let delta_usual = &step
             * T::from_f64((((n + 1) as f64).sqrt() + (n - 1) as f64) / (n as f64 * 2.0_f64.sqrt()));
-        let delta_zero = step.clone()
-            * T::from_f64((((n + 1) as f64).sqrt() - 1.0) / (n as f64 * 2.0_f64.sqrt()));
+        let delta_zero =
+            &step * T::from_f64((((n + 1) as f64).sqrt() - 1.0) / (n as f64 * 2.0_f64.sqrt()));
 
         for i in 0..n {
-            let mut point = initial_point.clone();
+            let mut point = initial_point.to_owned();
             for j in 0..n {
                 if i == j {
-                    point[j] += delta_usual.clone();
+                    point[j] += &delta_usual;
                 } else {
-                    point[j] += delta_zero.clone();
+                    point[j] += &delta_zero;
                 }
             }
-            simplex.push(Vertex::new_boxed(point, self.f.clone())?);
+            simplex.push(Vertex::new_boxed(point.to_owned(), self.f.clone())?);
         }
 
         let mut fn_evals = n + 1;
@@ -527,7 +531,7 @@ where
 
             // Track convergence
             if !history.is_empty() {
-                let improvement = history.last().unwrap().clone() - best.value.clone();
+                let improvement = history.last().unwrap() - &best.value;
                 if improvement.abs() < tol.clone() * T::from_f64(0.01) {
                     no_improvement_count += 1;
                 } else {
@@ -557,8 +561,8 @@ where
             let centroid = self.calculate_centroid(&simplex[..n]);
 
             // Reflection
-            let reflected = self.reflect_point(&worst.point, &centroid, &alpha);
-            let f_reflected = self.f.call(&reflected);
+            let reflected = self.reflect_point(worst.point.view(), centroid.view(), &alpha);
+            let f_reflected = self.f.call(reflected.view());
             fn_evals += 1;
 
             if !f_reflected.is_finite() {
@@ -574,11 +578,11 @@ where
             } else if f_reflected < best.value {
                 // Expansion
                 let expanded = self.reflect_point(
-                    &worst.point,
-                    &centroid,
-                    &(alpha.clone() + (gamma.clone() - alpha.clone())),
+                    worst.point.view(),
+                    centroid.view(),
+                    &(&alpha + (&gamma - &alpha)),
                 );
-                let f_expanded = self.f.call(&expanded);
+                let f_expanded = self.f.call(expanded.view());
                 fn_evals += 1;
 
                 if !f_expanded.is_finite() {
@@ -600,12 +604,13 @@ where
                 // Contraction
                 let (contracted, f_contracted) = if f_reflected < worst.value {
                     let point =
-                        self.reflect_point(&worst.point, &centroid, &(alpha.clone() * rho.clone()));
-                    let value = self.f.call(&point);
+                        self.reflect_point(worst.point.view(), centroid.view(), &(&alpha * &rho));
+                    let value = self.f.call(point.view());
                     (point, value)
                 } else {
-                    let point = self.reflect_point(&worst.point, &centroid, &-rho.clone());
-                    let value = self.f.call(&point);
+                    let point =
+                        self.reflect_point(worst.point.view(), centroid.view(), &-rho.clone());
+                    let value = self.f.call(point.view());
                     (point, value)
                 };
                 fn_evals += 1;
@@ -625,11 +630,10 @@ where
                     for i in 1..=n {
                         let mut new_point = Array1::zeros(n);
                         for j in 0..n {
-                            new_point[j] = best_point[j].clone()
-                                + sigma.clone()
-                                    * (simplex[i].point[j].clone() - best_point[j].clone());
+                            new_point[j] =
+                                &best_point[j] + &sigma * (&simplex[i].point[j] - &best_point[j]);
                         }
-                        let new_value = self.f.call(&new_point);
+                        let new_value = self.f.call(new_point.view());
                         fn_evals += 1;
 
                         if !new_value.is_finite() {
@@ -664,7 +668,7 @@ where
     /// Convenience function with default parameters
     pub fn minimize(
         &mut self,
-        initial_point: &Array1<T>,
+        initial_point: ArrayView1<T>,
         initial_step: Option<T>,
         tol: Option<T>,
         max_iters: Option<usize>,
@@ -675,8 +679,8 @@ where
     /// Create initial simplex with custom step sizes for each dimension
     pub fn minimize_with_steps(
         &mut self,
-        initial_point: &Array1<T>,
-        step_sizes: &Array1<T>,
+        initial_point: ArrayView1<T>,
+        step_sizes: ArrayView1<T>,
     ) -> Result<SimplexResult<T>, MinimizerError> {
         let n = initial_point.len();
         if step_sizes.len() != n {
@@ -685,11 +689,11 @@ where
 
         // Custom implementation with individual step sizes
         let mut simplex = Vec::with_capacity(n + 1);
-        simplex.push(Vertex::new_boxed(initial_point.clone(), self.f.clone())?);
+        simplex.push(Vertex::new_boxed(initial_point.to_owned(), self.f.clone())?);
 
         for i in 0..n {
-            let mut point = initial_point.clone();
-            point[i] += step_sizes[i].clone();
+            let mut point = initial_point.to_owned();
+            point[i] += &step_sizes[i];
             simplex.push(Vertex::new_boxed(point, self.f.clone())?);
         }
 
@@ -729,7 +733,7 @@ mod minimize_simplex_tests {
 
     // Helper function to create Ackley
     fn ackley(bias: f64) -> F1dim<MyFloat> {
-        F1dim::new(MultiDimFn::new(move |x: &Array1<MyFloat>| {
+        F1dim::new(MultiDimFn::new(move |x: ArrayView1<MyFloat>| {
             let n = x.len() as f64;
             let t1 = x.iter().map(|val| val.powi(2)).sum::<MyFloat>();
             let t2 = x.iter().map(|val| (2.0 * PI * val).cos()).sum::<MyFloat>();
@@ -739,7 +743,7 @@ mod minimize_simplex_tests {
 
     // Helper function to create Elliptic
     fn elliptic(bias: f64) -> F1dim<MyFloat> {
-        F1dim::new(MultiDimFn::new(move |x: &Array1<MyFloat>| {
+        F1dim::new(MultiDimFn::new(move |x: ArrayView1<MyFloat>| {
             let sum: MyFloat = x
                 .iter()
                 .enumerate()
@@ -751,7 +755,7 @@ mod minimize_simplex_tests {
 
     // Helper function to create Griewank
     fn griewank(bias: f64) -> F1dim<MyFloat> {
-        F1dim::new(MultiDimFn::new(move |x: &Array1<MyFloat>| {
+        F1dim::new(MultiDimFn::new(move |x: ArrayView1<MyFloat>| {
             let t1 = x.iter().map(|val| val.powi(2)).sum::<MyFloat>() / 4000.0;
             let t2 = x
                 .iter()
@@ -764,8 +768,8 @@ mod minimize_simplex_tests {
 
     // Helper function to create Rosenbrock
     fn rosenbrock(shift: Array1<MyFloat>, bias: f64) -> F1dim<MyFloat> {
-        F1dim::new(MultiDimFn::new(move |x: &Array1<MyFloat>| {
-            let x_new = x - &shift + 1.0;
+        F1dim::new(MultiDimFn::new(move |x: ArrayView1<MyFloat>| {
+            let x_new = &x - &shift + 1.0;
             let sum: MyFloat = x_new
                 .windows(2)
                 .into_iter()
@@ -778,12 +782,12 @@ mod minimize_simplex_tests {
     #[test]
     fn test_2d_quadratic() {
         // f(x,y) = (x-1)² + (y-2)², minimum at (1,2)
-        let func = |x: &Array1<MyFloat>| (&x[0] - 1.0).powi(2) + (&x[1] - 2.0).powi(2);
+        let func = |x: ArrayView1<MyFloat>| (&x[0] - 1.0).powi(2) + (&x[1] - 2.0).powi(2);
         let objective = MultiDimFn::new(func);
         let mut simplex = Simplex::new(objective);
 
         let result = simplex
-            .minimize(&array![0.0.into(), 0.0.into()], None, None, None)
+            .minimize(array![0.0.into(), 0.0.into()].view(), None, None, None)
             .unwrap();
 
         assert!((&result.xmin[0] - 1.0).abs() < 1e-6);
@@ -800,14 +804,15 @@ mod minimize_simplex_tests {
     #[test]
     fn test_rosenbrock_2d() {
         // Rosenbrock function: f(x,y) = (1-x)² + 100(y-x²)²
-        let rosenbrock =
-            |x: &Array1<MyFloat>| (1.0 - &x[0]).powi(2) + 100.0 * (&x[1] - &x[0].powi(2)).powi(2);
+        let rosenbrock = |x: ArrayView1<MyFloat>| {
+            (1.0 - &x[0]).powi(2) + 100.0 * (&x[1] - &x[0].powi(2)).powi(2)
+        };
         let objective = MultiDimFn::new(rosenbrock);
         let mut simplex = Simplex::new(objective);
 
         let result = simplex
             .downhill_simplex(
-                &array![MyFloat::new(-1.2), 1.0.into()],
+                array![MyFloat::new(-1.2), 1.0.into()].view(),
                 Some(0.1.into()),
                 Some(1e-6.into()),
                 Some(2000),
@@ -826,13 +831,13 @@ mod minimize_simplex_tests {
     #[test]
     fn test_3d_sphere() {
         // f(x,y,z) = x² + y² + z², minimum at (0,0,0)
-        let sphere = |x: &Array1<MyFloat>| x.iter().map(|xi| xi * xi).sum();
+        let sphere = |x: ArrayView1<MyFloat>| x.iter().map(|xi| xi * xi).sum();
         let objective = MultiDimFn::new(sphere);
         let mut simplex = Simplex::new(objective);
 
         let result = simplex
             .minimize(
-                &array![1.0.into(), 1.0.into(), 1.0.into()],
+                array![1.0.into(), 1.0.into(), 1.0.into()].view(),
                 None,
                 None,
                 None,
@@ -854,13 +859,13 @@ mod minimize_simplex_tests {
 
     #[test]
     fn test_adaptive_simplex() {
-        let func = |x: &Array1<MyFloat>| (&x[0] - 3.0).powi(2) + (&x[1] + 2.0).powi(2) + 5.0;
+        let func = |x: ArrayView1<MyFloat>| (&x[0] - 3.0).powi(2) + (&x[1] + 2.0).powi(2) + 5.0;
         let objective = MultiDimFn::new(func);
         let mut simplex = Simplex::new(objective);
 
         let result = simplex
             .adaptive_downhill_simplex(
-                &array![0.0.into(), 0.0.into()],
+                array![0.0.into(), 0.0.into()].view(),
                 Some(1.0.into()),
                 Some(1e-8.into()),
                 None,
@@ -878,14 +883,14 @@ mod minimize_simplex_tests {
 
     #[test]
     fn test_custom_step_sizes() {
-        let func = |x: &Array1<MyFloat>| (&x[0] / 10.0 - 1.0).powi(2) + (&x[1] - 2.0).powi(2);
+        let func = |x: ArrayView1<MyFloat>| (&x[0] / 10.0 - 1.0).powi(2) + (&x[1] - 2.0).powi(2);
         let objective = MultiDimFn::new(func);
         let mut simplex = Simplex::new(objective);
 
         let result = simplex
             .minimize_with_steps(
-                &array![0.0.into(), 0.0.into()],
-                &array![10.0.into(), 1.0.into()], // Different step sizes for each dimension
+                array![0.0.into(), 0.0.into()].view(),
+                array![10.0.into(), 1.0.into()].view(), // Different step sizes for each dimension
             )
             .unwrap();
 
@@ -898,11 +903,11 @@ mod minimize_simplex_tests {
 
     #[test]
     fn test_invalid_dimension() {
-        let func = |_: &Array1<MyFloat>| 0.0.into();
+        let func = |_: ArrayView1<MyFloat>| 0.0.into();
         let objective = MultiDimFn::new(func);
         let mut simplex = Simplex::new(objective);
 
-        let result = simplex.minimize(&array![], None, None, None);
+        let result = simplex.minimize(array![].view(), None, None, None);
         assert!(result.is_err());
 
         assert!(matches!(result, Err(MinimizerError::InvalidDimension)));
@@ -910,12 +915,12 @@ mod minimize_simplex_tests {
 
     #[test]
     fn test_convergence_tracking() {
-        let func = |x: &Array1<MyFloat>| x[0].powi(2) + x[1].powi(2);
+        let func = |x: ArrayView1<MyFloat>| x[0].powi(2) + x[1].powi(2);
         let objective = MultiDimFn::new(func);
         let mut simplex = Simplex::new(objective);
 
         let result = simplex
-            .minimize(&array![2.0.into(), 2.0.into()], None, None, None)
+            .minimize(array![2.0.into(), 2.0.into()].view(), None, None, None)
             .unwrap();
 
         assert!(!result.history.is_empty());
@@ -926,12 +931,12 @@ mod minimize_simplex_tests {
     #[test]
     fn test_simplex_high_dimensional() {
         // Test 5D sphere function
-        let sphere_5d = |x: &Array1<MyFloat>| x.iter().map(|xi| xi * xi).sum::<MyFloat>();
+        let sphere_5d = |x: ArrayView1<MyFloat>| x.iter().map(|xi| xi * xi).sum::<MyFloat>();
         let objective = MultiDimFn::new(sphere_5d);
         let mut simplex = Simplex::new(objective);
 
         let result = simplex
-            .minimize(&Array1::ones(5), None, None, None)
+            .minimize(Array1::ones(5).view(), None, None, None)
             .unwrap();
 
         assert!(result.converged);
@@ -945,13 +950,13 @@ mod minimize_simplex_tests {
     fn test_simplex_rosenbrock_variants() {
         // Test 1: 2D Rosenbrock
         let rosenbrock_2d =
-            |x: &Array1<MyFloat>| (1.0 - &x[0]).powi(2) + 100.0 * (&x[1] - x[0].powi(2)).powi(2);
+            |x: ArrayView1<MyFloat>| (1.0 - &x[0]).powi(2) + 100.0 * (&x[1] - x[0].powi(2)).powi(2);
         let objective = MultiDimFn::new(rosenbrock_2d);
         let mut simplex = Simplex::new(objective);
 
         let result = simplex
             .downhill_simplex(
-                &array![MyFloat::new(-1.2), 1.0.into()],
+                array![MyFloat::new(-1.2), 1.0.into()].view(),
                 Some(0.1.into()),
                 Some(1e-6.into()),
                 Some(3000),
@@ -962,7 +967,7 @@ mod minimize_simplex_tests {
         assert!((&result.xmin[1] - 1.0).abs() < 1e-3);
 
         // Test 2: Extended Rosenbrock (4D)
-        let rosenbrock_4d = |x: &Array1<MyFloat>| {
+        let rosenbrock_4d = |x: ArrayView1<MyFloat>| {
             (0..x.len() - 1)
                 .map(|i| (1.0 - &x[i]).powi(2) + 100.0 * (&x[i + 1] - x[i].powi(2)).powi(2))
                 .sum::<MyFloat>()
@@ -971,7 +976,7 @@ mod minimize_simplex_tests {
         let mut simplex = Simplex::new(objective);
 
         let result = simplex
-            .minimize(&(Array1::ones(4) * -1.0), None, None, None)
+            .minimize((Array1::ones(4) * -1.0).view(), None, None, None)
             .unwrap();
 
         for coord in result.xmin {
@@ -982,7 +987,7 @@ mod minimize_simplex_tests {
     #[test]
     fn test_simplex_with_constraints_penalty() {
         // Test penalty method simulation
-        let constrained_objective = |x: &Array1<MyFloat>| {
+        let constrained_objective = |x: ArrayView1<MyFloat>| {
             let obj = x[0].powi(2) + x[1].powi(2);
             let penalty = if &x[0] + &x[1] < 1.0 {
                 1000.0 * (1.0 - &x[0] - &x[1]).powi(2)
@@ -995,7 +1000,7 @@ mod minimize_simplex_tests {
         let mut simplex = Simplex::new(objective);
 
         let result = simplex
-            .minimize(&array![0.6.into(), 0.6.into()], None, None, None)
+            .minimize(array![0.6.into(), 0.6.into()].view(), None, None, None)
             .unwrap();
 
         // Should satisfy constraint x + y >= 1
@@ -1006,7 +1011,7 @@ mod minimize_simplex_tests {
     #[test]
     fn test_adaptive_simplex_performance() {
         // Compare standard vs adaptive simplex
-        let beale = |x: &Array1<MyFloat>| {
+        let beale = |x: ArrayView1<MyFloat>| {
             let x1 = x[0].clone();
             let x2 = x[1].clone();
             (1.5 - &x1 + &x1 * &x2).powi(2)
@@ -1017,10 +1022,10 @@ mod minimize_simplex_tests {
         let mut simplex = Simplex::new(objective);
 
         let standard_result = simplex
-            .downhill_simplex(&array![1.0.into(), 1.0.into()], None, None, None)
+            .downhill_simplex(array![1.0.into(), 1.0.into()].view(), None, None, None)
             .unwrap();
         let adaptive_result = simplex
-            .adaptive_downhill_simplex(&array![1.0.into(), 1.0.into()], None, None, None)
+            .adaptive_downhill_simplex(array![1.0.into(), 1.0.into()].view(), None, None, None)
             .unwrap();
 
         // Both should converge
@@ -1043,12 +1048,12 @@ mod minimize_simplex_tests {
         #[test]
         fn test_1d_optimization() {
             // f(x) = (x - 5)²
-            let func = |x: &Array1<MyFloat>| (&x[0] - 5.0).powi(2);
+            let func = |x: ArrayView1<MyFloat>| (&x[0] - 5.0).powi(2);
             let objective = MultiDimFn::new(func);
             let mut simplex = Simplex::new(objective);
 
             let result = simplex
-                .minimize(&array![0.0.into()], None, None, None)
+                .minimize(array![0.0.into()].view(), None, None, None)
                 .unwrap();
 
             assert!((&result.xmin[0] - 5.0).abs() < 1e-6);
@@ -1060,12 +1065,12 @@ mod minimize_simplex_tests {
 
         #[test]
         fn test_already_at_minimum() {
-            let func = |x: &Array1<MyFloat>| x[0].powi(2) + x[1].powi(2);
+            let func = |x: ArrayView1<MyFloat>| x[0].powi(2) + x[1].powi(2);
             let objective = MultiDimFn::new(func);
             let mut simplex = Simplex::new(objective);
 
             let result = simplex
-                .minimize(&array![0.0.into(), 0.0.into()], None, None, None)
+                .minimize(array![0.0.into(), 0.0.into()].view(), None, None, None)
                 .unwrap();
 
             assert!(result.xmin[0].abs() < 1e-6);
@@ -1076,12 +1081,12 @@ mod minimize_simplex_tests {
         #[test]
         fn test_negative_coordinates() {
             // Minimum at (-3, -4)
-            let func = |x: &Array1<MyFloat>| (&x[0] + 3.0).powi(2) + (&x[1] + 4.0).powi(2);
+            let func = |x: ArrayView1<MyFloat>| (&x[0] + 3.0).powi(2) + (&x[1] + 4.0).powi(2);
             let objective = MultiDimFn::new(func);
             let mut simplex = Simplex::new(objective);
 
             let result = simplex
-                .minimize(&array![0.0.into(), 0.0.into()], None, None, None)
+                .minimize(array![0.0.into(), 0.0.into()].view(), None, None, None)
                 .unwrap();
 
             assert!((&result.xmin[0] + 3.0).abs() < 1e-6);
@@ -1095,11 +1100,11 @@ mod minimize_simplex_tests {
 
         #[test]
         fn test_empty_initial_point() {
-            let func = |_: &Array1<MyFloat>| 0.0.into();
+            let func = |_: ArrayView1<MyFloat>| 0.0.into();
             let objective = MultiDimFn::new(func);
             let mut simplex = Simplex::new(objective);
 
-            let result = simplex.minimize(&array![], None, None, None);
+            let result = simplex.minimize(array![].view(), None, None, None);
             assert!(result.is_err());
             assert!(matches!(
                 result.unwrap_err(),
@@ -1109,12 +1114,12 @@ mod minimize_simplex_tests {
 
         #[test]
         fn test_invalid_tolerance() {
-            let func = |x: &Array1<MyFloat>| x[0].powi(2);
+            let func = |x: ArrayView1<MyFloat>| x[0].powi(2);
             let objective = MultiDimFn::new(func);
             let mut simplex = Simplex::new(objective);
 
             let result =
-                simplex.downhill_simplex(&array![1.0.into()], None, Some(0.0.into()), None);
+                simplex.downhill_simplex(array![1.0.into()].view(), None, Some(0.0.into()), None);
             assert!(result.is_err());
             assert!(matches!(
                 result.unwrap_err(),
@@ -1122,7 +1127,7 @@ mod minimize_simplex_tests {
             ));
 
             let result = simplex.downhill_simplex(
-                &array![1.0.into()],
+                array![1.0.into()].view(),
                 None,
                 Some(MyFloat::new(-1e-8)),
                 None,
@@ -1136,7 +1141,7 @@ mod minimize_simplex_tests {
 
         #[test]
         fn test_function_returning_infinity() {
-            let func = |x: &Array1<MyFloat>| {
+            let func = |x: ArrayView1<MyFloat>| {
                 if x[0] > 1.0 {
                     f64::INFINITY.into()
                 } else {
@@ -1146,7 +1151,7 @@ mod minimize_simplex_tests {
             let objective = MultiDimFn::new(func);
             let mut simplex = Simplex::new(objective);
 
-            let result = simplex.minimize(&array![2.0.into()], None, None, None); // Start where function is infinite
+            let result = simplex.minimize(array![2.0.into()].view(), None, None, None); // Start where function is infinite
             assert!(result.is_err());
             assert!(matches!(
                 result.unwrap_err(),
@@ -1156,7 +1161,7 @@ mod minimize_simplex_tests {
 
         #[test]
         fn test_function_returning_nan() {
-            let func = |x: &Array1<MyFloat>| {
+            let func = |x: ArrayView1<MyFloat>| {
                 if x[0] < 0.0 {
                     f64::NAN.into()
                 } else {
@@ -1166,7 +1171,7 @@ mod minimize_simplex_tests {
             let objective = MultiDimFn::new(func);
             let mut simplex = Simplex::new(objective);
 
-            let result = simplex.minimize(&array![MyFloat::new(-1.0)], None, None, None); // Start where function is NaN
+            let result = simplex.minimize(array![MyFloat::new(-1.0)].view(), None, None, None); // Start where function is NaN
             assert!(result.is_err());
             assert!(matches!(
                 result.unwrap_err(),
@@ -1176,12 +1181,14 @@ mod minimize_simplex_tests {
 
         #[test]
         fn test_mismatched_step_sizes() {
-            let func = |x: &Array1<MyFloat>| x[0].powi(2) + x[1].powi(2);
+            let func = |x: ArrayView1<MyFloat>| x[0].powi(2) + x[1].powi(2);
             let objective = MultiDimFn::new(func);
             let mut simplex = Simplex::new(objective);
 
-            let result =
-                simplex.minimize_with_steps(&array![1.0.into(), 1.0.into()], &array![0.1.into()]); // Wrong length
+            let result = simplex.minimize_with_steps(
+                array![1.0.into(), 1.0.into()].view(),
+                array![0.1.into()].view(),
+            ); // Wrong length
             assert!(result.is_err());
             assert!(matches!(
                 result.unwrap_err(),
@@ -1196,7 +1203,7 @@ mod minimize_simplex_tests {
         #[test]
         fn test_max_iterations_reached() {
             // Create a difficult function that won't converge quickly
-            let func = |x: &Array1<MyFloat>| {
+            let func = |x: ArrayView1<MyFloat>| {
                 (&x[0] - 1.0).powi(4) + (&x[1] - 2.0).powi(4) + 0.01 * (&x[0] * &x[1]).sin()
             };
             let objective = MultiDimFn::new(func);
@@ -1204,7 +1211,7 @@ mod minimize_simplex_tests {
 
             let result = simplex
                 .downhill_simplex(
-                    &array![0.0.into(), 0.0.into()],
+                    array![0.0.into(), 0.0.into()].view(),
                     None,
                     Some(1e-12.into()),
                     Some(10),
@@ -1217,12 +1224,12 @@ mod minimize_simplex_tests {
 
         #[test]
         fn test_convergence_tracking() {
-            let func = |x: &Array1<MyFloat>| (&x[0] - 2.0).powi(2) + (&x[1] - 3.0).powi(2);
+            let func = |x: ArrayView1<MyFloat>| (&x[0] - 2.0).powi(2) + (&x[1] - 3.0).powi(2);
             let objective = MultiDimFn::new(func);
             let mut simplex = Simplex::new(objective);
 
             let result = simplex
-                .minimize(&array![0.0.into(), 0.0.into()], None, None, None)
+                .minimize(array![0.0.into(), 0.0.into()].view(), None, None, None)
                 .unwrap();
 
             assert!(!result.history.is_empty());
@@ -1239,13 +1246,13 @@ mod minimize_simplex_tests {
 
         #[test]
         fn test_tight_tolerance() {
-            let func = |x: &Array1<MyFloat>| x[0].powi(2) + x[1].powi(2);
+            let func = |x: ArrayView1<MyFloat>| x[0].powi(2) + x[1].powi(2);
             let objective = MultiDimFn::new(func);
             let mut simplex = Simplex::new(objective);
 
             let result = simplex
                 .downhill_simplex(
-                    &array![1.0.into(), 1.0.into()],
+                    array![1.0.into(), 1.0.into()].view(),
                     None,
                     Some(1e-12.into()),
                     None,
@@ -1264,12 +1271,12 @@ mod minimize_simplex_tests {
 
         #[test]
         fn test_10d_sphere() {
-            let sphere_10d = |x: &Array1<MyFloat>| x.iter().map(|xi| xi * xi).sum::<MyFloat>();
+            let sphere_10d = |x: ArrayView1<MyFloat>| x.iter().map(|xi| xi * xi).sum::<MyFloat>();
             let objective = MultiDimFn::new(sphere_10d);
             let mut simplex = Simplex::new(objective);
 
             let result = simplex
-                .minimize(&Array1::ones(10), None, None, None)
+                .minimize(Array1::ones(10).view(), None, None, None)
                 .unwrap();
 
             for coord in result.xmin {
@@ -1281,7 +1288,7 @@ mod minimize_simplex_tests {
         #[test]
         fn test_high_dimensional_rosenbrock() {
             // 4D Rosenbrock function
-            let rosenbrock_4d = |x: &Array1<MyFloat>| {
+            let rosenbrock_4d = |x: ArrayView1<MyFloat>| {
                 (0..x.len() - 1)
                     .map(|i| (1.0 - &x[i]).powi(2) + 100.0 * (&x[i + 1] - x[i].powi(2)).powi(2))
                     .sum::<MyFloat>()
@@ -1291,7 +1298,7 @@ mod minimize_simplex_tests {
 
             let result = simplex
                 .downhill_simplex(
-                    &(Array1::ones(4) * -0.5),
+                    (Array1::ones(4) * -0.5).view(),
                     Some(0.5.into()),
                     Some(1e-4.into()),
                     Some(5000),
@@ -1311,7 +1318,7 @@ mod minimize_simplex_tests {
         #[test]
         fn test_beale_function() {
             // Beale function: global minimum at (3, 0.5)
-            let beale = |x: &Array1<MyFloat>| {
+            let beale = |x: ArrayView1<MyFloat>| {
                 let x1 = x[0].clone();
                 let x2 = x[1].clone();
                 (1.5 - &x1 + &x1 * &x2).powi(2)
@@ -1323,7 +1330,7 @@ mod minimize_simplex_tests {
 
             let result = simplex
                 .downhill_simplex(
-                    &array![1.0.into(), 1.0.into()],
+                    array![1.0.into(), 1.0.into()].view(),
                     Some(0.5.into()),
                     Some(1e-6.into()),
                     Some(2000),
@@ -1338,7 +1345,7 @@ mod minimize_simplex_tests {
         #[test]
         fn test_goldstein_price_function() {
             // Goldstein-Price function: global minimum at (0, -1) with value 3
-            let goldstein_price = |x: &Array1<MyFloat>| {
+            let goldstein_price = |x: ArrayView1<MyFloat>| {
                 let x1 = x[0].clone();
                 let x2 = x[1].clone();
                 (1.0 + (&x1 + &x2 + 1.0).powi(2)
@@ -1356,7 +1363,7 @@ mod minimize_simplex_tests {
 
             let result = simplex
                 .downhill_simplex(
-                    &array![0.5.into(), MyFloat::new(-0.5)],
+                    array![0.5.into(), MyFloat::new(-0.5)].view(),
                     Some(0.2.into()),
                     Some(1e-6.into()),
                     Some(3000),
@@ -1371,7 +1378,7 @@ mod minimize_simplex_tests {
         #[test]
         fn test_himmelblau_function() {
             // Himmelblau's function has 4 global minima
-            let himmelblau = |x: &Array1<MyFloat>| {
+            let himmelblau = |x: ArrayView1<MyFloat>| {
                 (x[0].powi(2) + &x[1] - 11.0).powi(2) + (&x[0] + x[1].powi(2) - 7.0).powi(2)
             };
             let objective = MultiDimFn::new(himmelblau);
@@ -1387,7 +1394,12 @@ mod minimize_simplex_tests {
 
             for start in starting_points {
                 let result = simplex
-                    .downhill_simplex(&start, Some(0.5.into()), Some(1e-6.into()), Some(2000))
+                    .downhill_simplex(
+                        start.view(),
+                        Some(0.5.into()),
+                        Some(1e-6.into()),
+                        Some(2000),
+                    )
                     .unwrap();
 
                 // All minima should have function value 0
@@ -1415,7 +1427,7 @@ mod minimize_simplex_tests {
 
         #[test]
         fn test_adaptive_vs_standard_performance() {
-            let func = |x: &Array1<MyFloat>| {
+            let func = |x: ArrayView1<MyFloat>| {
                 // Scaled quadratic - more challenging in one dimension
                 (&x[0] / 100.0 - 1.0).powi(2) + (&x[1] - 2.0).powi(2)
             };
@@ -1424,7 +1436,7 @@ mod minimize_simplex_tests {
 
             let standard_result = simplex
                 .downhill_simplex(
-                    &array![0.0.into(), 0.0.into()],
+                    array![0.0.into(), 0.0.into()].view(),
                     None,
                     Some(1e-8.into()),
                     None,
@@ -1432,7 +1444,7 @@ mod minimize_simplex_tests {
                 .unwrap();
             let adaptive_result = simplex
                 .adaptive_downhill_simplex(
-                    &array![0.0.into(), 0.0.into()],
+                    array![0.0.into(), 0.0.into()].view(),
                     None,
                     Some(1e-8.into()),
                     None,
@@ -1449,7 +1461,7 @@ mod minimize_simplex_tests {
         #[test]
         fn test_adaptive_no_improvement_convergence() {
             // Function that plateaus to test no-improvement convergence
-            let plateau_func = |x: &Array1<MyFloat>| {
+            let plateau_func = |x: ArrayView1<MyFloat>| {
                 let base = x[0].powi(2) + x[1].powi(2);
                 if base < 0.01 {
                     0.01.into()
@@ -1462,7 +1474,7 @@ mod minimize_simplex_tests {
 
             let result = simplex
                 .adaptive_downhill_simplex(
-                    &array![2.0.into(), 2.0.into()],
+                    array![2.0.into(), 2.0.into()].view(),
                     Some(1.0.into()),
                     Some(1e-8.into()),
                     Some(1000),
@@ -1484,7 +1496,7 @@ mod minimize_simplex_tests {
         #[test]
         fn test_custom_step_sizes_scaled_problem() {
             // Problem with very different scales in different dimensions
-            let scaled_func = |x: &Array1<MyFloat>| {
+            let scaled_func = |x: ArrayView1<MyFloat>| {
                 (&x[0] / 1000.0 - 1.0).powi(2) + (&x[1] * 1000.0 - 2.0).powi(2)
             };
             let objective = MultiDimFn::new(scaled_func);
@@ -1493,8 +1505,8 @@ mod minimize_simplex_tests {
             // Use appropriate step sizes for each dimension
             let result = simplex
                 .minimize_with_steps(
-                    &array![0.0.into(), 0.0.into()],
-                    &array![1000.0.into(), 0.001.into()], // Large step for first dim, small for second
+                    array![0.0.into(), 0.0.into()].view(),
+                    array![1000.0.into(), 0.001.into()].view(), // Large step for first dim, small for second
                 )
                 .unwrap();
 
@@ -1504,14 +1516,14 @@ mod minimize_simplex_tests {
 
         #[test]
         fn test_zero_step_size() {
-            let func = |x: &Array1<MyFloat>| x[0].powi(2) + x[1].powi(2);
+            let func = |x: ArrayView1<MyFloat>| x[0].powi(2) + x[1].powi(2);
             let objective = MultiDimFn::new(func);
             let mut simplex = Simplex::new(objective);
 
             // Test with zero step size - this creates a degenerate simplex
             let result = simplex.minimize_with_steps(
-                &array![1.0.into(), 1.0.into()],
-                &array![0.0.into(), 1.0.into()],
+                array![1.0.into(), 1.0.into()].view(),
+                array![0.0.into(), 1.0.into()].view(),
             );
 
             // Zero step size creates a degenerate simplex, which may cause convergence issues
@@ -1532,12 +1544,12 @@ mod minimize_simplex_tests {
 
         #[test]
         fn test_constant_function() {
-            let constant_func = |_: &Array1<MyFloat>| 42.0.into();
+            let constant_func = |_: ArrayView1<MyFloat>| 42.0.into();
             let objective = MultiDimFn::new(constant_func);
             let mut simplex = Simplex::new(objective);
 
             let result = simplex
-                .minimize(&array![1.0.into(), 2.0.into()], None, None, None)
+                .minimize(array![1.0.into(), 2.0.into()].view(), None, None, None)
                 .unwrap();
 
             assert!((result.fmin - 42.0).abs() < 1e-10);
@@ -1547,12 +1559,12 @@ mod minimize_simplex_tests {
         #[test]
         fn test_linear_function() {
             // f(x,y) = 2x + 3y (unbounded below, but simplex should handle gracefully)
-            let linear_func = |x: &Array1<MyFloat>| 2.0 * &x[0] + 3.0 * &x[1];
+            let linear_func = |x: ArrayView1<MyFloat>| 2.0 * &x[0] + 3.0 * &x[1];
             let objective = MultiDimFn::new(linear_func);
             let mut simplex = Simplex::new(objective);
 
             let result = simplex.downhill_simplex(
-                &array![0.0.into(), 0.0.into()],
+                array![0.0.into(), 0.0.into()].view(),
                 Some(1.0.into()),
                 Some(1e-8.into()),
                 Some(100),
@@ -1573,7 +1585,7 @@ mod minimize_simplex_tests {
 
         #[test]
         fn test_discontinuous_function() {
-            let discontinuous = |x: &Array1<MyFloat>| {
+            let discontinuous = |x: ArrayView1<MyFloat>| {
                 if x[0] < 0.0 {
                     100.0 + x[0].powi(2) + x[1].powi(2)
                 } else {
@@ -1584,7 +1596,7 @@ mod minimize_simplex_tests {
             let mut simplex = Simplex::new(objective);
 
             let result = simplex
-                .minimize(&array![1.0.into(), 1.0.into()], None, None, None)
+                .minimize(array![1.0.into(), 1.0.into()].view(), None, None, None)
                 .unwrap();
 
             // Should find minimum in the x >= 0 region
@@ -1599,12 +1611,12 @@ mod minimize_simplex_tests {
 
         #[test]
         fn test_simplex_state_consistency() {
-            let func = |x: &Array1<MyFloat>| (&x[0] - 3.0).powi(2) + (&x[1] - 4.0).powi(2);
+            let func = |x: ArrayView1<MyFloat>| (&x[0] - 3.0).powi(2) + (&x[1] - 4.0).powi(2);
             let objective = MultiDimFn::new(func);
             let mut simplex = Simplex::new(objective);
 
             let result = simplex
-                .minimize(&array![0.0.into(), 0.0.into()], None, None, None)
+                .minimize(array![0.0.into(), 0.0.into()].view(), None, None, None)
                 .unwrap();
 
             // Check that simplex internal state matches result
@@ -1616,18 +1628,18 @@ mod minimize_simplex_tests {
 
         #[test]
         fn test_multiple_optimizations() {
-            let func = |x: &Array1<MyFloat>| (&x[0] - 1.0).powi(2) + (&x[1] - 2.0).powi(2);
+            let func = |x: ArrayView1<MyFloat>| (&x[0] - 1.0).powi(2) + (&x[1] - 2.0).powi(2);
             let objective = MultiDimFn::new(func);
             let mut simplex = Simplex::new(objective);
 
             // First optimization
             let result1 = simplex
-                .minimize(&array![0.0.into(), 0.0.into()], None, None, None)
+                .minimize(array![0.0.into(), 0.0.into()].view(), None, None, None)
                 .unwrap();
 
             // Second optimization with different starting point
             let result2 = simplex
-                .minimize(&array![5.0.into(), 5.0.into()], None, None, None)
+                .minimize(array![5.0.into(), 5.0.into()].view(), None, None, None)
                 .unwrap();
 
             // Both should find the same minimum
@@ -1650,12 +1662,12 @@ mod minimize_simplex_tests {
             // Note: This test would need to be redesigned since we can't capture eval_count
             // in a closure that implements ObjFn. Instead, we can test that fn_evals is reasonable:
 
-            let func = |x: &Array1<MyFloat>| x[0].powi(2) + x[1].powi(2);
+            let func = |x: ArrayView1<MyFloat>| x[0].powi(2) + x[1].powi(2);
             let objective = MultiDimFn::new(func);
             let mut simplex = Simplex::new(objective);
 
             let result = simplex
-                .minimize(&array![1.0.into(), 1.0.into()], None, None, None)
+                .minimize(array![1.0.into(), 1.0.into()].view(), None, None, None)
                 .unwrap();
 
             // Should have reasonable number of function evaluations
@@ -1665,7 +1677,7 @@ mod minimize_simplex_tests {
 
         #[test]
         fn test_very_small_initial_step() {
-            let func = |x: &Array1<MyFloat>| x[0].powi(2) + x[1].powi(2);
+            let func = |x: ArrayView1<MyFloat>| x[0].powi(2) + x[1].powi(2);
             let objective = MultiDimFn::new(func);
             let mut simplex = Simplex::new(objective);
 
@@ -1673,7 +1685,7 @@ mod minimize_simplex_tests {
             // due to the simplex size being smaller than the tolerance
             let result = simplex
                 .downhill_simplex(
-                    &array![1.0.into(), 1.0.into()],
+                    array![1.0.into(), 1.0.into()].view(),
                     Some(1e-12.into()),
                     Some(1e-6.into()),
                     Some(5000),
@@ -1700,13 +1712,13 @@ mod minimize_simplex_tests {
         #[test]
         fn test_small_but_reasonable_initial_step() {
             // This test demonstrates proper behavior with a small but reasonable step
-            let func = |x: &Array1<MyFloat>| x[0].powi(2) + x[1].powi(2);
+            let func = |x: ArrayView1<MyFloat>| x[0].powi(2) + x[1].powi(2);
             let objective = MultiDimFn::new(func);
             let mut simplex = Simplex::new(objective);
 
             let result = simplex
                 .downhill_simplex(
-                    &array![1.0.into(), 1.0.into()],
+                    array![1.0.into(), 1.0.into()].view(),
                     Some(1e-6.into()),
                     Some(1e-8.into()),
                     None,
@@ -1721,13 +1733,13 @@ mod minimize_simplex_tests {
 
         #[test]
         fn test_very_large_initial_step() {
-            let func = |x: &Array1<MyFloat>| x[0].powi(2) + x[1].powi(2);
+            let func = |x: ArrayView1<MyFloat>| x[0].powi(2) + x[1].powi(2);
             let objective = MultiDimFn::new(func);
             let mut simplex = Simplex::new(objective);
 
             let result = simplex
                 .downhill_simplex(
-                    &array![0.0.into(), 0.0.into()],
+                    array![0.0.into(), 0.0.into()].view(),
                     Some(1000.0.into()),
                     None,
                     None,
@@ -1746,13 +1758,13 @@ mod minimize_simplex_tests {
         #[test]
         fn test_ill_conditioned_problem() {
             // Function with very different curvatures in different directions
-            let ill_conditioned = |x: &Array1<MyFloat>| x[0].powi(2) + 10000.0 * x[1].powi(2);
+            let ill_conditioned = |x: ArrayView1<MyFloat>| x[0].powi(2) + 10000.0 * x[1].powi(2);
             let objective = MultiDimFn::new(ill_conditioned);
             let mut simplex = Simplex::new(objective);
 
             let result = simplex
                 .downhill_simplex(
-                    &array![1.0.into(), 1.0.into()],
+                    array![1.0.into(), 1.0.into()].view(),
                     Some(0.1.into()),
                     Some(1e-4.into()),
                     Some(5000),
@@ -1770,12 +1782,12 @@ mod minimize_simplex_tests {
 
         #[test]
         fn test_near_zero_function_values() {
-            let tiny_func = |x: &Array1<MyFloat>| 1e-15 * (x[0].powi(2) + x[1].powi(2));
+            let tiny_func = |x: ArrayView1<MyFloat>| 1e-15 * (x[0].powi(2) + x[1].powi(2));
             let objective = MultiDimFn::new(tiny_func);
             let mut simplex = Simplex::new(objective);
 
             let result = simplex
-                .minimize(&array![1.0.into(), 1.0.into()], None, None, None)
+                .minimize(array![1.0.into(), 1.0.into()].view(), None, None, None)
                 .unwrap();
 
             assert!(result.xmin[0].abs() < 1e-6);
@@ -1906,7 +1918,7 @@ mod minimize_simplex_tests {
             let n = 10;
             let x = Array1::from_shape_fn(n, |_| MyFloat::new(rng.random::<f64>() * 200.0 - 100.0));
             let shift_func = shift.clone();
-            let func = move |x: &Array1<MyFloat>| {
+            let func = move |x: ArrayView1<MyFloat>| {
                 x.iter()
                     .enumerate()
                     .map(|(i, val)| (val - shift_func[i]).powi(2) + bias)
@@ -1915,7 +1927,12 @@ mod minimize_simplex_tests {
             let objective = MultiDimFn::new(func);
             let mut simplex = Simplex::new(objective);
             let result = simplex
-                .minimize(&x, None, Some(1e-10.into()), Some(1e3 as usize * n.pow(2)))
+                .minimize(
+                    x.view(),
+                    None,
+                    Some(1e-10.into()),
+                    Some(1e3 as usize * n.pow(2)),
+                )
                 .unwrap();
             for i in 0..10 {
                 assert!((&result.xmin[i] - shift[i]).abs() < 1e-2);
@@ -1931,7 +1948,7 @@ mod minimize_simplex_tests {
                 let x =
                     Array1::from_shape_fn(n, |_| MyFloat::new(rng.random::<f64>() * 200.0 - 100.0));
                 let shift_func = shift.clone();
-                let func = move |x: &Array1<MyFloat>| {
+                let func = move |x: ArrayView1<MyFloat>| {
                     x.iter()
                         .enumerate()
                         .map(|(i, val)| (val - shift_func[i]).powi(2) + bias)
@@ -1940,7 +1957,12 @@ mod minimize_simplex_tests {
                 let objective = MultiDimFn::new(func);
                 let mut simplex = Simplex::new(objective);
                 let result = simplex
-                    .minimize(&x, None, Some(1e-10.into()), Some(1e3 as usize * n.pow(2)))
+                    .minimize(
+                        x.view(),
+                        None,
+                        Some(1e-10.into()),
+                        Some(1e3 as usize * n.pow(2)),
+                    )
                     .unwrap();
                 for i in 0..10 {
                     assert!((&result.xmin[i] - shift[i]).abs() < 1e-2);
@@ -1957,7 +1979,7 @@ mod minimize_simplex_tests {
                 let x =
                     Array1::from_shape_fn(n, |_| MyFloat::new(rng.random::<f64>() * 200.0 - 100.0));
                 let shift_func = shift.clone();
-                let func = move |x: &Array1<MyFloat>| {
+                let func = move |x: ArrayView1<MyFloat>| {
                     x.iter()
                         .enumerate()
                         .map(|(i, val)| (val - shift_func[i]).powi(2) + bias)
@@ -1966,7 +1988,12 @@ mod minimize_simplex_tests {
                 let objective = MultiDimFn::new(func);
                 let mut simplex = Simplex::new(objective);
                 let result = simplex
-                    .minimize(&x, None, Some(1e-10.into()), Some(1e3 as usize * n.pow(2)))
+                    .minimize(
+                        x.view(),
+                        None,
+                        Some(1e-10.into()),
+                        Some(1e3 as usize * n.pow(2)),
+                    )
                     .unwrap();
                 for i in 0..10 {
                     assert!((&result.xmin[i] - shift[i]).abs() < 1e-2);
@@ -2089,7 +2116,7 @@ mod minimize_simplex_tests {
             let n = 10;
             let x = Array1::from_shape_fn(n, |_| MyFloat::new(rng.random::<f64>() * 200.0 - 100.0));
             let shift_func = shift.clone();
-            let func = move |x: &Array1<MyFloat>| {
+            let func = move |x: ArrayView1<MyFloat>| {
                 x.iter()
                     .enumerate()
                     .map(|(i, _)| {
@@ -2104,7 +2131,12 @@ mod minimize_simplex_tests {
             let objective = MultiDimFn::new(func);
             let mut simplex = Simplex::new(objective);
             let result = simplex
-                .minimize(&x, None, Some(1e-10.into()), Some(1e3 as usize * n.pow(2)))
+                .minimize(
+                    x.view(),
+                    None,
+                    Some(1e-10.into()),
+                    Some(1e3 as usize * n.pow(2)),
+                )
                 .unwrap();
             for i in 0..10 {
                 assert!((&result.xmin[i] - shift[i]).abs() < 1e-2);
@@ -2120,7 +2152,7 @@ mod minimize_simplex_tests {
                 let x =
                     Array1::from_shape_fn(n, |_| MyFloat::new(rng.random::<f64>() * 200.0 - 100.0));
                 let shift_func = shift.clone();
-                let func = move |x: &Array1<MyFloat>| {
+                let func = move |x: ArrayView1<MyFloat>| {
                     x.iter()
                         .enumerate()
                         .map(|(i, _)| {
@@ -2135,7 +2167,12 @@ mod minimize_simplex_tests {
                 let objective = MultiDimFn::new(func);
                 let mut simplex = Simplex::new(objective);
                 let result = simplex
-                    .minimize(&x, None, Some(1e-10.into()), Some(1e3 as usize * n.pow(2)))
+                    .minimize(
+                        x.view(),
+                        None,
+                        Some(1e-10.into()),
+                        Some(1e3 as usize * n.pow(2)),
+                    )
                     .unwrap();
                 for i in 0..10 {
                     assert!((&result.xmin[i] - shift[i]).abs() < 1e-2);
@@ -2152,7 +2189,7 @@ mod minimize_simplex_tests {
                 let x =
                     Array1::from_shape_fn(n, |_| MyFloat::new(rng.random::<f64>() * 200.0 - 100.0));
                 let shift_func = shift.clone();
-                let func = move |x: &Array1<MyFloat>| {
+                let func = move |x: ArrayView1<MyFloat>| {
                     x.iter()
                         .enumerate()
                         .map(|(i, _)| {
@@ -2167,7 +2204,12 @@ mod minimize_simplex_tests {
                 let objective = MultiDimFn::new(func);
                 let mut simplex = Simplex::new(objective);
                 let result = simplex
-                    .minimize(&x, None, Some(1e-10.into()), Some(1e3 as usize * n.pow(2)))
+                    .minimize(
+                        x.view(),
+                        None,
+                        Some(1e-10.into()),
+                        Some(1e3 as usize * n.pow(2)),
+                    )
                     .unwrap();
                 for i in 0..10 {
                     assert!((&result.xmin[i] - shift[i]).abs() < 1e-2);
@@ -2326,10 +2368,15 @@ mod minimize_simplex_tests {
                 let x1 = &Array1::from_shape_fn(n, |_| {
                     MyFloat::new(rng.random::<f64>() * 200.0 - 100.0)
                 }) - &shift;
-                let x = &dot_1d_2d(&x1, &m);
+                let x = dot_1d_2d(x1.view(), m.view());
                 let mut simplex = Simplex::new(elliptic(bias));
                 let result = simplex
-                    .minimize(x, None, Some(1e-10.into()), Some(1e3 as usize * n.pow(2)))
+                    .minimize(
+                        x.view(),
+                        None,
+                        Some(1e-10.into()),
+                        Some(1e3 as usize * n.pow(2)),
+                    )
                     .unwrap();
                 println!(
                     "\n\nxmin = {:?}\nfmin = {:?}\n\n",
@@ -2465,7 +2512,7 @@ mod minimize_simplex_tests {
             let x = Array1::from_shape_fn(n, |_| MyFloat::new(rng.random::<f64>() * 200.0 - 100.0));
             let shift_func = shift.clone();
             let rand_val = MyFloat::new(rng.random::<f64>());
-            let func = move |x: &Array1<MyFloat>| {
+            let func = move |x: ArrayView1<MyFloat>| {
                 x.iter()
                     .enumerate()
                     .map(|(i, _)| {
@@ -2481,7 +2528,12 @@ mod minimize_simplex_tests {
             let objective = MultiDimFn::new(func);
             let mut simplex = Simplex::new(objective);
             let result = simplex
-                .minimize(&x, None, Some(1e-10.into()), Some(1e3 as usize * n.pow(2)))
+                .minimize(
+                    x.view(),
+                    None,
+                    Some(1e-10.into()),
+                    Some(1e3 as usize * n.pow(2)),
+                )
                 .unwrap();
             for i in 0..10 {
                 assert!((&result.xmin[i] - &shift[i]).abs() < 1e-2);
@@ -2608,7 +2660,12 @@ mod minimize_simplex_tests {
                     Array1::from_shape_fn(n, |_| MyFloat::new(rng.random::<f64>() * 200.0 - 100.0));
                 let mut simplex = Simplex::new(rosenbrock(shift.slice(s![0..10]).to_owned(), bias));
                 let result = simplex
-                    .minimize(&x, None, Some(1e-12.into()), Some(1e3 as usize * n.pow(2)))
+                    .minimize(
+                        x.view(),
+                        None,
+                        Some(1e-12.into()),
+                        Some(1e3 as usize * n.pow(2)),
+                    )
                     .unwrap();
                 println!(
                     "\n\nxmin = {:?}\nfmin = {:?}\n\n",

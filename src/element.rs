@@ -1,8 +1,11 @@
-use crate::frequency::Frequency;
-use crate::point::Point;
-use crate::points::Points;
-use crate::scale::Scale;
-use crate::unit::{Unit, UnitVal, Unitized};
+use crate::{
+    frequency::Frequency,
+    point::Point,
+    pts::Points,
+    scale::Scale,
+    unit::{Unit, UnitVal, Unitized},
+};
+use ndarray::prelude::*;
 use num::complex::{Complex64, c64};
 use serde::Serialize;
 use std::fmt;
@@ -155,7 +158,7 @@ macro_rules! define_elem_impl {
                 }
             }
 
-            fn net(&self, freq: &Frequency) -> Points<Complex64> {
+            fn net(&self, freq: &Frequency) -> Points<Complex64, Ix3> {
                 match self {
                     $(
                         Element::$variant(elem) => elem.net(freq),
@@ -204,7 +207,7 @@ pub trait Elem {
     fn id(&self) -> String;
     fn elem(&self) -> ElemType;
     fn name(&self) -> &String;
-    fn net(&self, freq: &Frequency) -> Points<Complex64>;
+    fn net(&self, freq: &Frequency) -> Points<Complex64, Ix3>;
     fn nodes(&self) -> Vec<usize>;
     fn z(&self, freq: &Frequency) -> Complex64;
     fn z_at(&self, freq: &Frequency, i: usize) -> Complex64;
@@ -839,9 +842,8 @@ macro_rules! define_mlin_calcs {
 mod element_tests {
     use super::*;
     use crate::point::Pt;
-    use crate::points::Pts;
+    use crate::pts::Pts;
     use float_cmp::*;
-    use ndarray::prelude::*;
     use std::f64::consts::PI;
 
     const DEFAULT_MARGIN: F64Margin = F64Margin {

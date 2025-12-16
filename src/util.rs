@@ -1,6 +1,4 @@
 use crate::myfloat::MyFloat;
-use crate::point::{Point, Pt};
-use crate::points::{Points, Pts};
 use float_cmp::{F64Margin, approx_eq};
 use ndarray::prelude::*;
 use num::complex::Complex64;
@@ -30,8 +28,8 @@ pub fn comp_line(exemplar: &str, net: &str, test: &str) {
 }
 
 pub fn comp_points_c64(
-    exemplar: &Points<Complex64>,
-    calc: &Points<Complex64>,
+    exemplar: ArrayView3<Complex64>,
+    calc: ArrayView3<Complex64>,
     precision: F64Margin,
     test: &str,
 ) {
@@ -41,19 +39,19 @@ pub fn comp_points_c64(
     for i in 0..calc.len_of(Axis(0)) {
         for j in 0..calc.len_of(Axis(1)) {
             for k in 0..calc.len_of(Axis(2)) {
-                comp_point(
+                comp_f64(
                     &exemplar[(i, j, k)].re,
                     &calc[(i, j, k)].re,
                     precision,
                     test,
-                    format!("({},{},{}).re", i, j, k),
+                    format!("({},{},{}).re", i, j, k).to_owned().as_str(),
                 );
-                comp_point(
+                comp_f64(
                     &exemplar[(i, j, k)].im,
                     &calc[(i, j, k)].im,
                     precision,
                     test,
-                    format!("({},{},{}).im", i, j, k),
+                    format!("({},{},{}).im", i, j, k).to_owned().as_str(),
                 );
             }
         }
@@ -61,8 +59,8 @@ pub fn comp_points_c64(
 }
 
 pub fn comp_points_f64(
-    exemplar: &Points<f64>,
-    calc: &Points<f64>,
+    exemplar: ArrayView3<f64>,
+    calc: ArrayView3<f64>,
     precision: F64Margin,
     test: &str,
 ) {
@@ -85,74 +83,89 @@ pub fn comp_points_f64(
 }
 
 pub fn comp_point_c64(
-    exemplar: &Point<Complex64>,
-    calc: &Point<Complex64>,
+    exemplar: ArrayView2<Complex64>,
+    calc: ArrayView2<Complex64>,
     precision: F64Margin,
     test: &str,
 ) {
     for j in 0..calc.nrows() {
         for k in 0..calc.ncols() {
-            comp_point(
+            comp_f64(
                 &exemplar[(j, k)].re,
                 &calc[(j, k)].re,
                 precision,
                 test,
-                format!("({},{}).re", j, k),
+                format!("({},{}).re", j, k).to_owned().as_str(),
             );
-            comp_point(
+            comp_f64(
                 &exemplar[(j, k)].im,
                 &calc[(j, k)].im,
                 precision,
                 test,
-                format!("({},{}).im", j, k),
+                format!("({},{}).im", j, k).to_owned().as_str(),
             );
         }
     }
 }
 
-pub fn comp_point_f64(exemplar: &Point<f64>, calc: &Point<f64>, precision: F64Margin, test: &str) {
+pub fn comp_point_f64(
+    exemplar: ArrayView2<f64>,
+    calc: ArrayView2<f64>,
+    precision: F64Margin,
+    test: &str,
+) {
     for j in 0..calc.nrows() {
         for k in 0..calc.ncols() {
-            comp_point(
+            comp_f64(
                 &exemplar[(j, k)],
                 &calc[(j, k)],
                 precision,
                 test,
-                format!("({},{})", j, k),
+                format!("({},{})", j, k).to_owned().as_str(),
             );
         }
     }
 }
 
-pub fn comp_mat_f64(exemplar: &Array2<f64>, calc: &Array2<f64>, precision: F64Margin, test: &str) {
+pub fn comp_mat_f64(
+    exemplar: ArrayView2<f64>,
+    calc: ArrayView2<f64>,
+    precision: F64Margin,
+    test: &str,
+) {
     for j in 0..calc.nrows() {
         for k in 0..calc.ncols() {
-            comp_point(
+            comp_f64(
                 &exemplar[(j, k)],
                 &calc[(j, k)],
                 precision,
                 test,
-                format!("({}, {})", j, k),
+                format!("({}, {})", j, k).to_owned().as_str(),
             );
         }
     }
 }
 
-pub fn comp_row_f64(exemplar: &Array1<f64>, calc: &Array1<f64>, precision: F64Margin, test: &str) {
+pub fn comp_row_f64(
+    exemplar: ArrayView1<f64>,
+    calc: ArrayView1<f64>,
+    precision: F64Margin,
+    test: &str,
+) {
     for k in 0..calc.len() {
-        comp_point(
+        comp_f64(
             exemplar.get(k).unwrap(),
             calc.get(k).unwrap(),
             precision,
             test,
-            format!("({})", k),
+            format!("({})", k).to_owned().as_str(),
         );
     }
 }
 
 pub fn comp_point_myfloat(
-    exemplar: &Point<MyFloat>,
-    calc: &Point<MyFloat>,
+    exemplar: ArrayView2<MyFloat>,
+    calc: ArrayView2<MyFloat>,
     precision: F64Margin,
     test: &str,
 ) {
@@ -170,8 +183,8 @@ pub fn comp_point_myfloat(
 }
 
 pub fn comp_mat_myfloat(
-    exemplar: &Array2<MyFloat>,
-    calc: &Array2<MyFloat>,
+    exemplar: ArrayView2<MyFloat>,
+    calc: ArrayView2<MyFloat>,
     precision: F64Margin,
     test: &str,
 ) {
@@ -189,8 +202,8 @@ pub fn comp_mat_myfloat(
 }
 
 pub fn comp_row_myfloat(
-    exemplar: &Array1<MyFloat>,
-    calc: &Array1<MyFloat>,
+    exemplar: ArrayView1<MyFloat>,
+    calc: ArrayView1<MyFloat>,
     precision: F64Margin,
     test: &str,
 ) {
@@ -206,8 +219,8 @@ pub fn comp_row_myfloat(
 }
 
 pub fn comp_row_c64(
-    exemplar: &Array1<Complex64>,
-    calc: &Array1<Complex64>,
+    exemplar: ArrayView1<Complex64>,
+    calc: ArrayView1<Complex64>,
     precision: F64Margin,
     test: &str,
 ) {
@@ -223,8 +236,8 @@ pub fn comp_row_c64(
 }
 
 pub fn comp_array_c64(
-    exemplar: &Array1<Complex64>,
-    calc: &Array1<Complex64>,
+    exemplar: ArrayView1<Complex64>,
+    calc: ArrayView1<Complex64>,
     precision: F64Margin,
     test: &str,
 ) {
@@ -234,8 +247,8 @@ pub fn comp_array_c64(
 }
 
 pub fn comp_array_f64(
-    exemplar: &Array1<f64>,
-    calc: &Array1<f64>,
+    exemplar: ArrayView1<f64>,
+    calc: ArrayView1<f64>,
     precision: F64Margin,
     test: &str,
 ) {
@@ -245,8 +258,8 @@ pub fn comp_array_f64(
 }
 
 pub fn comp_array_myfloat(
-    exemplar: &Array1<MyFloat>,
-    calc: &Array1<MyFloat>,
+    exemplar: ArrayView1<MyFloat>,
+    calc: ArrayView1<MyFloat>,
     precision: F64Margin,
     test: &str,
 ) {
@@ -277,10 +290,6 @@ pub fn comp_vec_f64(exemplar: &[f64], calc: &[f64], precision: F64Margin, test: 
             &(format!("({})", k)).to_owned(),
         );
     }
-}
-
-pub fn comp_point(exemplar: &f64, calc: &f64, precision: F64Margin, test: &str, idx: String) {
-    comp_f64(exemplar, calc, precision, test, &(idx.to_owned()));
 }
 
 pub fn comp_c64(

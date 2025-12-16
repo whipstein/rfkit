@@ -36,28 +36,28 @@ pub use self::simplex::{Simplex, SimplexResult};
 
 // Define a trait for the objective function
 pub trait ObjFn<T>: DynClone {
-    fn call(&self, x: &Array1<T>) -> T;
+    fn call(&self, x: ArrayView1<T>) -> T;
     fn call_scalar(&self, x: &T) -> T;
 }
 dyn_clone::clone_trait_object!(<T> ObjFn<T>);
 
 // Define a trait for the derivative function
 pub trait ObjDerFn<T>: ObjFn<T> + DynClone {
-    fn df(&self, x: &Array1<T>) -> T;
+    fn df(&self, x: ArrayView1<T>) -> T;
     fn df_scalar(&self, x: &T) -> T;
 }
 dyn_clone::clone_trait_object!(<T> ObjDerFn<T>);
 
 // Define a trait for the gradient function
 pub trait ObjGradFn<T>: ObjFn<T> + DynClone {
-    fn grad(&self, x: &Array1<T>) -> Array1<T>;
+    fn grad(&self, x: ArrayView1<T>) -> Array1<T>;
     fn grad_scalar(&self, x: &T) -> Array1<T>;
 }
 dyn_clone::clone_trait_object!(<T> ObjGradFn<T>);
 
 // Define a trait for the hessian function
 pub trait ObjHessFn<T>: ObjGradFn<T> + DynClone {
-    fn hess(&self, x: &Array1<T>) -> Array2<T>;
+    fn hess(&self, x: ArrayView1<T>) -> Array2<T>;
     fn hess_scalar(&self, x: &T) -> Array2<T>;
 }
 dyn_clone::clone_trait_object!(<T> ObjHessFn<T>);
@@ -86,7 +86,7 @@ where
     F: Fn(&T) -> T + Clone,
     T: RFFloat,
 {
-    fn call(&self, x: &Array1<T>) -> T {
+    fn call(&self, x: ArrayView1<T>) -> T {
         // Take the first element for single-dim functions
         (self.0)(&x[0])
     }
@@ -123,7 +123,7 @@ where
     DF: Fn(&T) -> T + Clone,
     T: RFFloat,
 {
-    fn call(&self, x: &Array1<T>) -> T {
+    fn call(&self, x: ArrayView1<T>) -> T {
         // Take the first element for single-dim functions
         (self.0)(&x[0])
     }
@@ -139,7 +139,7 @@ where
     DF: Fn(&T) -> T + Clone,
     T: RFFloat,
 {
-    fn df(&self, x: &Array1<T>) -> T {
+    fn df(&self, x: ArrayView1<T>) -> T {
         // Take the first element for single-dim functions
         (self.1)(&x[0])
     }
@@ -153,13 +153,13 @@ where
 #[derive(Clone)]
 pub struct MultiDimFn<T, F>(pub F, std::marker::PhantomData<T>)
 where
-    F: Fn(&Array1<T>) -> T + Clone,
+    F: Fn(ArrayView1<T>) -> T + Clone,
     T: RFFloat;
 
 // Convenience constructors
 impl<T, F> MultiDimFn<T, F>
 where
-    F: Fn(&Array1<T>) -> T + Clone,
+    F: Fn(ArrayView1<T>) -> T + Clone,
     T: RFFloat,
 {
     pub fn new(f: F) -> Self {
@@ -170,30 +170,30 @@ where
 // Implementation for multi-dimensional functions
 impl<T, F> ObjFn<T> for MultiDimFn<T, F>
 where
-    F: Fn(&Array1<T>) -> T + Clone,
+    F: Fn(ArrayView1<T>) -> T + Clone,
     T: RFFloat,
 {
-    fn call(&self, x: &Array1<T>) -> T {
+    fn call(&self, x: ArrayView1<T>) -> T {
         (self.0)(x)
     }
 
     fn call_scalar(&self, x: &T) -> T {
-        (self.0)(&array![x.clone()])
+        (self.0)(array![x.clone()].view())
     }
 }
 
 // Implementation for multi-dimensional functions
 impl<T, F> ObjDerFn<T> for MultiDimFn<T, F>
 where
-    F: Fn(&Array1<T>) -> T + Clone,
+    F: Fn(ArrayView1<T>) -> T + Clone,
     T: RFFloat,
 {
-    fn df(&self, x: &Array1<T>) -> T {
+    fn df(&self, x: ArrayView1<T>) -> T {
         (self.0)(x)
     }
 
     fn df_scalar(&self, x: &T) -> T {
-        (self.0)(&array![x.clone()])
+        (self.0)(array![x.clone()].view())
     }
 }
 
@@ -201,15 +201,15 @@ where
 #[derive(Clone)]
 pub struct MultiDimGradFn<T, F, GF>(pub F, pub GF, std::marker::PhantomData<T>)
 where
-    F: Fn(&Array1<T>) -> T + Clone,
-    GF: Fn(&Array1<T>) -> Array1<T> + Clone,
+    F: Fn(ArrayView1<T>) -> T + Clone,
+    GF: Fn(ArrayView1<T>) -> Array1<T> + Clone,
     T: RFFloat;
 
 // Convenience constructors
 impl<T, F, GF> MultiDimGradFn<T, F, GF>
 where
-    F: Fn(&Array1<T>) -> T + Clone,
-    GF: Fn(&Array1<T>) -> Array1<T> + Clone,
+    F: Fn(ArrayView1<T>) -> T + Clone,
+    GF: Fn(ArrayView1<T>) -> Array1<T> + Clone,
     T: RFFloat,
 {
     pub fn new(f: F, gf: GF) -> Self {
@@ -220,31 +220,31 @@ where
 // Implementation for multi-dimensional function w/gradient
 impl<T, F, GF> ObjFn<T> for MultiDimGradFn<T, F, GF>
 where
-    F: Fn(&Array1<T>) -> T + Clone,
-    GF: Fn(&Array1<T>) -> Array1<T> + Clone,
+    F: Fn(ArrayView1<T>) -> T + Clone,
+    GF: Fn(ArrayView1<T>) -> Array1<T> + Clone,
     T: RFFloat,
 {
-    fn call(&self, x: &Array1<T>) -> T {
+    fn call(&self, x: ArrayView1<T>) -> T {
         (self.0)(x)
     }
 
     fn call_scalar(&self, x: &T) -> T {
-        (self.0)(&array![x.clone()])
+        (self.0)(array![x.clone()].view())
     }
 }
 
 impl<T, F, GF> ObjGradFn<T> for MultiDimGradFn<T, F, GF>
 where
-    F: Fn(&Array1<T>) -> T + Clone,
-    GF: Fn(&Array1<T>) -> Array1<T> + Clone,
+    F: Fn(ArrayView1<T>) -> T + Clone,
+    GF: Fn(ArrayView1<T>) -> Array1<T> + Clone,
     T: RFFloat,
 {
-    fn grad(&self, x: &Array1<T>) -> Array1<T> {
+    fn grad(&self, x: ArrayView1<T>) -> Array1<T> {
         (self.1)(x)
     }
 
     fn grad_scalar(&self, x: &T) -> Array1<T> {
-        (self.1)(&array![x.clone()])
+        (self.1)(array![x.clone()].view())
     }
 }
 
@@ -252,7 +252,7 @@ where
 #[derive(Clone)]
 pub struct MultiDimNumGradFn<T, F>
 where
-    F: Fn(&Array1<T>) -> T + Clone,
+    F: Fn(ArrayView1<T>) -> T + Clone,
     T: RFFloat,
 {
     f: F,
@@ -263,7 +263,7 @@ where
 // Convenience constructors
 impl<T, F> MultiDimNumGradFn<T, F>
 where
-    F: Fn(&Array1<T>) -> T + Clone,
+    F: Fn(ArrayView1<T>) -> T + Clone,
     T: RFFloat,
 {
     pub fn new(f: F, step: Option<T>, n: usize) -> Self {
@@ -274,17 +274,17 @@ where
         }
     }
 
-    pub fn numerical_gradient(&self, x: &Array1<T>) -> Array1<T> {
+    pub fn numerical_gradient(&self, x: ArrayView1<T>) -> Array1<T> {
         let mut grad = Array1::zeros(self.n);
 
         for i in 0..self.n {
-            let mut x_plus_h = x.clone();
+            let mut x_plus_h = x.to_owned();
             x_plus_h[i] += self.step.clone();
-            let f_plus_h = (self.f)(&x_plus_h);
+            let f_plus_h = (self.f)(x_plus_h.view());
 
-            let mut x_minus_h = x.clone();
+            let mut x_minus_h = x.to_owned();
             x_minus_h[i] -= self.step.clone();
-            let f_minus_h = (self.f)(&x_minus_h);
+            let f_minus_h = (self.f)(x_minus_h.view());
 
             grad[i] = (f_plus_h - f_minus_h) / (self.step.clone() * 2.0);
         }
@@ -296,29 +296,29 @@ where
 // Implementation for multi-dimensional function w/gradient
 impl<T, F> ObjFn<T> for MultiDimNumGradFn<T, F>
 where
-    F: Fn(&Array1<T>) -> T + Clone,
+    F: Fn(ArrayView1<T>) -> T + Clone,
     T: RFFloat,
 {
-    fn call(&self, x: &Array1<T>) -> T {
+    fn call(&self, x: ArrayView1<T>) -> T {
         (self.f)(x)
     }
 
     fn call_scalar(&self, x: &T) -> T {
-        (self.f)(&array![x.clone()])
+        (self.f)(array![x.clone()].view())
     }
 }
 
 impl<T, F> ObjGradFn<T> for MultiDimNumGradFn<T, F>
 where
-    F: Fn(&Array1<T>) -> T + Clone,
+    F: Fn(ArrayView1<T>) -> T + Clone,
     T: RFFloat,
 {
-    fn grad(&self, x: &Array1<T>) -> Array1<T> {
+    fn grad(&self, x: ArrayView1<T>) -> Array1<T> {
         self.numerical_gradient(x)
     }
 
     fn grad_scalar(&self, x: &T) -> Array1<T> {
-        self.numerical_gradient(&array![x.clone()])
+        self.numerical_gradient(array![x.clone()].view())
     }
 }
 
@@ -326,17 +326,17 @@ where
 #[derive(Clone)]
 pub struct MultiDimHessFn<T, F, GF, HF>(pub F, pub GF, pub Option<HF>, std::marker::PhantomData<T>)
 where
-    F: Fn(&Array1<T>) -> T + Clone,
-    GF: Fn(&Array1<T>) -> Array1<T> + Clone,
-    HF: Fn(&Array1<T>) -> Array2<T> + Clone,
+    F: Fn(ArrayView1<T>) -> T + Clone,
+    GF: Fn(ArrayView1<T>) -> Array1<T> + Clone,
+    HF: Fn(ArrayView1<T>) -> Array2<T> + Clone,
     T: RFFloat;
 
 // Convenience constructors
 impl<T, F, GF, HF> MultiDimHessFn<T, F, GF, HF>
 where
-    F: Fn(&Array1<T>) -> T + Clone,
-    GF: Fn(&Array1<T>) -> Array1<T> + Clone,
-    HF: Fn(&Array1<T>) -> Array2<T> + Clone,
+    F: Fn(ArrayView1<T>) -> T + Clone,
+    GF: Fn(ArrayView1<T>) -> Array1<T> + Clone,
+    HF: Fn(ArrayView1<T>) -> Array2<T> + Clone,
     T: RFFloat,
 {
     pub fn new(f: F, gf: GF, hf: Option<HF>) -> Self {
@@ -347,44 +347,44 @@ where
 // Implementation for multi-dimensional function w/hessian
 impl<T, F, GF, HF> ObjFn<T> for MultiDimHessFn<T, F, GF, HF>
 where
-    F: Fn(&Array1<T>) -> T + Clone,
-    GF: Fn(&Array1<T>) -> Array1<T> + Clone,
-    HF: Fn(&Array1<T>) -> Array2<T> + Clone,
+    F: Fn(ArrayView1<T>) -> T + Clone,
+    GF: Fn(ArrayView1<T>) -> Array1<T> + Clone,
+    HF: Fn(ArrayView1<T>) -> Array2<T> + Clone,
     T: RFFloat,
 {
-    fn call(&self, x: &Array1<T>) -> T {
+    fn call(&self, x: ArrayView1<T>) -> T {
         (self.0)(x)
     }
 
     fn call_scalar(&self, x: &T) -> T {
-        (self.0)(&array![x.clone()])
+        (self.0)(array![x.clone()].view())
     }
 }
 
 impl<T, F, GF, HF> ObjGradFn<T> for MultiDimHessFn<T, F, GF, HF>
 where
-    F: Fn(&Array1<T>) -> T + Clone,
-    GF: Fn(&Array1<T>) -> Array1<T> + Clone,
-    HF: Fn(&Array1<T>) -> Array2<T> + Clone,
+    F: Fn(ArrayView1<T>) -> T + Clone,
+    GF: Fn(ArrayView1<T>) -> Array1<T> + Clone,
+    HF: Fn(ArrayView1<T>) -> Array2<T> + Clone,
     T: RFFloat,
 {
-    fn grad(&self, x: &Array1<T>) -> Array1<T> {
+    fn grad(&self, x: ArrayView1<T>) -> Array1<T> {
         (self.1)(x)
     }
 
     fn grad_scalar(&self, x: &T) -> Array1<T> {
-        (self.1)(&array![x.clone()])
+        (self.1)(array![x.clone()].view())
     }
 }
 
 impl<T, F, GF, HF> ObjHessFn<T> for MultiDimHessFn<T, F, GF, HF>
 where
-    F: Fn(&Array1<T>) -> T + Clone,
-    GF: Fn(&Array1<T>) -> Array1<T> + Clone,
-    HF: Fn(&Array1<T>) -> Array2<T> + Clone,
+    F: Fn(ArrayView1<T>) -> T + Clone,
+    GF: Fn(ArrayView1<T>) -> Array1<T> + Clone,
+    HF: Fn(ArrayView1<T>) -> Array2<T> + Clone,
     T: RFFloat,
 {
-    fn hess(&self, x: &Array1<T>) -> Array2<T> {
+    fn hess(&self, x: ArrayView1<T>) -> Array2<T> {
         match self.2.clone() {
             Some(hf) => (hf)(x),
             _ => Array2::eye(x.len()),
@@ -393,7 +393,7 @@ where
 
     fn hess_scalar(&self, x: &T) -> Array2<T> {
         match self.2.clone() {
-            Some(hf) => (hf)(&array![x.clone()]),
+            Some(hf) => (hf)(array![x.clone()].view()),
             _ => Array2::eye(1),
         }
     }
@@ -425,8 +425,8 @@ where
 
     pub fn eval(
         &mut self,
-        point: &Array1<T>,
-        direction: &Array1<T>,
+        point: ArrayView1<T>,
+        direction: ArrayView1<T>,
         t: &T,
     ) -> Result<T, MinimizerError> {
         let test_point: Array1<T> = point
@@ -434,7 +434,7 @@ where
             .zip(direction.iter())
             .map(|(p, d)| p.clone() + t.clone() * d.clone())
             .collect();
-        let value = self.f.call(&test_point);
+        let value = self.f.call(test_point.view());
         if !value.is_finite() {
             return Err(MinimizerError::FunctionEvaluationError);
         }
@@ -446,7 +446,7 @@ impl<T> ObjFn<T> for F1dim<T>
 where
     T: RFFloat,
 {
-    fn call(&self, x: &Array1<T>) -> T {
+    fn call(&self, x: ArrayView1<T>) -> T {
         self.f.call(x)
     }
 
@@ -484,7 +484,7 @@ impl<T> ObjFn<T> for GF1dim<T>
 where
     T: RFFloat,
 {
-    fn call(&self, x: &Array1<T>) -> T {
+    fn call(&self, x: ArrayView1<T>) -> T {
         self.f.call(x)
     }
 
@@ -497,12 +497,12 @@ impl<T> ObjGradFn<T> for GF1dim<T>
 where
     T: RFFloat,
 {
-    fn grad(&self, x: &Array1<T>) -> Array1<T> {
+    fn grad(&self, x: ArrayView1<T>) -> Array1<T> {
         self.f.grad(x)
     }
 
     fn grad_scalar(&self, x: &T) -> Array1<T> {
-        self.f.grad(&array![x.clone()])
+        self.f.grad(array![x.clone()].view())
     }
 }
 
@@ -559,7 +559,7 @@ where
         }
     }
 
-    pub fn objective(&self, x: &Array1<T>) -> T {
+    pub fn objective(&self, x: ArrayView1<T>) -> T {
         let mut result = self.f.call(x);
 
         // Add barrier terms for ieq
@@ -574,7 +574,7 @@ where
         result
     }
 
-    pub fn gradient(&self, x: &Array1<T>) -> Array1<T> {
+    pub fn gradient(&self, x: ArrayView1<T>) -> Array1<T> {
         let mut grad = self.f.grad(x);
         let n = x.len();
 
@@ -595,7 +595,7 @@ where
         grad
     }
 
-    pub fn hess(&self, x: &Array1<T>) -> Array2<T> {
+    pub fn hess(&self, x: ArrayView1<T>) -> Array2<T> {
         let mut hess = self.f.hess(x);
         let n = x.len();
 
@@ -632,12 +632,12 @@ impl<T> ObjFn<T> for HF1dim<T>
 where
     T: RFFloat,
 {
-    fn call(&self, x: &Array1<T>) -> T {
+    fn call(&self, x: ArrayView1<T>) -> T {
         self.objective(x)
     }
 
     fn call_scalar(&self, x: &T) -> T {
-        self.objective(&array![x.clone()])
+        self.objective(array![x.clone()].view())
     }
 }
 
@@ -645,12 +645,12 @@ impl<T> ObjGradFn<T> for HF1dim<T>
 where
     T: RFFloat,
 {
-    fn grad(&self, x: &Array1<T>) -> Array1<T> {
+    fn grad(&self, x: ArrayView1<T>) -> Array1<T> {
         self.gradient(x)
     }
 
     fn grad_scalar(&self, x: &T) -> Array1<T> {
-        self.gradient(&array![x.clone()])
+        self.gradient(array![x.clone()].view())
     }
 }
 
@@ -658,12 +658,12 @@ impl<T> ObjHessFn<T> for HF1dim<T>
 where
     T: RFFloat,
 {
-    fn hess(&self, x: &Array1<T>) -> Array2<T> {
+    fn hess(&self, x: ArrayView1<T>) -> Array2<T> {
         self.hess(x)
     }
 
     fn hess_scalar(&self, x: &T) -> Array2<T> {
-        self.hess(&array![x.clone()])
+        self.hess(array![x.clone()].view())
     }
 }
 
@@ -672,9 +672,9 @@ pub trait Constraint<T>: DynClone
 where
     T: RFFloat,
 {
-    fn evaluate(&self, x: &Array1<T>) -> T;
-    fn gradient(&self, x: &Array1<T>) -> Array1<T>;
-    fn hessian(&self, x: &Array1<T>) -> Array2<T>;
+    fn evaluate(&self, x: ArrayView1<T>) -> T;
+    fn gradient(&self, x: ArrayView1<T>) -> Array1<T>;
+    fn hessian(&self, x: ArrayView1<T>) -> Array2<T>;
 }
 dyn_clone::clone_trait_object!(<T> Constraint<T>);
 
@@ -693,19 +693,19 @@ impl<T> LinearConstraint<T>
 where
     T: RFFloat,
 {
-    pub fn new(a: &Array1<T>, b: &T, is_equality: bool) -> Self {
+    pub fn new(a: ArrayView1<T>, b: &T, is_equality: bool) -> Self {
         Self {
-            a: a.clone(),
+            a: a.to_owned(),
             b: b.clone(),
             is_equality,
         }
     }
 
-    pub fn inequality(a: &Array1<T>, b: &T) -> Self {
+    pub fn inequality(a: ArrayView1<T>, b: &T) -> Self {
         Self::new(a, b, false)
     }
 
-    pub fn equality(a: &Array1<T>, b: &T) -> Self {
+    pub fn equality(a: ArrayView1<T>, b: &T) -> Self {
         Self::new(a, b, true)
     }
 }
@@ -714,7 +714,7 @@ impl<T> Constraint<T> for LinearConstraint<T>
 where
     T: RFFloat,
 {
-    fn evaluate(&self, x: &Array1<T>) -> T {
+    fn evaluate(&self, x: ArrayView1<T>) -> T {
         self.a
             .iter()
             .zip(x.iter())
@@ -723,11 +723,11 @@ where
             + &self.b
     }
 
-    fn gradient(&self, _x: &Array1<T>) -> Array1<T> {
+    fn gradient(&self, _x: ArrayView1<T>) -> Array1<T> {
         self.a.clone()
     }
 
-    fn hessian(&self, x: &Array1<T>) -> Array2<T> {
+    fn hessian(&self, x: ArrayView1<T>) -> Array2<T> {
         let n = x.len();
         Array2::zeros((n, n))
     }
@@ -783,7 +783,7 @@ impl<T> Constraint<T> for QuadraticConstraint<T>
 where
     T: RFFloat,
 {
-    fn evaluate(&self, x: &Array1<T>) -> T {
+    fn evaluate(&self, x: ArrayView1<T>) -> T {
         let n = x.len();
         let mut result = self.b.clone();
 
@@ -802,7 +802,7 @@ where
         result
     }
 
-    fn gradient(&self, x: &Array1<T>) -> Array1<T> {
+    fn gradient(&self, x: ArrayView1<T>) -> Array1<T> {
         let n = x.len();
         let mut grad = self.a.clone();
 
@@ -816,7 +816,7 @@ where
         grad
     }
 
-    fn hessian(&self, _x: &Array1<T>) -> Array2<T> {
+    fn hessian(&self, _x: ArrayView1<T>) -> Array2<T> {
         // Hessian is 2*Q for quadratic constraint
         let n = self.q.nrows();
         let mut hess = Array2::zeros((n, n));
@@ -853,8 +853,8 @@ where
 
 /// Create box constraints: l ≤ x ≤ u
 pub fn create_box_constraints<T>(
-    lower: &Array1<T>,
-    upper: &Array1<T>,
+    lower: ArrayView1<T>,
+    upper: ArrayView1<T>,
 ) -> Vec<Box<dyn Constraint<T>>>
 where
     T: RFFloat + 'static,
@@ -867,7 +867,8 @@ where
             let mut a = Array1::<T>::zeros(lower.len());
             a[i] = T::from_f64(-1.0);
             constraints
-                .push(Box::new(LinearConstraint::<T>::inequality(&a, l)) as Box<dyn Constraint<T>>);
+                .push(Box::new(LinearConstraint::<T>::inequality(a.view(), l))
+                    as Box<dyn Constraint<T>>);
         }
 
         // x_i ≤ u becomes x_i - u ≤ 0
@@ -875,9 +876,10 @@ where
             let mut a = Array1::<T>::zeros(lower.len());
             a[i] = T::from_f64(1.0);
             let neg_u = -u.clone();
-            constraints
-                .push(Box::new(LinearConstraint::<T>::inequality(&a, &neg_u))
-                    as Box<dyn Constraint<T>>);
+            constraints.push(
+                Box::new(LinearConstraint::<T>::inequality(a.view(), &neg_u))
+                    as Box<dyn Constraint<T>>,
+            );
         }
     }
 
@@ -1072,9 +1074,9 @@ where
 {
     pub(crate) fn new<F>(point: Array1<T>, f: &F) -> Result<Self, MinimizerError>
     where
-        F: Fn(&Array1<T>) -> T,
+        F: Fn(ArrayView1<T>) -> T,
     {
-        let value = f(&point);
+        let value = f(point.view());
         if !value.is_finite() {
             return Err(MinimizerError::FunctionEvaluationError);
         }
@@ -1085,7 +1087,7 @@ where
         point: Array1<T>,
         f: Box<dyn ObjFn<T>>,
     ) -> Result<Self, MinimizerError> {
-        let value = f.call(&point);
+        let value = f.call(point.view());
         if !value.is_finite() {
             return Err(MinimizerError::FunctionEvaluationError);
         }
@@ -1226,27 +1228,29 @@ where
 }
 
 // Helper function for dot product
-fn dot_1d_1d<T>(a: &Array1<T>, b: &Array1<T>) -> T
+fn dot_1d_1d<T>(a: ArrayView1<T>, b: ArrayView1<T>) -> T
 where
     T: RFFloat,
+    for<'a, 'b> &'a T: std::ops::Mul<&'b T, Output = T>,
 {
     let mut result = T::zero();
     for i in 0..a.len() {
-        result += a[i].clone() * b[i].clone();
+        result += &a[i] * &b[i];
     }
 
     result
 }
 
 // Helper function for dot product
-fn dot_1d_2d<T>(a: &Array1<T>, b: &Array2<T>) -> Array1<T>
+fn dot_1d_2d<T>(a: ArrayView1<T>, b: ArrayView2<T>) -> Array1<T>
 where
     T: RFFloat,
+    for<'a, 'b> &'a T: std::ops::Mul<&'b T, Output = T>,
 {
     let mut result = Array1::<T>::zeros(b.ncols());
     for j in 0..b.ncols() {
         for i in 0..b.nrows() {
-            result[j] += a[i].clone() * b[[i, j]].clone();
+            result[j] += &a[i] * &b[[i, j]];
         }
     }
 
@@ -1254,14 +1258,15 @@ where
 }
 
 // Helper function for dot product (matrix * vector)
-fn dot_2d_1d<T>(a: &Array2<T>, b: &Array1<T>) -> Array1<T>
+fn dot_2d_1d<T>(a: ArrayView2<T>, b: ArrayView1<T>) -> Array1<T>
 where
     T: RFFloat,
+    for<'a, 'b> &'a T: std::ops::Mul<&'b T, Output = T>,
 {
     let mut result = Array1::<T>::zeros(a.nrows());
     for i in 0..a.nrows() {
         for j in 0..a.ncols() {
-            result[i] += a[[i, j]].clone() * b[j].clone();
+            result[i] += &a[[i, j]] * &b[j];
         }
     }
 
@@ -1269,15 +1274,16 @@ where
 }
 
 // Helper function for dot product
-fn dot_2d_2d<T>(a: &Array2<T>, b: &Array2<T>) -> Array2<T>
+fn dot_2d_2d<T>(a: ArrayView2<T>, b: ArrayView2<T>) -> Array2<T>
 where
     T: RFFloat,
+    for<'a, 'b> &'a T: std::ops::Mul<&'b T, Output = T>,
 {
     let mut result = Array2::<T>::zeros((a.nrows(), b.ncols()));
     for i in 0..a.nrows() {
         for j in 0..b.ncols() {
             for k in 0..a.ncols() {
-                result[[i, j]] += a[[i, k]].clone() * b[[k, j]].clone();
+                result[[i, j]] += &a[[i, k]] * &b[[k, j]];
             }
         }
     }
@@ -1286,34 +1292,36 @@ where
 }
 
 // Helper function for L2 norm (Euclidean norm) of 1D array
-fn norm_1d<T>(a: &Array1<T>) -> T
+fn norm_1d<T>(a: ArrayView1<T>) -> T
 where
     T: RFFloat,
+    for<'a, 'b> &'a T: std::ops::Mul<&'b T, Output = T>,
 {
     let mut sum = T::zero();
     for i in 0..a.len() {
-        sum += a[i].clone() * a[i].clone();
+        sum += &a[i] * &a[i];
     }
     sum.sqrt()
 }
 
 // Helper function for Frobenius norm of 2D array
 // This is the matrix equivalent of the Euclidean norm
-fn norm_2d<T>(a: &Array2<T>) -> T
+fn norm_2d<T>(a: ArrayView2<T>) -> T
 where
     T: RFFloat,
+    for<'a, 'b> &'a T: std::ops::Mul<&'b T, Output = T>,
 {
     let mut sum = T::zero();
     for i in 0..a.nrows() {
         for j in 0..a.ncols() {
-            sum += a[[i, j]].clone() * a[[i, j]].clone();
+            sum += &a[[i, j]] * &a[[i, j]];
         }
     }
     sum.sqrt()
 }
 
 // Helper function for L1 norm (Manhattan norm) of 1D array
-fn norm_1d_l1<T>(a: &Array1<T>) -> T
+fn norm_1d_l1<T>(a: ArrayView1<T>) -> T
 where
     T: RFFloat,
 {
@@ -1325,7 +1333,7 @@ where
 }
 
 // Helper function for L1 norm of 2D array
-fn norm_2d_l1<T>(a: &Array2<T>) -> T
+fn norm_2d_l1<T>(a: ArrayView2<T>) -> T
 where
     T: RFFloat,
 {
@@ -1339,7 +1347,7 @@ where
 }
 
 // Helper function for L-infinity norm (maximum norm) of 1D array
-fn norm_1d_linf<T>(a: &Array1<T>) -> T
+fn norm_1d_linf<T>(a: ArrayView1<T>) -> T
 where
     T: RFFloat,
 {
@@ -1354,7 +1362,7 @@ where
 }
 
 // Helper function for L-infinity norm of 2D array
-fn norm_2d_linf<T>(a: &Array2<T>) -> T
+fn norm_2d_linf<T>(a: ArrayView2<T>) -> T
 where
     T: RFFloat,
 {
@@ -1390,7 +1398,7 @@ mod minimize_tests {
         fn test_dot_1d_1d_basic() {
             let a = array![1.0.into(), 2.0.into(), 3.0.into()];
             let b = array![4.0.into(), 5.0.into(), 6.0.into()];
-            let result: MyFloat = dot_1d_1d(&a, &b);
+            let result: MyFloat = dot_1d_1d(a.view(), b.view());
             // 1*4 + 2*5 + 3*6 = 4 + 10 + 18 = 32
             assert!(approx_eq!(f64, result.to_f64(), 32.0, MARGIN));
         }
@@ -1399,7 +1407,7 @@ mod minimize_tests {
         fn test_dot_1d_1d_zeros() {
             let a = array![0.0.into(), 0.0.into(), 0.0.into()];
             let b = array![1.0.into(), 2.0.into(), 3.0.into()];
-            let result: MyFloat = dot_1d_1d(&a, &b);
+            let result: MyFloat = dot_1d_1d(a.view(), b.view());
             assert!(approx_eq!(f64, result.to_f64(), 0.0, MARGIN));
         }
 
@@ -1407,7 +1415,7 @@ mod minimize_tests {
         fn test_dot_1d_1d_negative_values() {
             let a = array![(-1.0).into(), 2.0.into(), (-3.0).into()];
             let b = array![4.0.into(), (-5.0).into(), 6.0.into()];
-            let result: MyFloat = dot_1d_1d(&a, &b);
+            let result: MyFloat = dot_1d_1d(a.view(), b.view());
             // (-1)*4 + 2*(-5) + (-3)*6 = -4 - 10 - 18 = -32
             assert!(approx_eq!(f64, result.to_f64(), -32.0, MARGIN));
         }
@@ -1417,7 +1425,7 @@ mod minimize_tests {
             // Orthogonal vectors should have dot product of 0
             let a = array![1.0.into(), 0.0.into()];
             let b = array![0.0.into(), 1.0.into()];
-            let result: MyFloat = dot_1d_1d(&a, &b);
+            let result: MyFloat = dot_1d_1d(a.view(), b.view());
             assert!(approx_eq!(f64, result.to_f64(), 0.0, MARGIN));
         }
 
@@ -1425,7 +1433,7 @@ mod minimize_tests {
         fn test_dot_1d_1d_single_element() {
             let a = array![5.0.into()];
             let b = array![3.0.into()];
-            let result: MyFloat = dot_1d_1d(&a, &b);
+            let result: MyFloat = dot_1d_1d(a.view(), b.view());
             assert!(approx_eq!(f64, result.to_f64(), 15.0, MARGIN));
         }
 
@@ -1433,8 +1441,8 @@ mod minimize_tests {
         fn test_dot_1d_1d_commutative() {
             let a = array![1.5.into(), 2.5.into(), 3.5.into()];
             let b = array![4.5.into(), 5.5.into(), 6.5.into()];
-            let result1: MyFloat = dot_1d_1d(&a, &b);
-            let result2 = dot_1d_1d(&b, &a);
+            let result1: MyFloat = dot_1d_1d(a.view(), b.view());
+            let result2 = dot_1d_1d(b.view(), a.view());
             assert!(approx_eq!(f64, result1.to_f64(), result2.to_f64(), MARGIN));
         }
 
@@ -1442,7 +1450,7 @@ mod minimize_tests {
         fn test_dot_1d_1d_fractional_values() {
             let a: Array1<MyFloat> = array![0.1.into(), 0.2.into(), 0.3.into()];
             let b = array![0.4.into(), 0.5.into(), 0.6.into()];
-            let result = dot_1d_1d(&a, &b);
+            let result = dot_1d_1d(a.view(), b.view());
             // 0.1*0.4 + 0.2*0.5 + 0.3*0.6 = 0.04 + 0.1 + 0.18 = 0.32
             assert!(approx_eq!(f64, result.to_f64(), 0.32, MARGIN));
         }
@@ -1451,7 +1459,7 @@ mod minimize_tests {
         fn test_dot_1d_1d_large_values() {
             let a = array![1000.0.into(), 2000.0.into()];
             let b = array![3000.0.into(), 4000.0.into()];
-            let result: MyFloat = dot_1d_1d(&a, &b);
+            let result: MyFloat = dot_1d_1d(a.view(), b.view());
             // 1000*3000 + 2000*4000 = 3,000,000 + 8,000,000 = 11,000,000
             assert!(approx_eq!(f64, result.to_f64(), 11_000_000.0, MARGIN));
         }
@@ -1468,7 +1476,7 @@ mod minimize_tests {
                 [3.0.into(), 4.0.into()],
                 [5.0.into(), 6.0.into()]
             ];
-            let result = dot_1d_2d(&a, &b);
+            let result = dot_1d_2d(a.view(), b.view());
 
             // Result should be [1*1 + 2*3 + 3*5, 1*2 + 2*4 + 3*6]
             //                = [1 + 6 + 15, 2 + 8 + 18]
@@ -1482,7 +1490,7 @@ mod minimize_tests {
         fn test_dot_1d_2d_identity_like() {
             let a: Array1<MyFloat> = array![1.0.into(), 2.0.into()];
             let b = array![[1.0.into(), 0.0.into()], [0.0.into(), 1.0.into()]];
-            let result = dot_1d_2d(&a, &b);
+            let result = dot_1d_2d(a.view(), b.view());
 
             // Should get the original vector back
             assert_eq!(result.len(), 2);
@@ -1498,7 +1506,7 @@ mod minimize_tests {
                 [3.0.into(), 4.0.into()],
                 [5.0.into(), 6.0.into()]
             ];
-            let result = dot_1d_2d(&a, &b);
+            let result = dot_1d_2d(a.view(), b.view());
 
             assert_eq!(result.len(), 2);
             assert!(approx_eq!(f64, result[0].to_f64(), 0.0, MARGIN));
@@ -1509,7 +1517,7 @@ mod minimize_tests {
         fn test_dot_1d_2d_negative_values() {
             let a: Array1<MyFloat> = array![(-1.0).into(), 2.0.into()];
             let b = array![[3.0.into(), (-4.0).into()], [5.0.into(), 6.0.into()]];
-            let result = dot_1d_2d(&a, &b);
+            let result = dot_1d_2d(a.view(), b.view());
 
             // Result: [-1*3 + 2*5, -1*(-4) + 2*6]
             //       = [-3 + 10, 4 + 12]
@@ -1523,7 +1531,7 @@ mod minimize_tests {
         fn test_dot_1d_2d_single_column() {
             let a: Array1<MyFloat> = array![1.0.into(), 2.0.into(), 3.0.into()];
             let b = array![[4.0.into()], [5.0.into()], [6.0.into()]];
-            let result = dot_1d_2d(&a, &b);
+            let result = dot_1d_2d(a.view(), b.view());
 
             // Result: [1*4 + 2*5 + 3*6] = [32]
             assert_eq!(result.len(), 1);
@@ -1537,7 +1545,7 @@ mod minimize_tests {
                 [1.0.into(), 2.0.into(), 3.0.into()],
                 [4.0.into(), 5.0.into(), 6.0.into()]
             ];
-            let result = dot_1d_2d(&a, &b);
+            let result = dot_1d_2d(a.view(), b.view());
 
             // Result: [1*1 + 2*4, 1*2 + 2*5, 1*3 + 2*6]
             //       = [9, 12, 15]
@@ -1558,7 +1566,7 @@ mod minimize_tests {
                 [4.0.into(), 5.0.into(), 6.0.into()]
             ]; // 2x3 matrix
             let b = array![1.0.into(), 2.0.into(), 3.0.into()]; // 3-element vector
-            let result = dot_2d_1d(&a, &b);
+            let result = dot_2d_1d(a.view(), b.view());
 
             // Result: [1*1 + 2*2 + 3*3, 4*1 + 5*2 + 6*3]
             //       = [1 + 4 + 9, 4 + 10 + 18]
@@ -1572,7 +1580,7 @@ mod minimize_tests {
         fn test_dot_2d_1d_square_matrix() {
             let a: Array2<MyFloat> = array![[1.0.into(), 2.0.into()], [3.0.into(), 4.0.into()]];
             let b = array![5.0.into(), 6.0.into()];
-            let result = dot_2d_1d(&a, &b);
+            let result = dot_2d_1d(a.view(), b.view());
 
             // Result: [1*5 + 2*6, 3*5 + 4*6]
             //       = [5 + 12, 15 + 24]
@@ -1587,7 +1595,7 @@ mod minimize_tests {
             let identity: Array2<MyFloat> =
                 array![[1.0.into(), 0.0.into()], [0.0.into(), 1.0.into()]];
             let b = array![3.0.into(), 7.0.into()];
-            let result = dot_2d_1d(&identity, &b);
+            let result = dot_2d_1d(identity.view(), b.view());
 
             // Identity matrix should return the original vector
             assert_eq!(result.len(), 2);
@@ -1599,7 +1607,7 @@ mod minimize_tests {
         fn test_dot_2d_1d_zero_vector() {
             let a: Array2<MyFloat> = array![[1.0.into(), 2.0.into()], [3.0.into(), 4.0.into()]];
             let b = array![0.0.into(), 0.0.into()];
-            let result = dot_2d_1d(&a, &b);
+            let result = dot_2d_1d(a.view(), b.view());
 
             // Result should be zero vector
             assert_eq!(result.len(), 2);
@@ -1611,7 +1619,7 @@ mod minimize_tests {
         fn test_dot_2d_1d_zero_matrix() {
             let a: Array2<MyFloat> = array![[0.0.into(), 0.0.into()], [0.0.into(), 0.0.into()]];
             let b = array![5.0.into(), 6.0.into()];
-            let result = dot_2d_1d(&a, &b);
+            let result = dot_2d_1d(a.view(), b.view());
 
             // Result should be zero vector
             assert_eq!(result.len(), 2);
@@ -1624,7 +1632,7 @@ mod minimize_tests {
             let a: Array2<MyFloat> =
                 array![[(-1.0).into(), 2.0.into()], [3.0.into(), (-4.0).into()]];
             let b = array![5.0.into(), (-6.0).into()];
-            let result = dot_2d_1d(&a, &b);
+            let result = dot_2d_1d(a.view(), b.view());
 
             // Result: [(-1)*5 + 2*(-6), 3*5 + (-4)*(-6)]
             //       = [-5 - 12, 15 + 24]
@@ -1638,7 +1646,7 @@ mod minimize_tests {
         fn test_dot_2d_1d_single_row() {
             let a: Array2<MyFloat> = array![[1.0.into(), 2.0.into(), 3.0.into()]];
             let b = array![4.0.into(), 5.0.into(), 6.0.into()];
-            let result = dot_2d_1d(&a, &b);
+            let result = dot_2d_1d(a.view(), b.view());
 
             // Result: [1*4 + 2*5 + 3*6] = [4 + 10 + 18] = [32]
             assert_eq!(result.len(), 1);
@@ -1649,7 +1657,7 @@ mod minimize_tests {
         fn test_dot_2d_1d_single_column() {
             let a: Array2<MyFloat> = array![[2.0.into()], [3.0.into()], [4.0.into()]];
             let b = array![5.0.into()];
-            let result = dot_2d_1d(&a, &b);
+            let result = dot_2d_1d(a.view(), b.view());
 
             // Result: [2*5, 3*5, 4*5] = [10, 15, 20]
             assert_eq!(result.len(), 3);
@@ -1667,7 +1675,7 @@ mod minimize_tests {
                 [7.0.into(), 8.0.into()]
             ]; // 4x2 matrix
             let b = array![2.0.into(), 3.0.into()]; // 2-element vector
-            let result = dot_2d_1d(&a, &b);
+            let result = dot_2d_1d(a.view(), b.view());
 
             // Result: [1*2 + 2*3, 3*2 + 4*3, 5*2 + 6*3, 7*2 + 8*3]
             //       = [2 + 6, 6 + 12, 10 + 18, 14 + 24]
@@ -1686,7 +1694,7 @@ mod minimize_tests {
                 [5.0.into(), 6.0.into(), 7.0.into(), 8.0.into()]
             ]; // 2x4 matrix
             let b = array![1.0.into(), 1.0.into(), 1.0.into(), 1.0.into()]; // 4-element vector
-            let result = dot_2d_1d(&a, &b);
+            let result = dot_2d_1d(a.view(), b.view());
 
             // Result: [1+2+3+4, 5+6+7+8] = [10, 26]
             assert_eq!(result.len(), 2);
@@ -1702,7 +1710,7 @@ mod minimize_tests {
                 [7.0.into(), 8.0.into(), 9.0.into()]
             ];
             let b = array![2.0.into(), 1.0.into(), 3.0.into()];
-            let result = dot_2d_1d(&a, &b);
+            let result = dot_2d_1d(a.view(), b.view());
 
             // Result: [1*2 + 2*1 + 3*3, 4*2 + 5*1 + 6*3, 7*2 + 8*1 + 9*3]
             //       = [2 + 2 + 9, 8 + 5 + 18, 14 + 8 + 27]
@@ -1717,7 +1725,7 @@ mod minimize_tests {
         fn test_dot_2d_1d_fractional_values() {
             let a: Array2<MyFloat> = array![[0.5.into(), 0.25.into()], [0.75.into(), 0.125.into()]];
             let b = array![4.0.into(), 8.0.into()];
-            let result = dot_2d_1d(&a, &b);
+            let result = dot_2d_1d(a.view(), b.view());
 
             // Result: [0.5*4 + 0.25*8, 0.75*4 + 0.125*8]
             //       = [2.0 + 2.0, 3.0 + 1.0]
@@ -1734,7 +1742,7 @@ mod minimize_tests {
                 [4.0.into(), 5.0.into(), 6.0.into()]
             ];
             let b = array![1.0.into(), 0.0.into(), 0.0.into()];
-            let result = dot_2d_1d(&a, &b);
+            let result = dot_2d_1d(a.view(), b.view());
 
             // Should extract the first column
             assert_eq!(result.len(), 2);
@@ -1749,7 +1757,7 @@ mod minimize_tests {
                 [4.0.into(), 5.0.into(), 6.0.into()]
             ];
             let b = array![1.0.into(), 1.0.into(), 1.0.into()];
-            let result = dot_2d_1d(&a, &b);
+            let result = dot_2d_1d(a.view(), b.view());
 
             // Should sum each row
             // Result: [1+2+3, 4+5+6] = [6, 15]
@@ -1762,7 +1770,7 @@ mod minimize_tests {
         fn test_dot_2d_1d_single_element() {
             let a: Array2<MyFloat> = array![[5.0.into()]];
             let b = array![3.0.into()];
-            let result = dot_2d_1d(&a, &b);
+            let result = dot_2d_1d(a.view(), b.view());
 
             // Result: [5*3] = [15]
             assert_eq!(result.len(), 1);
@@ -1777,7 +1785,7 @@ mod minimize_tests {
                 [0.0.into(), 0.0.into(), 4.0.into()]
             ];
             let b = array![5.0.into(), 6.0.into(), 7.0.into()];
-            let result = dot_2d_1d(&a, &b);
+            let result = dot_2d_1d(a.view(), b.view());
 
             // Diagonal matrix scales each component
             // Result: [2*5, 3*6, 4*7] = [10, 18, 28]
@@ -1796,10 +1804,10 @@ mod minimize_tests {
 
             // Compute A*(c*v)
             let cv = v.mapv(|x| &x * &c);
-            let result1 = dot_2d_1d(&a, &cv);
+            let result1 = dot_2d_1d(a.view(), cv.view());
 
             // Compute c*(A*v)
-            let av = dot_2d_1d(&a, &v);
+            let av = dot_2d_1d(a.view(), v.view());
             let result2 = av.mapv(|x| &x * &c);
 
             assert_eq!(result1.len(), result2.len());
@@ -1822,11 +1830,11 @@ mod minimize_tests {
 
             // Compute A*(v + w)
             let vw = array![&v[0] + &w[0], &v[1] + &w[1]];
-            let result1 = dot_2d_1d(&a, &vw);
+            let result1 = dot_2d_1d(a.view(), vw.view());
 
             // Compute A*v + A*w
-            let av = dot_2d_1d(&a, &v);
-            let aw = dot_2d_1d(&a, &w);
+            let av = dot_2d_1d(a.view(), v.view());
+            let aw = dot_2d_1d(a.view(), w.view());
             let result2 = array![&av[0] + &aw[0], &av[1] + &aw[1]];
 
             assert_eq!(result1.len(), result2.len());
@@ -1847,7 +1855,7 @@ mod minimize_tests {
                 [3000.0.into(), 4000.0.into()]
             ];
             let b = array![5.0.into(), 6.0.into()];
-            let result = dot_2d_1d(&a, &b);
+            let result = dot_2d_1d(a.view(), b.view());
 
             // Result: [1000*5 + 2000*6, 3000*5 + 4000*6]
             //       = [5000 + 12000, 15000 + 24000]
@@ -1864,7 +1872,7 @@ mod minimize_tests {
             // [1,  0]
             let a: Array2<MyFloat> = array![[0.0.into(), (-1.0).into()], [1.0.into(), 0.0.into()]];
             let b = array![1.0.into(), 0.0.into()]; // Unit vector along x-axis
-            let result = dot_2d_1d(&a, &b);
+            let result = dot_2d_1d(a.view(), b.view());
 
             // Should rotate to y-axis: [0, 1]
             assert_eq!(result.len(), 2);
@@ -1880,11 +1888,11 @@ mod minimize_tests {
             let v = array![5.0.into(), 6.0.into()];
 
             // Using dot_2d_1d
-            let result1 = dot_2d_1d(&a, &v);
+            let result1 = dot_2d_1d(a.view(), v.view());
 
             // Using dot_2d_2d with v as column vector
             let v_col = array![[5.0.into()], [6.0.into()]];
-            let result2_matrix = dot_2d_2d(&a, &v_col);
+            let result2_matrix = dot_2d_2d(a.view(), v_col.view());
 
             // Extract column vector
             assert_eq!(result1.len(), result2_matrix.nrows());
@@ -1906,7 +1914,7 @@ mod minimize_tests {
         fn test_dot_2d_2d_basic() {
             let a: Array2<MyFloat> = array![[1.0.into(), 2.0.into()], [3.0.into(), 4.0.into()]];
             let b = array![[5.0.into(), 6.0.into()], [7.0.into(), 8.0.into()]];
-            let result = dot_2d_2d(&a, &b);
+            let result = dot_2d_2d(a.view(), b.view());
 
             // Result:
             // [1*5 + 2*7, 1*6 + 2*8]   [19, 22]
@@ -1922,7 +1930,7 @@ mod minimize_tests {
         fn test_dot_2d_2d_identity() {
             let a: Array2<MyFloat> = array![[1.0.into(), 2.0.into()], [3.0.into(), 4.0.into()]];
             let identity = array![[1.0.into(), 0.0.into()], [0.0.into(), 1.0.into()]];
-            let result = dot_2d_2d(&a, &identity);
+            let result = dot_2d_2d(a.view(), identity.view());
 
             // Should get the original matrix back
             assert_eq!(result.shape(), &[2, 2]);
@@ -1936,7 +1944,7 @@ mod minimize_tests {
         fn test_dot_2d_2d_zeros() {
             let a: Array2<MyFloat> = array![[1.0.into(), 2.0.into()], [3.0.into(), 4.0.into()]];
             let zeros = array![[0.0.into(), 0.0.into()], [0.0.into(), 0.0.into()]];
-            let result = dot_2d_2d(&a, &zeros);
+            let result = dot_2d_2d(a.view(), zeros.view());
 
             // Result should be all zeros
             assert_eq!(result.shape(), &[2, 2]);
@@ -1957,7 +1965,7 @@ mod minimize_tests {
                 [9.0.into(), 10.0.into()],
                 [11.0.into(), 12.0.into()]
             ]; // 3x2
-            let result = dot_2d_2d(&a, &b);
+            let result = dot_2d_2d(a.view(), b.view());
 
             // Result should be 2x2
             // [1*7 + 2*9 + 3*11, 1*8 + 2*10 + 3*12]   [58, 64]
@@ -1973,7 +1981,7 @@ mod minimize_tests {
         fn test_dot_2d_2d_single_element() {
             let a: Array2<MyFloat> = array![[5.0.into()]];
             let b = array![[3.0.into()]];
-            let result = dot_2d_2d(&a, &b);
+            let result = dot_2d_2d(a.view(), b.view());
 
             assert_eq!(result.shape(), &[1, 1]);
             assert!(approx_eq!(f64, result[[0, 0]].to_f64(), 15.0, MARGIN));
@@ -1984,7 +1992,7 @@ mod minimize_tests {
             let a: Array2<MyFloat> =
                 array![[(-1.0).into(), 2.0.into()], [3.0.into(), (-4.0).into()]];
             let b = array![[5.0.into(), (-6.0).into()], [(-7.0).into(), 8.0.into()]];
-            let result = dot_2d_2d(&a, &b);
+            let result = dot_2d_2d(a.view(), b.view());
 
             // Result:
             // [(-1)*5 + 2*(-7), (-1)*(-6) + 2*8]   [(-19), 22]
@@ -2000,7 +2008,7 @@ mod minimize_tests {
         fn test_dot_2d_2d_column_vector_multiplication() {
             let a: Array2<MyFloat> = array![[1.0.into(), 2.0.into()], [3.0.into(), 4.0.into()]];
             let b = array![[5.0.into()], [6.0.into()]]; // Column vector
-            let result = dot_2d_2d(&a, &b);
+            let result = dot_2d_2d(a.view(), b.view());
 
             // Result should be a 2x1 matrix
             // [1*5 + 2*6]   [17]
@@ -2014,7 +2022,7 @@ mod minimize_tests {
         fn test_dot_2d_2d_row_vector_multiplication() {
             let a: Array2<MyFloat> = array![[1.0.into(), 2.0.into(), 3.0.into()]]; // Row vector (1x3)
             let b = array![[4.0.into()], [5.0.into()], [6.0.into()]]; // Column vector (3x1)
-            let result = dot_2d_2d(&a, &b);
+            let result = dot_2d_2d(a.view(), b.view());
 
             // Result should be a 1x1 matrix (scalar)
             // [1*4 + 2*5 + 3*6] = [32]
@@ -2034,7 +2042,7 @@ mod minimize_tests {
                 [6.0.into(), 5.0.into(), 4.0.into()],
                 [3.0.into(), 2.0.into(), 1.0.into()]
             ];
-            let result = dot_2d_2d(&a, &b);
+            let result = dot_2d_2d(a.view(), b.view());
 
             // Manual calculation for verification
             // Row 0: [1*9+2*6+3*3, 1*8+2*5+3*2, 1*7+2*4+3*1] = [30, 24, 18]
@@ -2059,11 +2067,11 @@ mod minimize_tests {
             let b = array![[5.0.into(), 6.0.into()], [7.0.into(), 8.0.into()]];
             let c = array![[9.0.into(), 10.0.into()], [11.0.into(), 12.0.into()]];
 
-            let ab = dot_2d_2d(&a, &b);
-            let abc_left = dot_2d_2d(&ab, &c);
+            let ab = dot_2d_2d(a.view(), b.view());
+            let abc_left = dot_2d_2d(ab.view(), c.view());
 
-            let bc = dot_2d_2d(&b, &c);
-            let abc_right = dot_2d_2d(&a, &bc);
+            let bc = dot_2d_2d(b.view(), c.view());
+            let abc_right = dot_2d_2d(a.view(), bc.view());
 
             assert_eq!(abc_left.shape(), abc_right.shape());
             for i in 0..abc_left.nrows() {
@@ -2082,7 +2090,7 @@ mod minimize_tests {
         fn test_dot_2d_2d_fractional_values() {
             let a: Array2<MyFloat> = array![[0.5.into(), 0.25.into()], [0.75.into(), 0.125.into()]];
             let b = array![[2.0.into(), 4.0.into()], [8.0.into(), 16.0.into()]];
-            let result = dot_2d_2d(&a, &b);
+            let result = dot_2d_2d(a.view(), b.view());
 
             // Row 0: [0.5*2 + 0.25*8, 0.5*4 + 0.25*16] = [3.0, 6.0]
             // Row 1: [0.75*2 + 0.125*8, 0.75*4 + 0.125*16] = [2.5, 5.0]
@@ -2100,7 +2108,7 @@ mod minimize_tests {
         #[test]
         fn test_norm_1d_basic() {
             let a = array![3.0.into(), 4.0.into()];
-            let result: MyFloat = norm_1d(&a);
+            let result: MyFloat = norm_1d(a.view());
             // sqrt(3^2 + 4^2) = sqrt(9 + 16) = sqrt(25) = 5
             assert!(approx_eq!(f64, result.to_f64(), 5.0, MARGIN));
         }
@@ -2108,21 +2116,21 @@ mod minimize_tests {
         #[test]
         fn test_norm_1d_zeros() {
             let a = array![0.0.into(), 0.0.into(), 0.0.into()];
-            let result: MyFloat = norm_1d(&a);
+            let result: MyFloat = norm_1d(a.view());
             assert!(approx_eq!(f64, result.to_f64(), 0.0, MARGIN));
         }
 
         #[test]
         fn test_norm_1d_single_element() {
             let a = array![5.0.into()];
-            let result: MyFloat = norm_1d(&a);
+            let result: MyFloat = norm_1d(a.view());
             assert!(approx_eq!(f64, result.to_f64(), 5.0, MARGIN));
         }
 
         #[test]
         fn test_norm_1d_negative_values() {
             let a = array![(-3.0).into(), (-4.0).into()];
-            let result: MyFloat = norm_1d(&a);
+            let result: MyFloat = norm_1d(a.view());
             // sqrt((-3)^2 + (-4)^2) = sqrt(9 + 16) = 5
             assert!(approx_eq!(f64, result.to_f64(), 5.0, MARGIN));
         }
@@ -2130,7 +2138,7 @@ mod minimize_tests {
         #[test]
         fn test_norm_1d_mixed_signs() {
             let a = array![(-3.0).into(), 4.0.into()];
-            let result: MyFloat = norm_1d(&a);
+            let result: MyFloat = norm_1d(a.view());
             // sqrt((-3)^2 + 4^2) = sqrt(9 + 16) = 5
             assert!(approx_eq!(f64, result.to_f64(), 5.0, MARGIN));
         }
@@ -2138,14 +2146,14 @@ mod minimize_tests {
         #[test]
         fn test_norm_1d_unit_vector() {
             let a = array![1.0.into(), 0.0.into(), 0.0.into()];
-            let result: MyFloat = norm_1d(&a);
+            let result: MyFloat = norm_1d(a.view());
             assert!(approx_eq!(f64, result.to_f64(), 1.0, MARGIN));
         }
 
         #[test]
         fn test_norm_1d_all_ones() {
             let a = array![1.0.into(), 1.0.into(), 1.0.into()];
-            let result: MyFloat = norm_1d(&a);
+            let result: MyFloat = norm_1d(a.view());
             // sqrt(1 + 1 + 1) = sqrt(3) ≈ 1.732050808
             assert!(approx_eq!(f64, result.to_f64(), 3.0_f64.sqrt(), MARGIN));
         }
@@ -2153,7 +2161,7 @@ mod minimize_tests {
         #[test]
         fn test_norm_1d_pythagorean_triple() {
             let a = array![5.0.into(), 12.0.into()];
-            let result: MyFloat = norm_1d(&a);
+            let result: MyFloat = norm_1d(a.view());
             // sqrt(25 + 144) = sqrt(169) = 13
             assert!(approx_eq!(f64, result.to_f64(), 13.0, MARGIN));
         }
@@ -2161,7 +2169,7 @@ mod minimize_tests {
         #[test]
         fn test_norm_1d_fractional() {
             let a = array![0.6.into(), 0.8.into()];
-            let result: MyFloat = norm_1d(&a);
+            let result: MyFloat = norm_1d(a.view());
             // sqrt(0.36 + 0.64) = sqrt(1.0) = 1.0
             assert!(approx_eq!(f64, result.to_f64(), 1.0, MARGIN));
         }
@@ -2169,7 +2177,7 @@ mod minimize_tests {
         #[test]
         fn test_norm_1d_large_values() {
             let a = array![1000.0.into(), 0.0.into()];
-            let result: MyFloat = norm_1d(&a);
+            let result: MyFloat = norm_1d(a.view());
             assert!(approx_eq!(f64, result.to_f64(), 1000.0, MARGIN));
         }
 
@@ -2177,11 +2185,11 @@ mod minimize_tests {
         fn test_norm_1d_homogeneity() {
             // Test that ||c*v|| = |c| * ||v||
             let a: Array1<MyFloat> = array![3.0.into(), 4.0.into()];
-            let norm_a = norm_1d(&a);
+            let norm_a = norm_1d(a.view());
 
             let scalar = MyFloat::new(2.0);
             let scaled = a.mapv(|x| &x * &scalar);
-            let norm_scaled: MyFloat = norm_1d(&scaled);
+            let norm_scaled: MyFloat = norm_1d(scaled.view());
 
             assert!(approx_eq!(
                 f64,
@@ -2198,7 +2206,7 @@ mod minimize_tests {
         #[test]
         fn test_norm_2d_basic() {
             let a = array![[1.0.into(), 2.0.into()], [3.0.into(), 4.0.into()]];
-            let result: MyFloat = norm_2d(&a);
+            let result: MyFloat = norm_2d(a.view());
             // sqrt(1 + 4 + 9 + 16) = sqrt(30) ≈ 5.477225575
             assert!(approx_eq!(f64, result.to_f64(), 30.0_f64.sqrt(), MARGIN));
         }
@@ -2206,21 +2214,21 @@ mod minimize_tests {
         #[test]
         fn test_norm_2d_zeros() {
             let a = array![[0.0.into(), 0.0.into()], [0.0.into(), 0.0.into()]];
-            let result: MyFloat = norm_2d(&a);
+            let result: MyFloat = norm_2d(a.view());
             assert!(approx_eq!(f64, result.to_f64(), 0.0, MARGIN));
         }
 
         #[test]
         fn test_norm_2d_single_element() {
             let a = array![[5.0.into()]];
-            let result: MyFloat = norm_2d(&a);
+            let result: MyFloat = norm_2d(a.view());
             assert!(approx_eq!(f64, result.to_f64(), 5.0, MARGIN));
         }
 
         #[test]
         fn test_norm_2d_identity() {
             let a = array![[1.0.into(), 0.0.into()], [0.0.into(), 1.0.into()]];
-            let result: MyFloat = norm_2d(&a);
+            let result: MyFloat = norm_2d(a.view());
             // sqrt(1 + 0 + 0 + 1) = sqrt(2) ≈ 1.414213562
             assert!(approx_eq!(f64, result.to_f64(), 2.0_f64.sqrt(), MARGIN));
         }
@@ -2231,7 +2239,7 @@ mod minimize_tests {
                 [(-1.0).into(), (-2.0).into()],
                 [(-3.0).into(), (-4.0).into()]
             ];
-            let result: MyFloat = norm_2d(&a);
+            let result: MyFloat = norm_2d(a.view());
             // sqrt(1 + 4 + 9 + 16) = sqrt(30)
             assert!(approx_eq!(f64, result.to_f64(), 30.0_f64.sqrt(), MARGIN));
         }
@@ -2239,7 +2247,7 @@ mod minimize_tests {
         #[test]
         fn test_norm_2d_mixed_signs() {
             let a = array![[1.0.into(), (-2.0).into()], [(-3.0).into(), 4.0.into()]];
-            let result: MyFloat = norm_2d(&a);
+            let result: MyFloat = norm_2d(a.view());
             // sqrt(1 + 4 + 9 + 16) = sqrt(30)
             assert!(approx_eq!(f64, result.to_f64(), 30.0_f64.sqrt(), MARGIN));
         }
@@ -2250,7 +2258,7 @@ mod minimize_tests {
                 [1.0.into(), 2.0.into(), 3.0.into()],
                 [4.0.into(), 5.0.into(), 6.0.into()]
             ];
-            let result: MyFloat = norm_2d(&a);
+            let result: MyFloat = norm_2d(a.view());
             // sqrt(1 + 4 + 9 + 16 + 25 + 36) = sqrt(91) ≈ 9.539392014
             assert!(approx_eq!(f64, result.to_f64(), 91.0_f64.sqrt(), MARGIN));
         }
@@ -2258,7 +2266,7 @@ mod minimize_tests {
         #[test]
         fn test_norm_2d_column_vector() {
             let a = array![[3.0.into()], [4.0.into()]];
-            let result: MyFloat = norm_2d(&a);
+            let result: MyFloat = norm_2d(a.view());
             // sqrt(9 + 16) = sqrt(25) = 5
             assert!(approx_eq!(f64, result.to_f64(), 5.0, MARGIN));
         }
@@ -2266,7 +2274,7 @@ mod minimize_tests {
         #[test]
         fn test_norm_2d_row_vector() {
             let a = array![[3.0.into(), 4.0.into()]];
-            let result: MyFloat = norm_2d(&a);
+            let result: MyFloat = norm_2d(a.view());
             // sqrt(9 + 16) = sqrt(25) = 5
             assert!(approx_eq!(f64, result.to_f64(), 5.0, MARGIN));
         }
@@ -2278,7 +2286,7 @@ mod minimize_tests {
                 [4.0.into(), 5.0.into(), 6.0.into()],
                 [7.0.into(), 8.0.into(), 9.0.into()]
             ];
-            let result: MyFloat = norm_2d(&a);
+            let result: MyFloat = norm_2d(a.view());
             // sqrt(1+4+9+16+25+36+49+64+81) = sqrt(285) ≈ 16.881943016
             assert!(approx_eq!(f64, result.to_f64(), 285.0_f64.sqrt(), MARGIN));
         }
@@ -2287,11 +2295,11 @@ mod minimize_tests {
         fn test_norm_2d_homogeneity() {
             // Test that ||c*A|| = |c| * ||A||
             let a: Array2<MyFloat> = array![[1.0.into(), 2.0.into()], [3.0.into(), 4.0.into()]];
-            let norm_a = norm_2d(&a);
+            let norm_a = norm_2d(a.view());
 
             let scalar = MyFloat::new(3.0);
             let scaled = a.mapv(|x| &x * &scalar);
-            let norm_scaled: MyFloat = norm_2d(&scaled);
+            let norm_scaled: MyFloat = norm_2d(scaled.view());
 
             assert!(approx_eq!(
                 f64,
@@ -2308,7 +2316,7 @@ mod minimize_tests {
         #[test]
         fn test_norm_1d_l1_basic() {
             let a = array![3.0.into(), 4.0.into()];
-            let result: MyFloat = norm_1d_l1(&a);
+            let result: MyFloat = norm_1d_l1(a.view());
             // |3| + |4| = 7
             assert!(approx_eq!(f64, result.to_f64(), 7.0, MARGIN));
         }
@@ -2316,7 +2324,7 @@ mod minimize_tests {
         #[test]
         fn test_norm_1d_l1_negative() {
             let a = array![(-3.0).into(), (-4.0).into()];
-            let result: MyFloat = norm_1d_l1(&a);
+            let result: MyFloat = norm_1d_l1(a.view());
             // |-3| + |-4| = 3 + 4 = 7
             assert!(approx_eq!(f64, result.to_f64(), 7.0, MARGIN));
         }
@@ -2324,7 +2332,7 @@ mod minimize_tests {
         #[test]
         fn test_norm_1d_l1_mixed() {
             let a = array![(-3.0).into(), 4.0.into(), (-2.0).into()];
-            let result: MyFloat = norm_1d_l1(&a);
+            let result: MyFloat = norm_1d_l1(a.view());
             // |-3| + |4| + |-2| = 3 + 4 + 2 = 9
             assert!(approx_eq!(f64, result.to_f64(), 9.0, MARGIN));
         }
@@ -2332,7 +2340,7 @@ mod minimize_tests {
         #[test]
         fn test_norm_1d_l1_zeros() {
             let a = array![0.0.into(), 0.0.into()];
-            let result: MyFloat = norm_1d_l1(&a);
+            let result: MyFloat = norm_1d_l1(a.view());
             assert!(approx_eq!(f64, result.to_f64(), 0.0, MARGIN));
         }
     }
@@ -2343,7 +2351,7 @@ mod minimize_tests {
         #[test]
         fn test_norm_2d_l1_basic() {
             let a = array![[1.0.into(), (-2.0).into()], [3.0.into(), (-4.0).into()]];
-            let result: MyFloat = norm_2d_l1(&a);
+            let result: MyFloat = norm_2d_l1(a.view());
             // |1| + |-2| + |3| + |-4| = 1 + 2 + 3 + 4 = 10
             assert!(approx_eq!(f64, result.to_f64(), 10.0, MARGIN));
         }
@@ -2351,7 +2359,7 @@ mod minimize_tests {
         #[test]
         fn test_norm_2d_l1_zeros() {
             let a = array![[0.0.into(), 0.0.into()], [0.0.into(), 0.0.into()]];
-            let result: MyFloat = norm_2d_l1(&a);
+            let result: MyFloat = norm_2d_l1(a.view());
             assert!(approx_eq!(f64, result.to_f64(), 0.0, MARGIN));
         }
     }
@@ -2362,7 +2370,7 @@ mod minimize_tests {
         #[test]
         fn test_norm_1d_linf_basic() {
             let a = array![3.0.into(), 4.0.into(), 2.0.into()];
-            let result: MyFloat = norm_1d_linf(&a);
+            let result: MyFloat = norm_1d_linf(a.view());
             // max(|3|, |4|, |2|) = 4
             assert!(approx_eq!(f64, result.to_f64(), 4.0, MARGIN));
         }
@@ -2370,7 +2378,7 @@ mod minimize_tests {
         #[test]
         fn test_norm_1d_linf_negative() {
             let a = array![3.0.into(), (-7.0).into(), 2.0.into()];
-            let result: MyFloat = norm_1d_linf(&a);
+            let result: MyFloat = norm_1d_linf(a.view());
             // max(|3|, |-7|, |2|) = 7
             assert!(approx_eq!(f64, result.to_f64(), 7.0, MARGIN));
         }
@@ -2378,14 +2386,14 @@ mod minimize_tests {
         #[test]
         fn test_norm_1d_linf_zeros() {
             let a = array![0.0.into(), 0.0.into()];
-            let result: MyFloat = norm_1d_linf(&a);
+            let result: MyFloat = norm_1d_linf(a.view());
             assert!(approx_eq!(f64, result.to_f64(), 0.0, MARGIN));
         }
 
         #[test]
         fn test_norm_1d_linf_single() {
             let a = array![5.0.into()];
-            let result: MyFloat = norm_1d_linf(&a);
+            let result: MyFloat = norm_1d_linf(a.view());
             assert!(approx_eq!(f64, result.to_f64(), 5.0, MARGIN));
         }
     }
@@ -2396,7 +2404,7 @@ mod minimize_tests {
         #[test]
         fn test_norm_2d_linf_basic() {
             let a = array![[1.0.into(), 2.0.into()], [(-7.0).into(), 4.0.into()]];
-            let result: MyFloat = norm_2d_linf(&a);
+            let result: MyFloat = norm_2d_linf(a.view());
             // max(|1|, |2|, |-7|, |4|) = 7
             assert!(approx_eq!(f64, result.to_f64(), 7.0, MARGIN));
         }
@@ -2404,7 +2412,7 @@ mod minimize_tests {
         #[test]
         fn test_norm_2d_linf_all_positive() {
             let a = array![[1.0.into(), 2.0.into()], [3.0.into(), 9.0.into()]];
-            let result: MyFloat = norm_2d_linf(&a);
+            let result: MyFloat = norm_2d_linf(a.view());
             // max(1, 2, 3, 9) = 9
             assert!(approx_eq!(f64, result.to_f64(), 9.0, MARGIN));
         }
@@ -2412,7 +2420,7 @@ mod minimize_tests {
         #[test]
         fn test_norm_2d_linf_zeros() {
             let a = array![[0.0.into(), 0.0.into()], [0.0.into(), 0.0.into()]];
-            let result: MyFloat = norm_2d_linf(&a);
+            let result: MyFloat = norm_2d_linf(a.view());
             assert!(approx_eq!(f64, result.to_f64(), 0.0, MARGIN));
         }
     }
@@ -2425,9 +2433,9 @@ mod minimize_tests {
             // For the same vector: ||x||_inf <= ||x||_2 <= ||x||_1
             let a: Array1<MyFloat> = array![1.0.into(), 2.0.into(), 3.0.into()];
 
-            let l_inf = norm_1d_linf(&a).to_f64();
-            let l_2 = norm_1d(&a).to_f64();
-            let l_1 = norm_1d_l1(&a).to_f64();
+            let l_inf = norm_1d_linf(a.view()).to_f64();
+            let l_2 = norm_1d(a.view()).to_f64();
+            let l_1 = norm_1d_l1(a.view()).to_f64();
 
             assert!(l_inf <= l_2);
             assert!(l_2 <= l_1);
@@ -2438,9 +2446,9 @@ mod minimize_tests {
             // Same inequality holds for matrices
             let a: Array2<MyFloat> = array![[1.0.into(), 2.0.into()], [3.0.into(), 4.0.into()]];
 
-            let l_inf = norm_2d_linf(&a).to_f64();
-            let frobenius = norm_2d(&a).to_f64();
-            let l_1 = norm_2d_l1(&a).to_f64();
+            let l_inf = norm_2d_linf(a.view()).to_f64();
+            let frobenius = norm_2d(a.view()).to_f64();
+            let l_1 = norm_2d_l1(a.view()).to_f64();
 
             assert!(l_inf <= frobenius);
             assert!(frobenius <= l_1);
@@ -2453,9 +2461,9 @@ mod minimize_tests {
             let b: Array1<MyFloat> = array![3.0.into(), 4.0.into()];
             let sum: Array1<MyFloat> = array![4.0.into(), 6.0.into()];
 
-            let norm_sum = norm_1d(&sum).to_f64();
-            let norm_a = norm_1d(&a).to_f64();
-            let norm_b = norm_1d(&b).to_f64();
+            let norm_sum = norm_1d(sum.view()).to_f64();
+            let norm_a = norm_1d(a.view()).to_f64();
+            let norm_b = norm_1d(b.view()).to_f64();
 
             assert!(norm_sum <= norm_a + norm_b + 1e-10); // Small epsilon for floating point
         }
@@ -2466,8 +2474,8 @@ mod minimize_tests {
             let vec_1d: Array1<MyFloat> = array![3.0.into(), 4.0.into()];
             let vec_2d: Array2<MyFloat> = array![[3.0.into()], [4.0.into()]];
 
-            let norm_1 = norm_1d(&vec_1d).to_f64();
-            let norm_2 = norm_2d(&vec_2d).to_f64();
+            let norm_1 = norm_1d(vec_1d.view()).to_f64();
+            let norm_2 = norm_2d(vec_2d.view()).to_f64();
 
             assert!(approx_eq!(f64, norm_1, norm_2, MARGIN));
         }

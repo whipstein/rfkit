@@ -1,10 +1,13 @@
-use crate::element::{Elem, ElemType, Lumped};
-use crate::frequency::Frequency;
-use crate::point;
-use crate::point::Point;
-use crate::points::{Points, Pts};
-use crate::scale::Scale;
-use crate::unit::{Unit, UnitVal, Unitized};
+use crate::{
+    element::{Elem, ElemType, Lumped},
+    frequency::Frequency,
+    point,
+    point::Point,
+    pts::{Points, Pts},
+    scale::Scale,
+    unit::{Unit, UnitVal, Unitized},
+};
+use ndarray::{IntoDimension, Ix3};
 use num::complex::{Complex, Complex64, c64};
 
 #[derive(Clone, Debug, PartialEq)]
@@ -70,12 +73,15 @@ impl Elem for Short {
         &self.id
     }
 
-    fn net(&self, freq: &Frequency) -> Points<Complex64> {
-        Points::from_shape_fn((freq.npts(), 2, 2), |(_, j, k)| match (j, k) {
-            (0, 0) | (1, 1) => c64(0.0, 0.0),
-            (1, 0) | (0, 1) => c64(1.0, 0.0),
-            _ => c64(0.0, 0.0),
-        })
+    fn net(&self, freq: &Frequency) -> Points<Complex64, Ix3> {
+        Points::<Complex64, Ix3>::from_shape_fn(
+            (freq.npts(), 2, 2).into_dimension(),
+            |(_, j, k)| match (j, k) {
+                (0, 0) | (1, 1) => c64(0.0, 0.0),
+                (1, 0) | (0, 1) => c64(1.0, 0.0),
+                _ => c64(0.0, 0.0),
+            },
+        )
     }
 
     fn nodes(&self) -> Vec<usize> {

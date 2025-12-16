@@ -43,6 +43,26 @@ where
 impl<T> DBrent<T>
 where
     T: RFFloat,
+    for<'a, 'b> &'a T: std::ops::Add<&'b T, Output = T>,
+    for<'a, 'b> &'a T: std::ops::Sub<&'b T, Output = T>,
+    for<'a, 'b> &'a T: std::ops::Mul<&'b T, Output = T>,
+    for<'a, 'b> &'a T: std::ops::Div<&'b T, Output = T>,
+    for<'a> &'a T: std::ops::Add<T, Output = T>,
+    for<'a> &'a T: std::ops::Sub<T, Output = T>,
+    for<'a> &'a T: std::ops::Mul<T, Output = T>,
+    for<'a> &'a T: std::ops::Div<T, Output = T>,
+    for<'a> &'a T: std::ops::Add<f64, Output = T>,
+    for<'a> &'a T: std::ops::Sub<f64, Output = T>,
+    for<'a> &'a T: std::ops::Mul<f64, Output = T>,
+    for<'a> &'a T: std::ops::Div<f64, Output = T>,
+    f64: std::ops::Add<T, Output = T>,
+    f64: std::ops::Sub<T, Output = T>,
+    f64: std::ops::Mul<T, Output = T>,
+    f64: std::ops::Div<T, Output = T>,
+    for<'a> f64: std::ops::Add<&'a T, Output = T>,
+    for<'a> f64: std::ops::Sub<&'a T, Output = T>,
+    for<'a> f64: std::ops::Mul<&'a T, Output = T>,
+    for<'a> f64: std::ops::Div<&'a T, Output = T>,
 {
     pub fn new<F>(f: F) -> Self
     where
@@ -96,7 +116,7 @@ where
         max_iters: Option<usize>,
     ) -> Result<DBrentResult<T>, MinimizerError> {
         self.converged = false;
-        let tol = tol.unwrap_or(T::from_f64(1e-14));
+        let tol = tol.unwrap_or(1e-14.into());
         let max_iter = max_iters.unwrap_or(100);
 
         // Validate inputs
@@ -113,7 +133,7 @@ where
         let mut eval_b = (bx.clone(), self.f.call_scalar(&bx), self.f.df_scalar(&bx));
 
         // Check that f(a) and f(b) have opposite signs
-        if eval_a.1.clone() * eval_b.1.clone() > T::zero() {
+        if &eval_a.1 * &eval_b.1 > T::zero() {
             return Err(MinimizerError::SameSignError);
         }
 
@@ -130,8 +150,7 @@ where
 
         self.iters = 0;
 
-        while eval_b.1.abs() > tol && (bx.clone() - ax.clone()).abs() > tol && self.iters < max_iter
-        {
+        while eval_b.1.abs() > tol && (&bx - &ax).abs() > tol && self.iters < max_iter {
             self.iters += 1;
 
             let mut s = bx.clone();
@@ -139,12 +158,11 @@ where
 
             // Try Newton's method first if derivative is significant
             if eval_b.2.abs() > tol && eval_b.2.abs() > T::from_f64(1e-8) {
-                let newton_step = eval_b.0.clone() - eval_b.1.clone() / eval_b.2.clone();
+                let newton_step = &eval_b.0 - &eval_b.1 / &eval_b.2;
 
                 // Check if Newton step is within bracket and reasonable
                 let newton_in_bracket = newton_step > ax && newton_step < bx;
-                let newton_reasonable = (newton_step.clone() - eval_b.0.clone()).abs()
-                    < (bx.clone() - ax.clone()).abs();
+                let newton_reasonable = (&newton_step - &eval_b.0).abs() < (&bx - &ax).abs();
 
                 if newton_in_bracket && newton_reasonable {
                     s = newton_step.clone();
@@ -157,31 +175,28 @@ where
                 // Try inverse quadratic interpolation with derivatives
                 if eval_a.1 != eval_c.1 && eval_b.1 != eval_c.1 && eval_a.1 != eval_b.1 {
                     // Hermite interpolation using function values and derivatives
-                    let h1 = eval_b.0.clone() - eval_a.0.clone();
-                    let h2 = eval_c.0.clone() - eval_b.0.clone();
+                    let h1 = &eval_b.0 - &eval_a.0;
+                    let h2 = &eval_c.0 - &eval_b.0;
 
                     if h1.abs() > tol && h2.abs() > tol {
                         // Use modified inverse quadratic interpolation with derivative info
-                        let delta1 = (eval_b.1.clone() - eval_a.1.clone()) / h1.clone();
-                        let delta2 = (eval_c.1.clone() - eval_b.1.clone()) / h2.clone();
+                        let delta1 = (&eval_b.1 - &eval_a.1) / &h1;
+                        let delta2 = (&eval_c.1 - &eval_b.1) / &h2;
 
-                        if (delta1.clone() - eval_a.2.clone()).abs() < T::one()
-                            && (delta2.clone() - eval_b.2.clone()).abs() < T::one()
+                        if (&delta1 - &eval_a.2).abs() < T::one()
+                            && (&delta2 - &eval_b.2).abs() < T::one()
                         {
-                            let denom = (eval_a.1.clone() - eval_b.1.clone())
-                                * (eval_a.1.clone() - eval_c.1.clone())
-                                * (eval_b.1.clone() - eval_c.1.clone());
+                            let denom = (&eval_a.1 - &eval_b.1)
+                                * (&eval_a.1 - &eval_c.1)
+                                * (&eval_b.1 - &eval_c.1);
 
                             if denom.abs() > tol {
-                                s = eval_a.0.clone() * eval_b.1.clone() * eval_c.1.clone()
-                                    / ((eval_a.1.clone() - eval_b.1.clone())
-                                        * (eval_a.1.clone() - eval_c.1.clone()))
-                                    + eval_b.0.clone() * eval_a.1.clone() * eval_c.1.clone()
-                                        / ((eval_b.1.clone() - eval_a.1.clone())
-                                            * (eval_b.1.clone() - eval_c.1.clone()))
-                                    + eval_c.0.clone() * eval_a.1.clone() * eval_b.1.clone()
-                                        / ((eval_c.1.clone() - eval_a.1.clone())
-                                            * (eval_c.1.clone() - eval_b.1.clone()));
+                                s = &eval_a.0 * &eval_b.1 * &eval_c.1
+                                    / ((&eval_a.1 - &eval_b.1) * (&eval_a.1 - &eval_c.1))
+                                    + &eval_b.0 * &eval_a.1 * &eval_c.1
+                                        / ((&eval_b.1 - &eval_a.1) * (&eval_b.1 - &eval_c.1))
+                                    + &eval_c.0 * &eval_a.1 * &eval_b.1
+                                        / ((&eval_c.1 - &eval_a.1) * (&eval_c.1 - &eval_b.1));
                                 method = "inverse_quadratic_with_derivative";
                             }
                         }
@@ -190,47 +205,36 @@ where
 
                 // Fallback to standard inverse quadratic interpolation
                 if method == "bisection" && eval_a.1 != eval_c.1 && eval_b.1 != eval_c.1 {
-                    let denom = (eval_a.1.clone() - eval_b.1.clone())
-                        * (eval_a.1.clone() - eval_c.1.clone())
-                        * (eval_b.1.clone() - eval_c.1.clone());
+                    let denom =
+                        (&eval_a.1 - &eval_b.1) * (&eval_a.1 - &eval_c.1) * (&eval_b.1 - &eval_c.1);
                     if denom.abs() > tol {
-                        s = eval_a.0.clone() * eval_b.1.clone() * eval_c.1.clone()
-                            / ((eval_a.1.clone() - eval_b.1.clone())
-                                * (eval_a.1.clone() - eval_c.1.clone()))
-                            + eval_b.0.clone() * eval_a.1.clone() * eval_c.1.clone()
-                                / ((eval_b.1.clone() - eval_a.1.clone())
-                                    * (eval_b.1.clone() - eval_c.1.clone()))
-                            + eval_c.0.clone() * eval_a.1.clone() * eval_b.1.clone()
-                                / ((eval_c.1.clone() - eval_a.1.clone())
-                                    * (eval_c.1.clone() - eval_b.1.clone()));
+                        s = &eval_a.0 * &eval_b.1 * &eval_c.1
+                            / ((&eval_a.1 - &eval_b.1) * (&eval_a.1 - &eval_c.1))
+                            + &eval_b.0 * &eval_a.1 * &eval_c.1
+                                / ((&eval_b.1 - &eval_a.1) * (&eval_b.1 - &eval_c.1))
+                            + &eval_c.0 * &eval_a.1 * &eval_b.1
+                                / ((&eval_c.1 - &eval_a.1) * (&eval_c.1 - &eval_b.1));
                         method = "inverse_quadratic";
                     }
                 }
 
                 // Fallback to secant method
                 if method == "bisection" && eval_a.1 != eval_b.1 {
-                    s = eval_b.0.clone()
-                        - eval_b.1.clone() * (eval_b.0.clone() - eval_a.0.clone())
-                            / (eval_b.1.clone() - eval_a.1.clone());
+                    s = &eval_b.0 - &eval_b.1 * (&eval_b.0 - &eval_a.0) / (&eval_b.1 - &eval_a.1);
                     method = "secant";
                 }
             }
 
             // Safety checks - use bisection if interpolated point is not acceptable
-            let condition1 = !(((T::from_f64(3.0) * ax.clone() + bx.clone()) / T::from_f64(4.0))
-                ..=bx.clone())
-                .contains(&s);
-            let condition2 = mflag
-                && (s.clone() - bx.clone()).abs()
-                    >= (bx.clone() - eval_c.0.clone()).abs() / T::from_f64(2.0);
-            let val = eval_c.0.clone() - eval_d.0.clone();
-            let condition3 =
-                !mflag && (s.clone() - bx.clone()).abs() >= val.abs() / T::from_f64(2.0);
-            let condition4 = mflag && (b.clone() - eval_c.0.clone()).abs() < tol;
+            let condition1 = !(((3.0 * &ax + &bx) / 4.0)..=bx.clone()).contains(&s);
+            let condition2 = mflag && (&s - &bx).abs() >= (&bx - &eval_c.0).abs() / 2.0;
+            let val = &eval_c.0 - &eval_d.0;
+            let condition3 = !mflag && (&s - &bx).abs() >= val.abs() / 2.0;
+            let condition4 = mflag && (b - &eval_c.0).abs() < tol;
             let condition5 = !mflag && val.abs() < tol;
 
             if condition1 || condition2 || condition3 || condition4 || condition5 {
-                s = (ax.clone() + bx.clone()) / T::from_f64(2.0);
+                s = (&ax + &bx) / 2.0;
                 method = "bisection";
                 mflag = true;
             } else {
@@ -244,7 +248,7 @@ where
             eval_d = eval_c.clone();
             eval_c = eval_b.clone();
 
-            if eval_a.1.clone() * eval_s.1.clone() < T::zero() {
+            if &eval_a.1 * &eval_s.1 < T::zero() {
                 bx = s.clone();
                 eval_b = eval_s.clone();
             } else {
@@ -271,7 +275,7 @@ where
             dfmin: self.dfmin.clone(),
             iters: self.iters,
             converged: self.converged,
-            final_bracket_size: (bx.clone() - ax.clone()).abs(),
+            final_bracket_size: (&bx - &ax).abs(),
             method_used,
         })
     }
@@ -297,7 +301,7 @@ where
         max_iters: Option<usize>,
     ) -> Result<DBrentResult<T>, MinimizerError> {
         self.converged = false;
-        let tol = tol.unwrap_or(T::from_f64(1e-14));
+        let tol = tol.unwrap_or(1e-14.into());
         let max_iter = max_iters.unwrap_or(100);
 
         if a >= b {
@@ -320,7 +324,7 @@ where
         let mut fb = self.f.call_scalar(&bracket_b);
 
         // Ensure proper bracket
-        if fa.clone() * fb.clone() > T::zero() {
+        if &fa * &fb > T::zero() {
             return Err(MinimizerError::SameSignError);
         }
 
@@ -339,25 +343,25 @@ where
 
             if dfx.abs() < tol {
                 // Use bisection when derivative is too small
-                x = (bracket_a.clone() + bracket_b.clone()) / T::from_f64(2.0);
+                x = (&bracket_a + &bracket_b) / 2.0;
                 method_used.push("bisection".to_string());
             } else {
                 // Try Newton step
-                let x_newton = x.clone() - fx.clone() / dfx.clone();
+                let x_newton = &x - &fx / &dfx;
 
                 if x_newton > bracket_a && x_newton < bracket_b {
                     x = x_newton.clone();
                     method_used.push("newton".to_string());
                 } else {
                     // Newton step outside bracket, use bisection
-                    x = (bracket_a.clone() + bracket_b.clone()) / T::from_f64(2.0);
+                    x = (&bracket_a + &bracket_b) / 2.0;
                     method_used.push("bisection".to_string());
                 }
             }
 
             // Update bracket
             let fx_new = self.f.call_scalar(&x);
-            if fa.clone() * fx_new.clone() < T::zero() {
+            if &fa * &fx_new < T::zero() {
                 bracket_b = x.clone();
                 fb = fx_new.clone();
             } else {
@@ -380,7 +384,7 @@ where
             dfmin: self.dfmin.clone(),
             iters: self.iters,
             converged: self.converged,
-            final_bracket_size: (bracket_b.clone() - bracket_a.clone()).abs(),
+            final_bracket_size: (&bracket_b - &bracket_a).abs(),
             method_used,
         })
     }
