@@ -1,7 +1,6 @@
 use crate::element::{Elem, ElemType, Term};
 use crate::frequency::Frequency;
 use crate::point;
-use crate::point::Point;
 use crate::pts::{Points, Pts};
 use ndarray::{IntoDimension, prelude::*};
 use num::complex::Complex64;
@@ -11,7 +10,7 @@ pub struct Ground {
     id: String,
     z: Complex64,
     node: [usize; 1],
-    c: Point<Complex64>,
+    c: Points<Complex64, Ix2>,
     z0: Complex64,
 }
 
@@ -38,7 +37,7 @@ impl Default for Ground {
 }
 
 impl Elem for Ground {
-    fn c(&self, _freq: &Frequency) -> Point<Complex64> {
+    fn c(&self, _freq: &Frequency) -> Points<Complex64, Ix2> {
         self.c.clone()
     }
 

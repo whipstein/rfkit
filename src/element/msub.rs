@@ -3,7 +3,6 @@ use crate::{
     element::{Distributed, Elem, ElemType, Lumped},
     frequency::Frequency,
     point,
-    point::{Point, Pt},
     pts::{Points, Pts},
     scale::Scale,
     unit::{Unit, UnitVal, UnitValBuilder, Unitized},
@@ -131,8 +130,8 @@ impl Default for Msub {
 }
 
 impl Elem for Msub {
-    fn c(&self, _freq: &Frequency) -> Point<Complex64> {
-        Point::zeros((0, 0))
+    fn c(&self, _freq: &Frequency) -> Points<Complex64, Ix2> {
+        Points::zeros((0, 0))
     }
 
     fn c_at(&self, _freq: &Frequency, j: usize, k: usize) -> Complex64 {

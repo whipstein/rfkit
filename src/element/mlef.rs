@@ -3,7 +3,6 @@ use crate::{
     element::{Distributed, Elem, ElemType, msub::Msub},
     frequency::Frequency,
     point,
-    point::Point,
     pts::{Points, Pts},
     scale::Scale,
     unit::{Unit, UnitVal, Unitized},
@@ -49,7 +48,7 @@ impl Default for Mlef {
 
 impl Elem for Mlef {
     // todo!("fix c value for true mlef response");
-    fn c(&self, _freq: &Frequency) -> Point<Complex64> {
+    fn c(&self, _freq: &Frequency) -> Points<Complex64, Ix2> {
         // point![
         //     Complex64,
         //     [

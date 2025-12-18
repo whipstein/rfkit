@@ -2,7 +2,6 @@ use crate::{
     element::{Elem, ElemType, Element},
     frequency::Frequency,
     network::{Network, NetworkBuilder},
-    point::{Point, Pt},
     prelude::ElementBuilder,
     pts::{Points, Pts},
 };
@@ -422,11 +421,11 @@ impl Circuit {
             return;
         }
 
-        let id = Point::eye(self.x.dim().1);
+        let id = Points::eye((self.x.dim().1, self.x.dim().1));
 
         for i in 0..self.freq.npts() {
-            let c = Point::from(self.c.slice(s![i, .., ..]));
-            let x = Point::from(self.x.slice(s![i, .., ..]));
+            let c = Points::from(self.c.slice(s![i, .., ..]));
+            let x = Points::from(self.x.slice(s![i, .., ..]));
 
             let mut net = &id - &c.dot(&x);
 

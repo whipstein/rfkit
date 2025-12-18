@@ -1,6 +1,5 @@
 use crate::{
     frequency::Frequency,
-    point::Point,
     pts::Points,
     scale::Scale,
     unit::{Unit, UnitVal, Unitized},
@@ -118,7 +117,7 @@ impl fmt::Display for ElemType {
 macro_rules! define_elem_impl {
     (variants: [$($variant:ident),+ $(,)?]) => {
         impl Elem for Element {
-            fn c(&self, freq: &Frequency) -> Point<Complex64> {
+            fn c(&self, freq: &Frequency) -> Points<Complex64, Ix2> {
                 match self {
                     $(
                         Element::$variant(elem) => elem.c(freq),
@@ -202,7 +201,7 @@ macro_rules! define_elem_impl {
 }
 
 pub trait Elem {
-    fn c(&self, freq: &Frequency) -> Point<Complex64>;
+    fn c(&self, freq: &Frequency) -> Points<Complex64, Ix2>;
     fn c_at(&self, freq: &Frequency, j: usize, k: usize) -> Complex64;
     fn id(&self) -> String;
     fn elem(&self) -> ElemType;
@@ -841,7 +840,6 @@ macro_rules! define_mlin_calcs {
 #[cfg(test)]
 mod element_tests {
     use super::*;
-    use crate::point::Pt;
     use crate::pts::Pts;
     use float_cmp::*;
     use std::f64::consts::PI;

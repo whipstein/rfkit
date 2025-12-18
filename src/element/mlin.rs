@@ -3,7 +3,6 @@ use crate::{
     element::{Distributed, Elem, ElemType, mlin_exp, msub::Msub},
     frequency::Frequency,
     point,
-    point::Point,
     pts::{Points, Pts},
     scale::Scale,
     unit::{Unit, UnitVal, Unitized},
@@ -48,7 +47,7 @@ impl Default for Mlin {
 }
 
 impl Elem for Mlin {
-    fn c(&self, freq: &Frequency) -> Point<Complex64> {
+    fn c(&self, freq: &Frequency) -> Points<Complex64, Ix2> {
         point![
             Complex64,
             [
@@ -386,7 +385,6 @@ mod element_mlin_tests {
     use super::*;
     use crate::{
         element::msub::MsubBuilder,
-        point::Pt,
         unit::UnitValBuilder,
         util::{comp_c64, comp_f64, comp_point_c64},
     };

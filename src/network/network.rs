@@ -6,7 +6,6 @@ use crate::{
     myfloat::MyFloat,
     network::{NetworkPoint, PortPoints, PortVal, WaveType, network_err_msg},
     parameter::RFParameter,
-    point::{Point, Pt},
     pts::{Points, Pts},
     scale::Scale,
     unit::Unit,
@@ -760,7 +759,7 @@ impl Network {
 
     pub fn is_reciprocal(&self) -> bool {
         for pt in self.s().outer_iter() {
-            if !Point::<Complex64>::new(pt.to_owned()).is_reciprocal() {
+            if !Points::<Complex64, Ix2>::new(pt.to_owned()).is_reciprocal() {
                 return false;
             }
         }
@@ -934,8 +933,8 @@ impl Network {
         }
     }
 
-    pub fn net_at_freq_idx(&self, param: RFParameter, idx: usize) -> Point<Complex64> {
-        Point::<Complex64>::new(self.net(param).slice(s![idx, .., ..]).to_owned())
+    pub fn net_at_freq_idx(&self, param: RFParameter, idx: usize) -> Points<Complex64, Ix2> {
+        Points::<Complex64, Ix2>::new(self.net(param).slice(s![idx, .., ..]).to_owned())
     }
 
     pub fn net_at_port(&self, param: RFParameter, port: PortVal) -> PortPoints<Complex64> {

@@ -4,7 +4,6 @@ use crate::{
     impedance::ComplexNumberType,
     network::{Network, NetworkBuilder},
     parameter::RFParameter,
-    point::{Point, Pt},
     pts::{Points, Pts},
     scale::Scale,
     unit::Unit,
@@ -114,7 +113,7 @@ impl StringUtils for str {
 }
 
 fn parse_value(
-    pt: &mut Point<Complex64>,
+    pt: &mut Points<Complex64, Ix2>,
     i: usize,
     j: usize,
     fmt: ComplexNumberType,
@@ -167,7 +166,7 @@ pub fn read_touchstone(file_path: &String) -> Result<Network, Box<dyn Error>> {
     let mut z0: Array1<Complex64> = Array1::zeros(nports);
     z0.fill(c64(50.0, 0.0));
     let mut freq_tmp: Vec<f64> = vec![];
-    let mut point_tmp = Point::zeros((nports, nports));
+    let mut point_tmp = Points::zeros((nports, nports));
     let mut data = Points::<Complex64, Ix3>::zeros((0, nports, nports).into_dimension());
     let mut comments = String::new();
 

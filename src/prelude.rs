@@ -54,8 +54,6 @@ pub use crate::network::{
 };
 
 #[doc(no_inline)]
-pub use crate::point::{Point, Pt};
-#[doc(no_inline)]
 pub use crate::pts::{Points, Pts};
 #[doc(no_inline)]
 pub use crate::{point, points};

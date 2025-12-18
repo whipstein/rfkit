@@ -2,19 +2,18 @@ use crate::{
     element::{Elem, ElemType, Lumped},
     frequency::Frequency,
     point,
-    point::Point,
     pts::{Points, Pts},
     scale::Scale,
     unit::{Unit, UnitVal, Unitized},
 };
-use ndarray::{IntoDimension, Ix3};
+use ndarray::{IntoDimension, prelude::*};
 use num::complex::{Complex, Complex64, c64};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Short {
     id: String,
     nodes: [usize; 2],
-    c: Point<Complex64>,
+    c: Points<Complex64, Ix2>,
     z0: Complex64,
 }
 
@@ -53,7 +52,7 @@ impl Default for Short {
 }
 
 impl Elem for Short {
-    fn c(&self, _freq: &Frequency) -> Point<Complex64> {
+    fn c(&self, _freq: &Frequency) -> Points<Complex64, Ix2> {
         self.c.clone()
     }
 

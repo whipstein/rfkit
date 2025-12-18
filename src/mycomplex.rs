@@ -1,15 +1,16 @@
 use crate::myfloat::MyFloat;
 use num::complex::Complex64;
 use num_traits::{Num, One, Zero};
-use rug::ops::{Pow, PowAssign};
-use rug::{Complex, Float};
-use std::fmt;
-use std::ops::{
-    Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Not, Rem, RemAssign, Sub, SubAssign,
+use rug::{
+    Complex, Float,
+    ops::{Pow, PowAssign},
 };
-
-// pub mod inverse;
-// pub mod zgemm;
+use std::{
+    fmt,
+    ops::{
+        Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Not, Rem, RemAssign, Sub, SubAssign,
+    },
+};
 
 /// A complex number wrapper with fixed precision of 53 bits
 pub struct MyComplex(rug::Complex);

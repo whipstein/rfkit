@@ -2,7 +2,6 @@ use crate::{
     element::{Elem, ElemType, Term},
     frequency::Frequency,
     point,
-    point::{Point, Pt},
     pts::{Points, Pts},
 };
 use ndarray::{IntoDimension, prelude::*};
@@ -13,7 +12,7 @@ pub struct Port {
     id: String,
     z: Complex64,
     node: [usize; 1],
-    c: Point<Complex64>,
+    c: Points<Complex64, Ix2>,
 }
 
 impl Port {
@@ -37,13 +36,13 @@ impl Default for Port {
             id: "C0".to_string(),
             z: Complex64::ZERO,
             node: [1],
-            c: Point::zeros((1, 1)),
+            c: Points::zeros((1, 1)),
         }
     }
 }
 
 impl Elem for Port {
-    fn c(&self, _freq: &Frequency) -> Point<Complex64> {
+    fn c(&self, _freq: &Frequency) -> Points<Complex64, Ix2> {
         self.c.clone()
     }
 
@@ -128,7 +127,7 @@ impl PortBuilder {
             id: self.id,
             z: self.z,
             node: self.node,
-            c: Point::zeros((1, 1)),
+            c: Points::zeros((1, 1)),
         }
     }
 }
@@ -148,7 +147,6 @@ impl Default for PortBuilder {
 mod element_port_tests {
     use super::*;
     use crate::{
-        point::Pt,
         scale::Scale,
         unit::UnitValBuilder,
         util::{comp_c64, comp_point_c64},

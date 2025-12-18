@@ -2,7 +2,6 @@ use crate::{
     element::{Distributed, Elem, ElemType, msub::Msub},
     frequency::Frequency,
     point,
-    point::Point,
     pts::{Points, Pts},
     scale::Scale,
     unit::{Unit, UnitVal, UnitValBuilder, Unitized},
@@ -86,7 +85,7 @@ impl Default for Mbend {
 }
 
 impl Elem for Mbend {
-    fn c(&self, freq: &Frequency) -> Point<Complex64> {
+    fn c(&self, freq: &Frequency) -> Points<Complex64, Ix2> {
         let (l_unitval, c_unitval) = self.calc_lc();
         let l = l_unitval.val();
         let c = c_unitval.val();

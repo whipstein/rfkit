@@ -14,9 +14,6 @@ pub mod myfloat;
 pub mod network;
 pub mod num;
 pub mod parameter;
-pub mod point;
-// pub mod points;
-// mod convert;
 pub mod prelude;
 pub mod pts;
 pub mod scale;
@@ -41,7 +38,7 @@ pub mod util;
 #[macro_export]
 macro_rules! point {
     ($t: ty, $([$($x:expr),* $(,)*]),+ $(,)*) => {{
-        $crate::point::Point::<$t>::new(ndarray::Array2::from(vec![$([$($x,)*],)*]))}
+        $crate::pts::Points::<$t, ndarray::Ix2>::new(ndarray::Array2::from(vec![$([$($x,)*],)*]))}
     };
 }
 

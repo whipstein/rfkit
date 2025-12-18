@@ -6,8 +6,7 @@ use crate::{
     mycomplex::MyComplex,
     myfloat::MyFloat,
     parameter::RFParameter,
-    point::{Point, Pt},
-    pts::Points,
+    pts::{Points, Pts},
     unit::Unit,
 };
 use ndarray::OwnedRepr;

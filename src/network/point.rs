@@ -8,7 +8,7 @@ use crate::{
     network::{NetworkPoint, WaveType},
     parameter::RFParameter,
     point,
-    point::{Point, Pt},
+    pts::{Points, Pts},
     unit::Unit,
 };
 use ndarray::{OwnedRepr, prelude::*};
@@ -35,9 +35,9 @@ use std::{
     slice::Iter,
 };
 
-impl NetworkPoint<Point<f64>, (f64, f64), Complex64> for Point<Complex64> {
+impl NetworkPoint<Points<f64, Ix2>, (f64, f64), Complex64> for Points<Complex64, Ix2> {
     fn a_to_g(&self) -> Option<Self> {
-        let val: Point<MyComplex> = self.into();
+        let val: Points<MyComplex, Ix2> = self.into();
         match val.a_to_g() {
             Some(x) => Some(x.into()),
             None => None,
@@ -45,7 +45,7 @@ impl NetworkPoint<Point<f64>, (f64, f64), Complex64> for Point<Complex64> {
     }
 
     fn a_to_h(&self) -> Option<Self> {
-        let val: Point<MyComplex> = self.into();
+        let val: Points<MyComplex, Ix2> = self.into();
         match val.a_to_h() {
             Some(x) => Some(x.into()),
             None => None,
@@ -54,7 +54,7 @@ impl NetworkPoint<Point<f64>, (f64, f64), Complex64> for Point<Complex64> {
 
     fn a_to_s(&self, z0: ArrayView1<Complex64>) -> Option<Self> {
         let z0c = Array1::from_shape_fn(z0.len(), |i| MyComplex::from((z0[[i]].re, z0[[i]].im)));
-        let val: Point<MyComplex> = self.into();
+        let val: Points<MyComplex, Ix2> = self.into();
         match val.a_to_s(z0c.view()) {
             Some(x) => Some(x.into()),
             None => None,
@@ -63,7 +63,7 @@ impl NetworkPoint<Point<f64>, (f64, f64), Complex64> for Point<Complex64> {
 
     fn a_to_t(&self, z0: ArrayView1<Complex64>) -> Option<Self> {
         let z0c = Array1::from_shape_fn(z0.len(), |i| MyComplex::from((z0[i].re, z0[i].im)));
-        let val: Point<MyComplex> = self.into();
+        let val: Points<MyComplex, Ix2> = self.into();
         match val.a_to_t(z0c.view()) {
             Some(x) => Some(x.into()),
             None => None,
@@ -71,7 +71,7 @@ impl NetworkPoint<Point<f64>, (f64, f64), Complex64> for Point<Complex64> {
     }
 
     fn a_to_y(&self) -> Option<Self> {
-        let val: Point<MyComplex> = self.into();
+        let val: Points<MyComplex, Ix2> = self.into();
         match val.a_to_y() {
             Some(x) => Some(x.into()),
             None => None,
@@ -79,7 +79,7 @@ impl NetworkPoint<Point<f64>, (f64, f64), Complex64> for Point<Complex64> {
     }
 
     fn a_to_z(&self) -> Option<Self> {
-        let val: Point<MyComplex> = self.into();
+        let val: Points<MyComplex, Ix2> = self.into();
         match val.a_to_z() {
             Some(x) => Some(x.into()),
             None => None,
@@ -87,15 +87,15 @@ impl NetworkPoint<Point<f64>, (f64, f64), Complex64> for Point<Complex64> {
     }
 
     fn connect(&self, p1: usize, net: &Self, p2: usize) -> Option<Self> {
-        let val: Point<MyComplex> = self.into();
+        let val: Points<MyComplex, Ix2> = self.into();
         match val.connect(p1, &net.into(), p2) {
             Some(x) => Some(x.into()),
             None => None,
         }
     }
 
-    fn db(&self) -> Point<f64> {
-        Point::<f64>::from_shape_fn(self.dim(), |(j, k)| {
+    fn db(&self) -> Points<f64, Ix2> {
+        Points::<f64, Ix2>::from_shape_fn(self.dim(), |(j, k)| {
             if self[(j, k)].norm().log10().is_finite() {
                 20.0 * self[(j, k)].norm().log10()
             } else {
@@ -104,13 +104,13 @@ impl NetworkPoint<Point<f64>, (f64, f64), Complex64> for Point<Complex64> {
         })
     }
 
-    fn deg(&self) -> Point<f64> {
-        Point::<f64>::from_shape_fn(self.dim(), |(j, k)| self[(j, k)].arg() * 180.0 / PI)
+    fn deg(&self) -> Points<f64, Ix2> {
+        Points::<f64, Ix2>::from_shape_fn(self.dim(), |(j, k)| self[(j, k)].arg() * 180.0 / PI)
     }
 
     fn from_db(data: &[(f64, f64)]) -> Self {
         let nports = (data.len() as f64).sqrt() as usize;
-        Point::from_shape_fn((nports, nports), |(i, j)| {
+        Points::from_shape_fn((nports, nports), |(i, j)| {
             c64::from_polar(
                 10_f64.powf(data[i * nports + j].0 / 20.0),
                 f64::to_radians(data[i * nports + j].1),
@@ -120,7 +120,7 @@ impl NetworkPoint<Point<f64>, (f64, f64), Complex64> for Point<Complex64> {
 
     fn from_ma(data: &[(f64, f64)]) -> Self {
         let nports = (data.len() as f64).sqrt() as usize;
-        Point::from_shape_fn((nports, nports), |(i, j)| {
+        Points::from_shape_fn((nports, nports), |(i, j)| {
             c64::from_polar(
                 data[i * nports + j].0,
                 f64::to_radians(data[i * nports + j].1),
@@ -130,13 +130,13 @@ impl NetworkPoint<Point<f64>, (f64, f64), Complex64> for Point<Complex64> {
 
     fn from_ri(data: &[(f64, f64)]) -> Self {
         let nports = (data.len() as f64).sqrt() as usize;
-        Point::from_shape_fn((nports, nports), |(i, j)| {
+        Points::from_shape_fn((nports, nports), |(i, j)| {
             c64(data[i * nports + j].0, data[i * nports + j].1)
         })
     }
 
     fn g_to_a(&self) -> Option<Self> {
-        let val: Point<MyComplex> = self.into();
+        let val: Points<MyComplex, Ix2> = self.into();
         match val.g_to_a() {
             Some(x) => Some(x.into()),
             None => None,
@@ -144,7 +144,7 @@ impl NetworkPoint<Point<f64>, (f64, f64), Complex64> for Point<Complex64> {
     }
 
     fn g_to_h(&self) -> Option<Self> {
-        let val: Point<MyComplex> = self.into();
+        let val: Points<MyComplex, Ix2> = self.into();
         match val.g_to_h() {
             Some(x) => Some(x.into()),
             None => None,
@@ -153,7 +153,7 @@ impl NetworkPoint<Point<f64>, (f64, f64), Complex64> for Point<Complex64> {
 
     fn g_to_s(&self, z0: ArrayView1<Complex64>) -> Option<Self> {
         let z0c = Array1::from_shape_fn(z0.len(), |i| MyComplex::from((z0[i].re, z0[i].im)));
-        let val: Point<MyComplex> = self.into();
+        let val: Points<MyComplex, Ix2> = self.into();
         match val.g_to_s(z0c.view()) {
             Some(x) => Some(x.into()),
             None => None,
@@ -162,7 +162,7 @@ impl NetworkPoint<Point<f64>, (f64, f64), Complex64> for Point<Complex64> {
 
     fn g_to_t(&self, z0: ArrayView1<Complex64>) -> Option<Self> {
         let z0c = Array1::from_shape_fn(z0.len(), |i| MyComplex::from((z0[i].re, z0[i].im)));
-        let val: Point<MyComplex> = self.into();
+        let val: Points<MyComplex, Ix2> = self.into();
         match val.g_to_t(z0c.view()) {
             Some(x) => Some(x.into()),
             None => None,
@@ -170,7 +170,7 @@ impl NetworkPoint<Point<f64>, (f64, f64), Complex64> for Point<Complex64> {
     }
 
     fn g_to_y(&self) -> Option<Self> {
-        let val: Point<MyComplex> = self.into();
+        let val: Points<MyComplex, Ix2> = self.into();
         match val.g_to_y() {
             Some(x) => Some(x.into()),
             None => None,
@@ -178,7 +178,7 @@ impl NetworkPoint<Point<f64>, (f64, f64), Complex64> for Point<Complex64> {
     }
 
     fn g_to_z(&self) -> Option<Self> {
-        let val: Point<MyComplex> = self.into();
+        let val: Points<MyComplex, Ix2> = self.into();
         match val.g_to_z() {
             Some(x) => Some(x.into()),
             None => None,
@@ -186,7 +186,7 @@ impl NetworkPoint<Point<f64>, (f64, f64), Complex64> for Point<Complex64> {
     }
 
     fn h_to_a(&self) -> Option<Self> {
-        let val: Point<MyComplex> = self.into();
+        let val: Points<MyComplex, Ix2> = self.into();
         match val.h_to_a() {
             Some(x) => Some(x.into()),
             None => None,
@@ -194,7 +194,7 @@ impl NetworkPoint<Point<f64>, (f64, f64), Complex64> for Point<Complex64> {
     }
 
     fn h_to_g(&self) -> Option<Self> {
-        let val: Point<MyComplex> = self.into();
+        let val: Points<MyComplex, Ix2> = self.into();
         match val.h_to_g() {
             Some(x) => Some(x.into()),
             None => None,
@@ -203,7 +203,7 @@ impl NetworkPoint<Point<f64>, (f64, f64), Complex64> for Point<Complex64> {
 
     fn h_to_s(&self, z0: ArrayView1<Complex64>) -> Option<Self> {
         let z0c = Array1::from_shape_fn(z0.len(), |i| MyComplex::from((z0[i].re, z0[i].im)));
-        let val: Point<MyComplex> = self.into();
+        let val: Points<MyComplex, Ix2> = self.into();
         match val.h_to_s(z0c.view()) {
             Some(x) => Some(x.into()),
             None => None,
@@ -212,7 +212,7 @@ impl NetworkPoint<Point<f64>, (f64, f64), Complex64> for Point<Complex64> {
 
     fn h_to_t(&self, z0: ArrayView1<Complex64>) -> Option<Self> {
         let z0c = Array1::from_shape_fn(z0.len(), |i| MyComplex::from((z0[i].re, z0[i].im)));
-        let val: Point<MyComplex> = self.into();
+        let val: Points<MyComplex, Ix2> = self.into();
         match val.h_to_t(z0c.view()) {
             Some(x) => Some(x.into()),
             None => None,
@@ -220,7 +220,7 @@ impl NetworkPoint<Point<f64>, (f64, f64), Complex64> for Point<Complex64> {
     }
 
     fn h_to_y(&self) -> Option<Self> {
-        let val: Point<MyComplex> = self.into();
+        let val: Points<MyComplex, Ix2> = self.into();
         match val.h_to_y() {
             Some(x) => Some(x.into()),
             None => None,
@@ -228,45 +228,45 @@ impl NetworkPoint<Point<f64>, (f64, f64), Complex64> for Point<Complex64> {
     }
 
     fn h_to_z(&self) -> Option<Self> {
-        let val: Point<MyComplex> = self.into();
+        let val: Points<MyComplex, Ix2> = self.into();
         match val.h_to_z() {
             Some(x) => Some(x.into()),
             None => None,
         }
     }
 
-    fn im(&self) -> Point<f64> {
-        Point::<f64>::from_shape_fn(self.dim(), |(j, k)| self[(j, k)].im)
+    fn im(&self) -> Points<f64, Ix2> {
+        Points::<f64, Ix2>::from_shape_fn(self.dim(), |(j, k)| self[(j, k)].im)
     }
 
     fn is_reciprocal(&self) -> bool {
-        !(self.nrows() != 2 || self.reciprocity().unwrap() != Point::<f64>::zeros((2, 2)))
+        !(self.nrows() != 2 || self.reciprocity().unwrap() != Points::<f64, Ix2>::zeros((2, 2)))
     }
 
-    fn mag(&self) -> Point<f64> {
-        Point::<f64>::from_shape_fn(self.dim(), |(j, k)| self[(j, k)].norm())
+    fn mag(&self) -> Points<f64, Ix2> {
+        Points::<f64, Ix2>::from_shape_fn(self.dim(), |(j, k)| self[(j, k)].norm())
     }
 
     fn new_like(pt: &Self) -> Self {
-        Point::zeros((pt.nrows(), pt.ncols()))
+        Points::zeros((pt.nrows(), pt.ncols()))
     }
 
-    fn rad(&self) -> Point<f64> {
-        Point::<f64>::from_shape_fn(self.dim(), |(j, k)| self[(j, k)].arg())
+    fn rad(&self) -> Points<f64, Ix2> {
+        Points::<f64, Ix2>::from_shape_fn(self.dim(), |(j, k)| self[(j, k)].arg())
     }
 
-    fn re(&self) -> Point<f64> {
-        Point::<f64>::from_shape_fn(self.dim(), |(j, k)| self[(j, k)].re)
+    fn re(&self) -> Points<f64, Ix2> {
+        Points::<f64, Ix2>::from_shape_fn(self.dim(), |(j, k)| self[(j, k)].re)
     }
 
-    fn reciprocity(&self) -> Option<Point<f64>> {
+    fn reciprocity(&self) -> Option<Points<f64, Ix2>> {
         let nrows = self.nrows();
         if nrows != 2 {
             return None;
         }
 
         let diff = (self - self.t().to_owned()).into_inner();
-        let mut out = Point::<f64>::zeros(self.dim());
+        let mut out = Points::<f64, Ix2>::zeros(self.dim());
         azip!((index (i,j), &diff in &diff) {
             out[[i,j]] = diff.abs();
         });
@@ -276,7 +276,7 @@ impl NetworkPoint<Point<f64>, (f64, f64), Complex64> for Point<Complex64> {
 
     fn s_to_a(&self, z0: ArrayView1<Complex64>) -> Option<Self> {
         let z0c = Array1::from_shape_fn(z0.len(), |i| MyComplex::from((z0[i].re, z0[i].im)));
-        let val: Point<MyComplex> = self.into();
+        let val: Points<MyComplex, Ix2> = self.into();
         match val.s_to_a(z0c.view()) {
             Some(x) => Some(x.into()),
             None => None,
@@ -285,7 +285,7 @@ impl NetworkPoint<Point<f64>, (f64, f64), Complex64> for Point<Complex64> {
 
     fn s_to_g(&self, z0: ArrayView1<Complex64>) -> Option<Self> {
         let z0c = Array1::from_shape_fn(z0.len(), |i| MyComplex::from((z0[i].re, z0[i].im)));
-        let val: Point<MyComplex> = self.into();
+        let val: Points<MyComplex, Ix2> = self.into();
         match val.s_to_g(z0c.view()) {
             Some(x) => Some(x.into()),
             None => None,
@@ -294,7 +294,7 @@ impl NetworkPoint<Point<f64>, (f64, f64), Complex64> for Point<Complex64> {
 
     fn s_to_h(&self, z0: ArrayView1<Complex64>) -> Option<Self> {
         let z0c = Array1::from_shape_fn(z0.len(), |i| MyComplex::from((z0[i].re, z0[i].im)));
-        let val: Point<MyComplex> = self.into();
+        let val: Points<MyComplex, Ix2> = self.into();
         match val.s_to_h(z0c.view()) {
             Some(x) => Some(x.into()),
             None => None,
@@ -305,7 +305,7 @@ impl NetworkPoint<Point<f64>, (f64, f64), Complex64> for Point<Complex64> {
     where
         Self: Sized,
     {
-        let val: Point<MyComplex> = self.into();
+        let val: Points<MyComplex, Ix2> = self.into();
         let z0c = Array1::<MyComplex>::from_shape_fn(z0.dim(), |j| z0[[j]].into());
         match val.s_to_s(z0c.view(), from, to) {
             Some(x) => Some(x.into()),
@@ -314,7 +314,7 @@ impl NetworkPoint<Point<f64>, (f64, f64), Complex64> for Point<Complex64> {
     }
 
     fn s_to_t(&self) -> Option<Self> {
-        let val: Point<MyComplex> = self.into();
+        let val: Points<MyComplex, Ix2> = self.into();
         match val.s_to_t() {
             Some(x) => Some(x.into()),
             None => None,
@@ -323,7 +323,7 @@ impl NetworkPoint<Point<f64>, (f64, f64), Complex64> for Point<Complex64> {
 
     fn s_to_y(&self, z0: ArrayView1<Complex64>) -> Option<Self> {
         let z0c = Array1::from_shape_fn(z0.len(), |i| MyComplex::from((z0[i].re, z0[i].im)));
-        let val: Point<MyComplex> = self.into();
+        let val: Points<MyComplex, Ix2> = self.into();
         match val.s_to_y(z0c.view()) {
             Some(x) => Some(x.into()),
             None => None,
@@ -332,7 +332,7 @@ impl NetworkPoint<Point<f64>, (f64, f64), Complex64> for Point<Complex64> {
 
     fn s_to_z(&self, z0: ArrayView1<Complex64>) -> Option<Self> {
         let z0c = Array1::from_shape_fn(z0.len(), |i| MyComplex::from((z0[i].re, z0[i].im)));
-        let val: Point<MyComplex> = self.into();
+        let val: Points<MyComplex, Ix2> = self.into();
         match val.s_to_z(z0c.view()) {
             Some(x) => Some(x.into()),
             None => None,
@@ -341,7 +341,7 @@ impl NetworkPoint<Point<f64>, (f64, f64), Complex64> for Point<Complex64> {
 
     fn t_to_a(&self, z0: ArrayView1<Complex64>) -> Option<Self> {
         let z0c = Array1::from_shape_fn(z0.len(), |i| MyComplex::from((z0[i].re, z0[i].im)));
-        let val: Point<MyComplex> = self.into();
+        let val: Points<MyComplex, Ix2> = self.into();
         match val.t_to_a(z0c.view()) {
             Some(x) => Some(x.into()),
             None => None,
@@ -350,7 +350,7 @@ impl NetworkPoint<Point<f64>, (f64, f64), Complex64> for Point<Complex64> {
 
     fn t_to_g(&self, z0: ArrayView1<Complex64>) -> Option<Self> {
         let z0c = Array1::from_shape_fn(z0.len(), |i| MyComplex::from((z0[i].re, z0[i].im)));
-        let val: Point<MyComplex> = self.into();
+        let val: Points<MyComplex, Ix2> = self.into();
         match val.t_to_g(z0c.view()) {
             Some(x) => Some(x.into()),
             None => None,
@@ -359,7 +359,7 @@ impl NetworkPoint<Point<f64>, (f64, f64), Complex64> for Point<Complex64> {
 
     fn t_to_h(&self, z0: ArrayView1<Complex64>) -> Option<Self> {
         let z0c = Array1::from_shape_fn(z0.len(), |i| MyComplex::from((z0[i].re, z0[i].im)));
-        let val: Point<MyComplex> = self.into();
+        let val: Points<MyComplex, Ix2> = self.into();
         match val.t_to_h(z0c.view()) {
             Some(x) => Some(x.into()),
             None => None,
@@ -367,7 +367,7 @@ impl NetworkPoint<Point<f64>, (f64, f64), Complex64> for Point<Complex64> {
     }
 
     fn t_to_s(&self) -> Option<Self> {
-        let val: Point<MyComplex> = self.into();
+        let val: Points<MyComplex, Ix2> = self.into();
         match val.t_to_s() {
             Some(x) => Some(x.into()),
             None => None,
@@ -376,7 +376,7 @@ impl NetworkPoint<Point<f64>, (f64, f64), Complex64> for Point<Complex64> {
 
     fn t_to_y(&self, z0: ArrayView1<Complex64>) -> Option<Self> {
         let z0c = Array1::from_shape_fn(z0.len(), |i| MyComplex::from((z0[i].re, z0[i].im)));
-        let val: Point<MyComplex> = self.into();
+        let val: Points<MyComplex, Ix2> = self.into();
         match val.t_to_y(z0c.view()) {
             Some(x) => Some(x.into()),
             None => None,
@@ -385,7 +385,7 @@ impl NetworkPoint<Point<f64>, (f64, f64), Complex64> for Point<Complex64> {
 
     fn t_to_z(&self, z0: ArrayView1<Complex64>) -> Option<Self> {
         let z0c = Array1::from_shape_fn(z0.len(), |i| MyComplex::from((z0[i].re, z0[i].im)));
-        let val: Point<MyComplex> = self.into();
+        let val: Points<MyComplex, Ix2> = self.into();
         match val.t_to_z(z0c.view()) {
             Some(x) => Some(x.into()),
             None => None,
@@ -393,7 +393,7 @@ impl NetworkPoint<Point<f64>, (f64, f64), Complex64> for Point<Complex64> {
     }
 
     fn y_to_a(&self) -> Option<Self> {
-        let val: Point<MyComplex> = self.into();
+        let val: Points<MyComplex, Ix2> = self.into();
         match val.y_to_a() {
             Some(x) => Some(x.into()),
             None => None,
@@ -401,7 +401,7 @@ impl NetworkPoint<Point<f64>, (f64, f64), Complex64> for Point<Complex64> {
     }
 
     fn y_to_g(&self) -> Option<Self> {
-        let val: Point<MyComplex> = self.into();
+        let val: Points<MyComplex, Ix2> = self.into();
         match val.y_to_g() {
             Some(x) => Some(x.into()),
             None => None,
@@ -409,7 +409,7 @@ impl NetworkPoint<Point<f64>, (f64, f64), Complex64> for Point<Complex64> {
     }
 
     fn y_to_h(&self) -> Option<Self> {
-        let val: Point<MyComplex> = self.into();
+        let val: Points<MyComplex, Ix2> = self.into();
         match val.y_to_h() {
             Some(x) => Some(x.into()),
             None => None,
@@ -418,7 +418,7 @@ impl NetworkPoint<Point<f64>, (f64, f64), Complex64> for Point<Complex64> {
 
     fn y_to_s(&self, z0: ArrayView1<Complex64>) -> Option<Self> {
         let z0c = Array1::from_shape_fn(z0.len(), |i| MyComplex::from((z0[i].re, z0[i].im)));
-        let val: Point<MyComplex> = self.into();
+        let val: Points<MyComplex, Ix2> = self.into();
         match val.y_to_s(z0c.view()) {
             Some(x) => Some(x.into()),
             None => None,
@@ -427,7 +427,7 @@ impl NetworkPoint<Point<f64>, (f64, f64), Complex64> for Point<Complex64> {
 
     fn y_to_t(&self, z0: ArrayView1<Complex64>) -> Option<Self> {
         let z0c = Array1::from_shape_fn(z0.len(), |i| MyComplex::from((z0[i].re, z0[i].im)));
-        let val: Point<MyComplex> = self.into();
+        let val: Points<MyComplex, Ix2> = self.into();
         match val.y_to_t(z0c.view()) {
             Some(x) => Some(x.into()),
             None => None,
@@ -435,7 +435,7 @@ impl NetworkPoint<Point<f64>, (f64, f64), Complex64> for Point<Complex64> {
     }
 
     fn y_to_z(&self) -> Option<Self> {
-        let val: Point<MyComplex> = self.into();
+        let val: Points<MyComplex, Ix2> = self.into();
         match val.y_to_z() {
             Some(x) => Some(x.into()),
             None => None,
@@ -443,7 +443,7 @@ impl NetworkPoint<Point<f64>, (f64, f64), Complex64> for Point<Complex64> {
     }
 
     fn z_to_a(&self) -> Option<Self> {
-        let val: Point<MyComplex> = self.into();
+        let val: Points<MyComplex, Ix2> = self.into();
         match val.z_to_a() {
             Some(x) => Some(x.into()),
             None => None,
@@ -451,7 +451,7 @@ impl NetworkPoint<Point<f64>, (f64, f64), Complex64> for Point<Complex64> {
     }
 
     fn z_to_g(&self) -> Option<Self> {
-        let val: Point<MyComplex> = self.into();
+        let val: Points<MyComplex, Ix2> = self.into();
         match val.z_to_g() {
             Some(x) => Some(x.into()),
             None => None,
@@ -459,7 +459,7 @@ impl NetworkPoint<Point<f64>, (f64, f64), Complex64> for Point<Complex64> {
     }
 
     fn z_to_h(&self) -> Option<Self> {
-        let val: Point<MyComplex> = self.into();
+        let val: Points<MyComplex, Ix2> = self.into();
         match val.z_to_h() {
             Some(x) => Some(x.into()),
             None => None,
@@ -468,7 +468,7 @@ impl NetworkPoint<Point<f64>, (f64, f64), Complex64> for Point<Complex64> {
 
     fn z_to_s(&self, z0: ArrayView1<Complex64>) -> Option<Self> {
         let z0c = Array1::from_shape_fn(z0.len(), |i| MyComplex::from((z0[i].re, z0[i].im)));
-        let val: Point<MyComplex> = self.into();
+        let val: Points<MyComplex, Ix2> = self.into();
         match val.z_to_s(z0c.view()) {
             Some(x) => Some(x.into()),
             None => None,
@@ -477,7 +477,7 @@ impl NetworkPoint<Point<f64>, (f64, f64), Complex64> for Point<Complex64> {
 
     fn z_to_t(&self, z0: ArrayView1<Complex64>) -> Option<Self> {
         let z0c = Array1::from_shape_fn(z0.len(), |i| MyComplex::from((z0[i].re, z0[i].im)));
-        let val: Point<MyComplex> = self.into();
+        let val: Points<MyComplex, Ix2> = self.into();
         match val.z_to_t(z0c.view()) {
             Some(x) => Some(x.into()),
             None => None,
@@ -485,7 +485,7 @@ impl NetworkPoint<Point<f64>, (f64, f64), Complex64> for Point<Complex64> {
     }
 
     fn z_to_y(&self) -> Option<Self> {
-        let val: Point<MyComplex> = self.into();
+        let val: Points<MyComplex, Ix2> = self.into();
         match val.z_to_y() {
             Some(x) => Some(x.into()),
             None => None,
@@ -493,7 +493,7 @@ impl NetworkPoint<Point<f64>, (f64, f64), Complex64> for Point<Complex64> {
     }
 }
 
-impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyComplex> {
+impl NetworkPoint<Points<MyFloat, Ix2>, (MyFloat, MyFloat), MyComplex> for Points<MyComplex, Ix2> {
     fn a_to_g(&self) -> Option<Self> {
         if !self.is_square() || self.nrows() != 2 {
             return None;
@@ -508,7 +508,7 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
             return None;
         }
 
-        Some(Point::<MyComplex>::from_shape_fn(
+        Some(Points::<MyComplex, Ix2>::from_shape_fn(
             self.dim(),
             |(j, k)| match (j, k) {
                 (0, 0) => c / denom,
@@ -534,7 +534,7 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
             return None;
         }
 
-        Some(Point::<MyComplex>::from_shape_fn(
+        Some(Points::<MyComplex, Ix2>::from_shape_fn(
             self.dim(),
             |(j, k)| match (j, k) {
                 (0, 0) => b / denom,
@@ -561,7 +561,7 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
         }
         let z0sqrt = MyComplex::from((z0[0].real() * z0[1].real())).sqrt();
 
-        Some(Point::<MyComplex>::from_shape_fn(
+        Some(Points::<MyComplex, Ix2>::from_shape_fn(
             self.dim(),
             |(j, k)| match (j, k) {
                 (0, 0) => (a * &z0[1] + b - c * &z0[0].conj() * &z0[1] - d * &z0[0].conj()) / denom,
@@ -590,7 +590,7 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
         }
         let z0sqrt = MyComplex::from((z0[0].real() * z0[1].real())).sqrt();
 
-        Some(Point::<MyComplex>::from_shape_fn(
+        Some(Points::<MyComplex, Ix2>::from_shape_fn(
             self.dim(),
             |(j, k)| match (j, k) {
                 (0, 0) => {
@@ -632,7 +632,7 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
             return None;
         }
 
-        Some(Point::<MyComplex>::from_shape_fn(
+        Some(Points::<MyComplex, Ix2>::from_shape_fn(
             self.dim(),
             |(j, k)| match (j, k) {
                 (0, 0) => d / denom,
@@ -658,7 +658,7 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
             return None;
         }
 
-        Some(Point::<MyComplex>::from_shape_fn(
+        Some(Points::<MyComplex, Ix2>::from_shape_fn(
             self.dim(),
             |(j, k)| match (j, k) {
                 (0, 0) => a / denom,
@@ -676,7 +676,7 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
         let nports = self.nrows() * net.nrows();
         let k = p1;
         let l = p2 + self.nrows();
-        let mut matrix = Point::<MyComplex>::from_shape_fn((nports, nports), |(i, j)| {
+        let mut matrix = Points::<MyComplex, Ix2>::from_shape_fn((nports, nports), |(i, j)| {
             if i < pa && j < pa {
                 self[(i, j)].clone()
             } else if i >= pa && j >= pa {
@@ -699,7 +699,7 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
         let all = &matrix[(l, l)];
         let denom = &(akl * alk - akk * all);
 
-        let mut out = Point::<MyComplex>::zeros((nports - 2, nports - 2));
+        let mut out = Points::<MyComplex, Ix2>::zeros((nports - 2, nports - 2));
         for i in ext_i.iter() {
             for j in ext_i.iter() {
                 let mut ii = *i;
@@ -740,8 +740,8 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
         Some(out)
     }
 
-    fn db(&self) -> Point<MyFloat> {
-        let mut pt = Point::<MyFloat>::zeros((self.nrows(), self.ncols()));
+    fn db(&self) -> Points<MyFloat, Ix2> {
+        let mut pt = Points::<MyFloat, Ix2>::zeros((self.nrows(), self.ncols()));
 
         for i in 0..self.nrows() {
             for j in 0..self.ncols() {
@@ -752,8 +752,8 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
         pt
     }
 
-    fn deg(&self) -> Point<MyFloat> {
-        let mut pt = Point::<MyFloat>::zeros((self.nrows(), self.ncols()));
+    fn deg(&self) -> Points<MyFloat, Ix2> {
+        let mut pt = Points::<MyFloat, Ix2>::zeros((self.nrows(), self.ncols()));
 
         for i in 0..self.nrows() {
             for j in 0..self.ncols() {
@@ -766,7 +766,7 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
 
     fn from_db(data: &[(MyFloat, MyFloat)]) -> Self {
         let nports = (data.len() as f64).sqrt() as usize;
-        Point::<MyComplex>::from_shape_fn((nports, nports), |(i, j)| {
+        Points::<MyComplex, Ix2>::from_shape_fn((nports, nports), |(i, j)| {
             MyComplex::from_polar(
                 &data[i * nports + j].0.db2mag(),
                 &data[i * nports + j].1.to_radians(),
@@ -776,7 +776,7 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
 
     fn from_ma(data: &[(MyFloat, MyFloat)]) -> Self {
         let nports = (data.len() as f64).sqrt() as usize;
-        Point::<MyComplex>::from_shape_fn((nports, nports), |(i, j)| {
+        Points::<MyComplex, Ix2>::from_shape_fn((nports, nports), |(i, j)| {
             MyComplex::from_polar(
                 &data[i * nports + j].0.clone(),
                 &data[i * nports + j].1.to_radians(),
@@ -786,7 +786,7 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
 
     fn from_ri(data: &[(MyFloat, MyFloat)]) -> Self {
         let nports = (data.len() as f64).sqrt() as usize;
-        Point::<MyComplex>::from_shape_fn((nports, nports), |(i, j)| {
+        Points::<MyComplex, Ix2>::from_shape_fn((nports, nports), |(i, j)| {
             MyComplex::new(
                 data[i * nports + j].0.clone(),
                 data[i * nports + j].1.clone(),
@@ -808,7 +808,7 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
             return None;
         }
 
-        Some(Point::<MyComplex>::from_shape_fn(
+        Some(Points::<MyComplex, Ix2>::from_shape_fn(
             self.dim(),
             |(j, k)| match (j, k) {
                 (0, 0) => 1.0 / denom,
@@ -822,9 +822,10 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
 
     fn g_to_h(&self) -> Option<Self> {
         match self.try_inv() {
-            Ok(x) => Some(Point::<MyComplex>::from_shape_fn(x.dim(), |(j, k)| {
-                x[[j, k]].clone()
-            })),
+            Ok(x) => Some(Points::<MyComplex, Ix2>::from_shape_fn(
+                x.dim(),
+                |(j, k)| x[[j, k]].clone(),
+            )),
             _ => None,
         }
     }
@@ -844,7 +845,7 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
             return None;
         }
 
-        Some(Point::<MyComplex>::from_shape_fn(
+        Some(Points::<MyComplex, Ix2>::from_shape_fn(
             self.dim(),
             |(j, k)| match (j, k) {
                 (0, 0) => {
@@ -878,7 +879,7 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
             return None;
         }
 
-        Some(Point::<MyComplex>::from_shape_fn(
+        Some(Points::<MyComplex, Ix2>::from_shape_fn(
             self.dim(),
             |(j, k)| match (j, k) {
                 (0, 0) => {
@@ -938,7 +939,7 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
             return None;
         }
 
-        Some(Point::<MyComplex>::from_shape_fn(
+        Some(Points::<MyComplex, Ix2>::from_shape_fn(
             self.dim(),
             |(j, k)| match (j, k) {
                 (0, 0) => (g11 * g22 - g12 * g21) / denom,
@@ -964,7 +965,7 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
             return None;
         }
 
-        Some(Point::<MyComplex>::from_shape_fn(
+        Some(Points::<MyComplex, Ix2>::from_shape_fn(
             self.dim(),
             |(j, k)| match (j, k) {
                 (0, 0) => 1.0 / denom,
@@ -990,7 +991,7 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
             return None;
         }
 
-        Some(Point::<MyComplex>::from_shape_fn(
+        Some(Points::<MyComplex, Ix2>::from_shape_fn(
             self.dim(),
             |(j, k)| match (j, k) {
                 (0, 0) => -(h11 * h22 - h12 * h21) / denom,
@@ -1004,9 +1005,10 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
 
     fn h_to_g(&self) -> Option<Self> {
         match self.try_inv() {
-            Ok(x) => Some(Point::<MyComplex>::from_shape_fn(x.dim(), |(j, k)| {
-                x[[j, k]].clone()
-            })),
+            Ok(x) => Some(Points::<MyComplex, Ix2>::from_shape_fn(
+                x.dim(),
+                |(j, k)| x[[j, k]].clone(),
+            )),
             _ => None,
         }
     }
@@ -1026,7 +1028,7 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
             return None;
         }
 
-        Some(Point::<MyComplex>::from_shape_fn(
+        Some(Points::<MyComplex, Ix2>::from_shape_fn(
             self.dim(),
             |(j, k)| match (j, k) {
                 (0, 0) => {
@@ -1058,7 +1060,7 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
             return None;
         }
 
-        Some(Point::<MyComplex>::from_shape_fn(
+        Some(Points::<MyComplex, Ix2>::from_shape_fn(
             self.dim(),
             |(j, k)| match (j, k) {
                 (0, 0) => {
@@ -1118,7 +1120,7 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
             return None;
         }
 
-        Some(Point::<MyComplex>::from_shape_fn(
+        Some(Points::<MyComplex, Ix2>::from_shape_fn(
             self.dim(),
             |(j, k)| match (j, k) {
                 (0, 0) => 1.0 / denom,
@@ -1144,7 +1146,7 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
             return None;
         }
 
-        Some(Point::<MyComplex>::from_shape_fn(
+        Some(Points::<MyComplex, Ix2>::from_shape_fn(
             self.dim(),
             |(j, k)| match (j, k) {
                 (0, 0) => (h11 * h22 - h12 * h21) / denom,
@@ -1156,8 +1158,8 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
         ))
     }
 
-    fn im(&self) -> Point<MyFloat> {
-        let mut pt = Point::<MyFloat>::zeros((self.nrows(), self.ncols()));
+    fn im(&self) -> Points<MyFloat, Ix2> {
+        let mut pt = Points::<MyFloat, Ix2>::zeros((self.nrows(), self.ncols()));
 
         for i in 0..self.nrows() {
             for j in 0..self.ncols() {
@@ -1169,11 +1171,11 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
     }
 
     fn is_reciprocal(&self) -> bool {
-        !(self.nrows() != 2 || self.reciprocity().unwrap() != Point::<MyFloat>::zeros((2, 2)))
+        !(self.nrows() != 2 || self.reciprocity().unwrap() != Points::<MyFloat, Ix2>::zeros((2, 2)))
     }
 
-    fn mag(&self) -> Point<MyFloat> {
-        let mut pt = Point::<MyFloat>::zeros((self.nrows(), self.ncols()));
+    fn mag(&self) -> Points<MyFloat, Ix2> {
+        let mut pt = Points::<MyFloat, Ix2>::zeros((self.nrows(), self.ncols()));
 
         for i in 0..self.nrows() {
             for j in 0..self.ncols() {
@@ -1185,11 +1187,11 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
     }
 
     fn new_like(pt: &Self) -> Self {
-        Point::<MyComplex>::zeros((pt.nrows(), pt.ncols()))
+        Points::<MyComplex, Ix2>::zeros((pt.nrows(), pt.ncols()))
     }
 
-    fn rad(&self) -> Point<MyFloat> {
-        let mut pt = Point::<MyFloat>::zeros((self.nrows(), self.ncols()));
+    fn rad(&self) -> Points<MyFloat, Ix2> {
+        let mut pt = Points::<MyFloat, Ix2>::zeros((self.nrows(), self.ncols()));
 
         for i in 0..self.nrows() {
             for j in 0..self.ncols() {
@@ -1200,8 +1202,8 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
         pt
     }
 
-    fn re(&self) -> Point<MyFloat> {
-        let mut pt = Point::<MyFloat>::zeros((self.nrows(), self.ncols()));
+    fn re(&self) -> Points<MyFloat, Ix2> {
+        let mut pt = Points::<MyFloat, Ix2>::zeros((self.nrows(), self.ncols()));
 
         for i in 0..self.nrows() {
             for j in 0..self.ncols() {
@@ -1212,7 +1214,7 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
         pt
     }
 
-    fn reciprocity(&self) -> Option<Point<MyFloat>> {
+    fn reciprocity(&self) -> Option<Points<MyFloat, Ix2>> {
         // let nrows = self.nrows();
         // if nrows != 2 {
         //     return None;
@@ -1250,7 +1252,10 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
         let x21 = ((1.0 - s11) * (1.0 - s22) - s12 * s21) / denom;
         let x22 = ((1.0 - s11) * (&z0[1].conj() + s22 * &z0[1]) + s12 * s21 * &z0[1]) / denom;
 
-        let out: Option<Self> = Some(Point::<MyComplex>::new(array![[x11, x12], [x21, x22]]));
+        let out: Option<Self> = Some(Points::<MyComplex, Ix2>::new(array![
+            [x11, x12],
+            [x21, x22]
+        ]));
         out
     }
 
@@ -1313,7 +1318,10 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
                 * &z0[1])
             / -denom;
 
-        let out: Option<Self> = Some(Point::<MyComplex>::new(array![[x11, x12], [x21, x22]]));
+        let out: Option<Self> = Some(Points::<MyComplex, Ix2>::new(array![
+            [x11, x12],
+            [x21, x22]
+        ]));
         out
     }
 
@@ -1339,7 +1347,10 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
         let x21 = -2.0 * s21 * &z0sqrt / denom;
         let x22 = ((1.0 - s11) * (1.0 - s22) - s12 * s21) / denom;
 
-        let out: Option<Self> = Some(Point::<MyComplex>::new(array![[x11, x12], [x21, x22]]));
+        let out: Option<Self> = Some(Points::<MyComplex, Ix2>::new(array![
+            [x11, x12],
+            [x21, x22]
+        ]));
         out
     }
 
@@ -1348,36 +1359,36 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
         Self: Sized,
     {
         let f_from = match from {
-            WaveType::Power => Point::<MyComplex>::from_shape_fn(self.dim(), |(j, k)| {
+            WaveType::Power => Points::<MyComplex, Ix2>::from_shape_fn(self.dim(), |(j, k)| {
                 if j == k {
                     (1.0 / z0[j].real().sqrt()).into()
                 } else {
                     (0.0).into()
                 }
             }),
-            WaveType::Pseudo => Point::<MyComplex>::from_shape_fn(self.dim(), |(j, k)| {
+            WaveType::Pseudo => Points::<MyComplex, Ix2>::from_shape_fn(self.dim(), |(j, k)| {
                 if j == k {
                     (z0[j].abs() / z0[j].real().sqrt()).into()
                 } else {
                     (0.0).into()
                 }
             }),
-            WaveType::Traveling => Point::<MyComplex>::from_shape_fn(self.dim(), |(j, k)| {
+            WaveType::Traveling => Points::<MyComplex, Ix2>::from_shape_fn(self.dim(), |(j, k)| {
                 if j == k { z0[j].sqrt() } else { (0.0).into() }
             }),
         };
         let g_from = match from {
-            WaveType::Power => Point::<MyComplex>::from_shape_fn(self.dim(), |(j, k)| {
+            WaveType::Power => Points::<MyComplex, Ix2>::from_shape_fn(self.dim(), |(j, k)| {
                 if j == k { z0[j].clone() } else { (0.0).into() }
             }),
-            WaveType::Pseudo => Point::<MyComplex>::from_shape_fn(self.dim(), |(j, k)| {
+            WaveType::Pseudo => Points::<MyComplex, Ix2>::from_shape_fn(self.dim(), |(j, k)| {
                 if j == k {
                     (z0[j].abs() / (&z0[j] * z0[j].real().sqrt())).into()
                 } else {
                     (0.0).into()
                 }
             }),
-            WaveType::Traveling => Point::<MyComplex>::from_shape_fn(self.dim(), |(j, k)| {
+            WaveType::Traveling => Points::<MyComplex, Ix2>::from_shape_fn(self.dim(), |(j, k)| {
                 if j == k {
                     1.0 / z0[j].sqrt()
                 } else {
@@ -1385,7 +1396,7 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
                 }
             }),
         };
-        let id = Point::<MyComplex>::eye(self.dim().0);
+        let id = Points::<MyComplex, Ix2>::eye(self.dim());
 
         let v = match from {
             WaveType::Power => {
@@ -1400,21 +1411,21 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
         };
 
         let f_to = match to {
-            WaveType::Power => Point::<MyComplex>::from_shape_fn(self.dim(), |(j, k)| {
+            WaveType::Power => Points::<MyComplex, Ix2>::from_shape_fn(self.dim(), |(j, k)| {
                 if j == k {
                     (1.0 / (2.0 * z0[j].real().sqrt())).into()
                 } else {
                     (0.0).into()
                 }
             }),
-            WaveType::Pseudo => Point::<MyComplex>::from_shape_fn(self.dim(), |(j, k)| {
+            WaveType::Pseudo => Points::<MyComplex, Ix2>::from_shape_fn(self.dim(), |(j, k)| {
                 if j == k {
                     (z0[j].real().sqrt() / (2.0 * z0[j].abs())).into()
                 } else {
                     (0.0).into()
                 }
             }),
-            WaveType::Traveling => Point::<MyComplex>::from_shape_fn(self.dim(), |(j, k)| {
+            WaveType::Traveling => Points::<MyComplex, Ix2>::from_shape_fn(self.dim(), |(j, k)| {
                 if j == k {
                     1.0 / z0[j].sqrt()
                 } else {
@@ -1422,7 +1433,7 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
                 }
             }),
         };
-        let g_to = Point::<MyComplex>::from_shape_fn(self.dim(), |(j, k)| {
+        let g_to = Points::<MyComplex, Ix2>::from_shape_fn(self.dim(), |(j, k)| {
             if j == k { z0[j].clone() } else { (0.0).into() }
         });
         let a = f_to.dot(&(&v + &g_to.dot(&i)));
@@ -1431,9 +1442,10 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
             WaveType::Pseudo | WaveType::Traveling => f_to.dot(&(&v - &g_to.conj().dot(&i))),
         };
 
-        Some(Point::<MyComplex>::from_shape_fn(self.dim(), |(j, k)| {
-            &b[[j, k]] / &a[[k, k]]
-        }))
+        Some(Points::<MyComplex, Ix2>::from_shape_fn(
+            self.dim(),
+            |(j, k)| &b[[j, k]] / &a[[k, k]],
+        ))
         // None
     }
 
@@ -1456,7 +1468,10 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
         let x21 = -s22 / denom;
         let x22 = 1.0 / denom;
 
-        let out: Option<Self> = Some(Point::<MyComplex>::new(array![[x11, x12], [x21, x22]]));
+        let out: Option<Self> = Some(Points::<MyComplex, Ix2>::new(array![
+            [x11, x12],
+            [x21, x22]
+        ]));
         out
     }
 
@@ -1484,9 +1499,9 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
                 ]
             ])
         } else {
-            let id = Point::<MyComplex>::eye(self.nrows());
+            let id = Points::<MyComplex, Ix2>::eye((self.nrows(), self.nrows()));
             let sqz0inv =
-                Point::<MyComplex>::from_shape_fn((self.nrows(), self.ncols()), |(i, j)| {
+                Points::<MyComplex, Ix2>::from_shape_fn((self.nrows(), self.ncols()), |(i, j)| {
                     if i == j {
                         1.0 / z0[[i]].sqrt()
                     } else {
@@ -1526,10 +1541,11 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
                 ]
             ])
         } else {
-            let id = Point::<MyComplex>::eye(self.nrows());
-            let sqz0 = Point::<MyComplex>::from_shape_fn((self.nrows(), self.ncols()), |(i, j)| {
-                if i == j { z0[[i]].sqrt() } else { (0.0).into() }
-            });
+            let id = Points::<MyComplex, Ix2>::eye((self.nrows(), self.nrows()));
+            let sqz0 =
+                Points::<MyComplex, Ix2>::from_shape_fn((self.nrows(), self.ncols()), |(i, j)| {
+                    if i == j { z0[[i]].sqrt() } else { (0.0).into() }
+                });
 
             let diff = (&id - self).try_inv();
             let sum = &id + self;
@@ -1563,7 +1579,10 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
         let x21 = (t22 + t21 - t12 - t11) / denom;
         let x22 = ((t22 - t12) * &z0[1].conj() + (t11 - t21) * &z0[1]) / denom;
 
-        let out: Option<Self> = Some(Point::<MyComplex>::new(array![[x11, x12], [x21, x22]]));
+        let out: Option<Self> = Some(Points::<MyComplex, Ix2>::new(array![
+            [x11, x12],
+            [x21, x22]
+        ]));
         out
     }
 
@@ -1617,7 +1636,10 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
                 * &z0[1])
             / denom;
 
-        let out: Option<Self> = Some(Point::<MyComplex>::new(array![[x11, x12], [x21, x22]]));
+        let out: Option<Self> = Some(Points::<MyComplex, Ix2>::new(array![
+            [x11, x12],
+            [x21, x22]
+        ]));
         out
     }
 
@@ -1643,7 +1665,10 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
         let x21 = -2.0 * &z0sqrt / denom;
         let x22 = (t22 + t21 - t12 - t11) / denom;
 
-        let out: Option<Self> = Some(Point::<MyComplex>::new(array![[x11, x12], [x21, x22]]));
+        let out: Option<Self> = Some(Points::<MyComplex, Ix2>::new(array![
+            [x11, x12],
+            [x21, x22]
+        ]));
         out
     }
 
@@ -1666,7 +1691,10 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
         let x21 = 1.0 / denom;
         let x22 = -t21 / denom;
 
-        let out: Option<Self> = Some(Point::<MyComplex>::new(array![[x11, x12], [x21, x22]]));
+        let out: Option<Self> = Some(Points::<MyComplex, Ix2>::new(array![
+            [x11, x12],
+            [x21, x22]
+        ]));
         out
     }
 
@@ -1691,7 +1719,10 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
         let x21 = -2.0 * &z0sqrt / denom;
         let x22 = ((t22 + t21) * &z0[0].conj() + (t12 + t11) * &z0[0]) / denom;
 
-        let out: Option<Self> = Some(Point::<MyComplex>::new(array![[x11, x12], [x21, x22]]));
+        let out: Option<Self> = Some(Points::<MyComplex, Ix2>::new(array![
+            [x11, x12],
+            [x21, x22]
+        ]));
         out
     }
 
@@ -1714,7 +1745,10 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
         let x21 = (2.0 * &z0[0].sqrt() * &z0[1].sqrt()) / denom;
         let x22 = ((t22 - t21 - t12 + t11) * &z0[1]) / denom;
 
-        let out: Option<Self> = Some(Point::<MyComplex>::new(array![[x11, x12], [x21, x22]]));
+        let out: Option<Self> = Some(Points::<MyComplex, Ix2>::new(array![
+            [x11, x12],
+            [x21, x22]
+        ]));
         out
     }
 
@@ -1737,7 +1771,10 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
         let x21 = -(y11 * y22 - y12 * y21) / denom;
         let x22 = -y11 / denom;
 
-        let out: Option<Self> = Some(Point::<MyComplex>::new(array![[x11, x12], [x21, x22]]));
+        let out: Option<Self> = Some(Points::<MyComplex, Ix2>::new(array![
+            [x11, x12],
+            [x21, x22]
+        ]));
         out
     }
 
@@ -1760,7 +1797,10 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
         let x21 = -y21 / denom;
         let x22 = 1.0 / denom;
 
-        let out: Option<Self> = Some(Point::<MyComplex>::new(array![[x11, x12], [x21, x22]]));
+        let out: Option<Self> = Some(Points::<MyComplex, Ix2>::new(array![
+            [x11, x12],
+            [x21, x22]
+        ]));
         out
     }
 
@@ -1783,7 +1823,10 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
         let x21 = y21 / denom;
         let x22 = (y11 * y22 - y12 * y21) / denom;
 
-        let out: Option<Self> = Some(Point::<MyComplex>::new(array![[x11, x12], [x21, x22]]));
+        let out: Option<Self> = Some(Points::<MyComplex, Ix2>::new(array![
+            [x11, x12],
+            [x21, x22]
+        ]));
         out
     }
 
@@ -1791,10 +1834,11 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
         if !self.is_square() {
             return None;
         }
-        let id = Point::<MyComplex>::eye(self.nrows());
-        let sqz0 = Point::<MyComplex>::from_shape_fn((self.nrows(), self.ncols()), |(i, j)| {
-            if i == j { z0[[i]].sqrt() } else { (0.0).into() }
-        });
+        let id = Points::<MyComplex, Ix2>::eye((self.nrows(), self.nrows()));
+        let sqz0 =
+            Points::<MyComplex, Ix2>::from_shape_fn((self.nrows(), self.ncols()), |(i, j)| {
+                if i == j { z0[[i]].sqrt() } else { (0.0).into() }
+            });
 
         let diff = &id - &sqz0.dot(self).dot(&sqz0);
         let sum = (&id + &sqz0.dot(self).dot(&sqz0)).try_inv();
@@ -1827,7 +1871,10 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
         let x22 =
             ((((y11 * y22 - y12 * y21) * &z0[0] + y22) * &z0[1]) + y11 * &z0[0] + 1.0) / -denom;
 
-        let out: Option<Self> = Some(Point::<MyComplex>::new(array![[x11, x12], [x21, x22]]));
+        let out: Option<Self> = Some(Points::<MyComplex, Ix2>::new(array![
+            [x11, x12],
+            [x21, x22]
+        ]));
         out
     }
 
@@ -1860,7 +1907,10 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
         let x21 = 1.0 / denom;
         let x22 = z22 / denom;
 
-        let out: Option<Self> = Some(Point::<MyComplex>::new(array![[x11, x12], [x21, x22]]));
+        let out: Option<Self> = Some(Points::<MyComplex, Ix2>::new(array![
+            [x11, x12],
+            [x21, x22]
+        ]));
         out
     }
 
@@ -1883,7 +1933,10 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
         let x21 = z21 / denom;
         let x22 = (z11 * z22 - z12 * z21) / denom;
 
-        let out: Option<Self> = Some(Point::<MyComplex>::new(array![[x11, x12], [x21, x22]]));
+        let out: Option<Self> = Some(Points::<MyComplex, Ix2>::new(array![
+            [x11, x12],
+            [x21, x22]
+        ]));
         out
     }
 
@@ -1906,7 +1959,10 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
         let x21 = -z21 / denom;
         let x22 = 1.0 / denom;
 
-        let out: Option<Self> = Some(Point::<MyComplex>::new(array![[x11, x12], [x21, x22]]));
+        let out: Option<Self> = Some(Points::<MyComplex, Ix2>::new(array![
+            [x11, x12],
+            [x21, x22]
+        ]));
         out
     }
 
@@ -1914,14 +1970,15 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
         if !self.is_square() {
             return None;
         }
-        let id = Point::<MyComplex>::eye(self.nrows());
-        let sqz0inv = Point::<MyComplex>::from_shape_fn((self.nrows(), self.ncols()), |(i, j)| {
-            if i == j {
-                1.0 / z0[[i]].sqrt()
-            } else {
-                (0.0).into()
-            }
-        });
+        let id = Points::<MyComplex, Ix2>::eye((self.nrows(), self.nrows()));
+        let sqz0inv =
+            Points::<MyComplex, Ix2>::from_shape_fn((self.nrows(), self.ncols()), |(i, j)| {
+                if i == j {
+                    1.0 / z0[[i]].sqrt()
+                } else {
+                    (0.0).into()
+                }
+            });
 
         let diff = &sqz0inv.dot(self).dot(&sqz0inv) - &id;
         let sum = (&sqz0inv.dot(self).dot(&sqz0inv) + &id).try_inv();
@@ -1951,7 +2008,10 @@ impl NetworkPoint<Point<MyFloat>, (MyFloat, MyFloat), MyComplex> for Point<MyCom
         let x21 = (z12 * z21 + &z0[1] * z11 + &z0[0] * &z0[1] - ((z11 + &z0[0]) * z22)) / denom;
         let x22 = ((z11 + &z0[0]) * z22 - z12 * z21 + &z0[1] * z11 + &z0[0] * &z0[1]) / denom;
 
-        let out: Option<Self> = Some(Point::<MyComplex>::new(array![[x11, x12], [x21, x22]]));
+        let out: Option<Self> = Some(Points::<MyComplex, Ix2>::new(array![
+            [x11, x12],
+            [x21, x22]
+        ]));
         out
     }
 

@@ -2,7 +2,6 @@ use crate::{
     element::{Elem, ElemType, Lumped, Q, QMode},
     frequency::Frequency,
     point,
-    point::Point,
     pts::{Points, Pts},
     scale::Scale,
     unit::{Unit, UnitVal, Unitized},
@@ -16,7 +15,7 @@ pub struct Capacitor {
     cap: UnitVal,
     q: Option<Q>,
     nodes: [usize; 2],
-    c: Point<Complex64>,
+    c: Points<Complex64, Ix2>,
     z0: Complex64,
 }
 
@@ -73,7 +72,7 @@ impl Default for Capacitor {
 }
 
 impl Elem for Capacitor {
-    fn c(&self, _freq: &Frequency) -> Point<Complex64> {
+    fn c(&self, _freq: &Frequency) -> Points<Complex64, Ix2> {
         self.c.clone()
     }
 
@@ -277,7 +276,6 @@ impl Default for CapacitorBuilder {
 mod element_capacitor_tests {
     use super::*;
     use crate::{
-        point::Pt,
         unit::UnitValBuilder,
         util::{comp_c64, comp_point_c64},
     };

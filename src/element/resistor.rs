@@ -2,7 +2,6 @@ use crate::{
     element::{Elem, ElemType, Lumped},
     frequency::Frequency,
     point,
-    point::Point,
     pts::{Points, Pts},
     scale::Scale,
     unit::{Unit, UnitVal, Unitized},
@@ -15,7 +14,7 @@ pub struct Resistor {
     id: String,
     res: UnitVal,
     nodes: [usize; 2],
-    c: Point<Complex64>,
+    c: Points<Complex64, Ix2>,
     z0: Complex64,
 }
 
@@ -56,7 +55,7 @@ impl Default for Resistor {
 }
 
 impl Elem for Resistor {
-    fn c(&self, _freq: &Frequency) -> Point<Complex64> {
+    fn c(&self, _freq: &Frequency) -> Points<Complex64, Ix2> {
         self.c.clone()
     }
 
@@ -223,7 +222,6 @@ impl Default for ResistorBuilder {
 mod element_resistor_tests {
     use super::*;
     use crate::{
-        point::Pt,
         unit::UnitValBuilder,
         util::{comp_c64, comp_point_c64},
     };

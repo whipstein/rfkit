@@ -1,11 +1,15 @@
 use core::f64;
 use num_traits::{Num, One, Signed, Zero};
-use rug::Float;
-use rug::ops::{Pow, PowAssign};
-use std::fmt;
-use std::iter::{Product, Sum};
-use std::ops::{
-    Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Not, Rem, RemAssign, Sub, SubAssign,
+use rug::{
+    Float,
+    ops::{Pow, PowAssign},
+};
+use std::{
+    fmt,
+    iter::{Product, Sum},
+    ops::{
+        Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Not, Rem, RemAssign, Sub, SubAssign,
+    },
 };
 
 /// Defines a multiplicative identity element for `Self`.

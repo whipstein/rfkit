@@ -1,41 +1,21 @@
-use crate::error::InversionError;
-use crate::points::{Points, Pts};
-use ndarray::SliceArg;
-use ndarray::prelude::*;
+use crate::{
+    error::InversionError,
+    pts::{Points, Pts},
+};
+use ndarray::{IntoDimension, SliceArg, prelude::*};
+use ndarray_linalg::error::LinalgError;
 use num_traits::{One, Zero};
-use std::fmt;
-use std::ops::{
-    Add, AddAssign, Div, DivAssign, Index, IndexMut, Mul, MulAssign, Neg, Sub, SubAssign,
+use std::{
+    fmt,
+    ops::{Add, AddAssign, Div, DivAssign, Index, IndexMut, Mul, MulAssign, Neg, Sub, SubAssign},
 };
 
 /// A matrix wrapper around ndarray::Array3 with f64 elements
 // pub struct Points(Array3<f64>);
 
-impl Points<f64> {
+impl Points<f64, Ix3> {
     pub fn new(array: Array3<f64>) -> Self {
         Points(array)
-    }
-}
-
-impl Pts<f64, f64> for Points<f64> {
-    /// Create a new matrix with given dimensions filled with zeros
-    fn zeros(shape: (usize, usize, usize)) -> Self {
-        Points(Array3::from_elem(shape, f64::zero()))
-    }
-
-    /// Create a new matrix with given dimensions filled with ones
-    fn ones(shape: (usize, usize, usize)) -> Self {
-        Points(Array3::from_elem(shape, f64::one()))
-    }
-
-    /// Create an identity matrix of given size
-    fn eye(size: (usize, usize)) -> Self {
-        Points(Array3::from_shape_fn(
-            (size.0, size.1, size.1),
-            |(_, j, k)| {
-                if j == k { 1.0 } else { 0.0 }
-            },
-        ))
     }
 
     /// Create a matrix from a 3D vector of f64 values
@@ -113,19 +93,43 @@ impl Pts<f64, f64> for Points<f64> {
     fn from_vec_complex(data: Vec<Vec<Vec<(f64, f64)>>>) -> Result<Self, &'static str> {
         Self::from_vec_c64(data)
     }
+}
+
+impl Pts<f64, Ix3> for Points<f64, Ix3> {
+    type Dim = (usize, usize, usize);
+    type Tuple<'a> = &'a [(f64, f64)];
+
+    /// Create a new matrix with given dimensions filled with zeros
+    fn zeros(shape: impl IntoDimension<Dim = Dim<[usize; 3]>>) -> Self {
+        Points(Array3::from_elem(shape, f64::zero()))
+    }
+
+    /// Create a new matrix with given dimensions filled with ones
+    fn ones(shape: impl IntoDimension<Dim = Dim<[usize; 3]>>) -> Self {
+        Points(Array3::from_elem(shape, f64::one()))
+    }
+
+    /// Create an identity matrix of given size
+    fn eye(shape: impl IntoDimension<Dim = Dim<[usize; 3]>>) -> Self {
+        Points(Array3::from_shape_fn(
+            shape,
+            |(_, j, k)| {
+                if j == k { 1.0 } else { 0.0 }
+            },
+        ))
+    }
 
     /// Create a matrix from a flat vector with specified dimensions
     fn from_flat_f64(
         data: Vec<f64>,
-        len: usize,
-        rows: usize,
-        cols: usize,
+        shape: impl IntoDimension<Dim = Dim<[usize; 3]>>,
     ) -> Result<Self, &'static str> {
-        if data.len() != len * rows * cols {
+        let (depth, rows, cols) = shape.into_dimension().into_pattern();
+        if data.len() != depth * rows * cols {
             return Err("Data length does not match matrix dimensions");
         }
 
-        let mut matrix = Self::zeros((len, rows, cols));
+        let mut matrix = Self::zeros((depth, rows, cols));
         for (idx, &value) in data.iter().enumerate() {
             let i = idx / (rows * cols);
             let j = idx / cols;
@@ -136,14 +140,17 @@ impl Pts<f64, f64> for Points<f64> {
         Ok(matrix)
     }
 
-    fn from_shape_fn<F>(shape: (usize, usize, usize), f: F) -> Self
+    fn from_shape_fn<F>(shape: impl IntoDimension<Dim = Dim<[usize; 3]>>, f: F) -> Self
     where
-        F: Fn((usize, usize, usize)) -> f64,
+        F: Fn(Self::Dim) -> f64,
     {
         Points(Array3::<f64>::from_shape_fn(shape, f))
     }
 
-    fn from_shape_vec(shape: (usize, usize, usize), v: Vec<f64>) -> Result<Self, &'static str> {
+    fn from_shape_vec(
+        shape: impl IntoDimension<Dim = Dim<[usize; 3]>>,
+        v: Vec<f64>,
+    ) -> Result<Self, &'static str> {
         match Array3::<f64>::from_shape_vec(shape, v) {
             Ok(x) => Ok(Points(x)),
             Err(_) => Err("Cannot create vector"),
@@ -224,12 +231,17 @@ impl Pts<f64, f64> for Points<f64> {
     }
 
     /// Get the shape as (len, rows, cols)
-    fn dim(&self) -> (usize, usize, usize) {
+    fn dim(&self) -> Self::Dim {
         self.0.dim()
     }
 
+    /// Get the dimension
+    fn raw_dim(&self) -> Ix3 {
+        self.0.raw_dim()
+    }
+
     /// Get the shape as (len, rows, cols)
-    fn shape(&self) -> (usize, usize, usize) {
+    fn shape(&self) -> Self::Dim {
         let shape = self.0.dim();
         (shape.0, shape.1, shape.2)
     }
@@ -270,10 +282,14 @@ impl Pts<f64, f64> for Points<f64> {
     }
 
     /// Calculate the trace (sum of diagonal elements)
-    fn trace(&self) -> Array1<f64> {
-        if !self.is_square() {
-            panic!("Trace is only defined for square matrices");
-        }
+    fn trace(&self) -> Result<Array1<f64>, LinalgError> {
+        _ = match self.is_square() {
+            true => Ok(self.nrows()),
+            false => Err(LinalgError::NotSquare {
+                rows: self.nrows() as i32,
+                cols: self.ncols() as i32,
+            }),
+        };
 
         let mut trace = Array1::zeros(self.npts());
         for (i, pt) in self.outer_iter().enumerate() {
@@ -283,21 +299,28 @@ impl Pts<f64, f64> for Points<f64> {
             }
             trace[i] = sum;
         }
-        trace
+        Ok(trace)
     }
 
     /// Calculate the determinant (only for small matrices)
-    fn det(&self) -> Array1<f64> {
-        if !self.is_square() {
-            panic!("Determinant is only defined for square matrices");
-        }
+    fn det(&self) -> Result<Array1<f64>, LinalgError> {
+        _ = match self.is_square() {
+            true => Ok(self.nrows()),
+            false => Err(LinalgError::NotSquare {
+                rows: self.nrows() as i32,
+                cols: self.ncols() as i32,
+            }),
+        };
+        // if !self.is_square() {
+        //     panic!("Determinant is only defined for square matrices");
+        // }
 
         let mut det = Array1::zeros(self.npts());
         for (i, pt) in self.outer_iter().enumerate() {
-            det[i] = match pt.nrows() {
-                0 => 1.0,
-                1 => pt[[0, 0]].clone(),
-                2 => &pt[[0, 0]] * &pt[[1, 1]] - &pt[[0, 1]] * &pt[[1, 0]],
+            let val = match pt.nrows() {
+                0 => Ok(1.0),
+                1 => Ok(pt[[0, 0]].clone()),
+                2 => Ok(&pt[[0, 0]] * &pt[[1, 1]] - &pt[[0, 1]] * &pt[[1, 0]]),
                 3 => {
                     let a00 = &pt[[0, 0]];
                     let a01 = &pt[[0, 1]];
@@ -309,13 +332,20 @@ impl Pts<f64, f64> for Points<f64> {
                     let a21 = &pt[[2, 1]];
                     let a22 = &pt[[2, 2]];
 
-                    a00 * (a11 * a22 - a12 * a21) - a01 * (a10 * a22 - a12 * a20)
-                        + a02 * (a10 * a21 - a11 * a20)
+                    Ok(
+                        a00 * (a11 * a22 - a12 * a21) - a01 * (a10 * a22 - a12 * a20)
+                            + a02 * (a10 * a21 - a11 * a20),
+                    )
                 }
-                _ => panic!("Determinant calculation for matrices larger than 3x3 not implemented"),
-            }
+                _ => Err(LinalgError::NotStandardShape {
+                    obj: "Determinant calculation for matrices larger than 3x3 not implemented",
+                    rows: self.nrows() as i32,
+                    cols: self.ncols() as i32,
+                }),
+            };
+            det[i] = val.unwrap();
         }
-        det
+        Ok(det)
     }
 
     /// Element-wise conjugate
@@ -468,8 +498,8 @@ impl Pts<f64, f64> for Points<f64> {
     }
 
     /// Create a matrix filled with the given value
-    fn fill(len: usize, rows: usize, cols: usize, value: f64) -> Self {
-        Points(Array3::from_elem((len, rows, cols), value))
+    fn fill(shape: impl IntoDimension<Dim = Dim<[usize; 3]>>, value: f64) -> Self {
+        Points(Array3::from_elem(shape, value))
     }
 
     /// Apply a function element-wise
@@ -489,11 +519,11 @@ impl Pts<f64, f64> for Points<f64> {
     }
 
     /// Compute the inverse of a square matrix using LU decomposition with partial pivoting
-    fn inv(&self) -> Points<f64> {
+    fn inv(&self) -> Points<f64, Ix3> {
         self.try_inv().unwrap()
     }
 
-    fn try_inv(&self) -> Result<Points<f64>, InversionError> {
+    fn try_inv(&self) -> Result<Points<f64, Ix3>, InversionError> {
         let (npts, rows, cols) = self.dim();
 
         // Check if matrix is square
@@ -713,7 +743,7 @@ impl Pts<f64, f64> for Points<f64> {
 }
 
 // Indexing
-impl Index<(usize, usize, usize)> for Points<f64> {
+impl Index<(usize, usize, usize)> for Points<f64, Ix3> {
     type Output = f64;
 
     fn index(&self, index: (usize, usize, usize)) -> &Self::Output {
@@ -721,7 +751,7 @@ impl Index<(usize, usize, usize)> for Points<f64> {
     }
 }
 
-impl Index<[usize; 3]> for Points<f64> {
+impl Index<[usize; 3]> for Points<f64, Ix3> {
     type Output = f64;
 
     fn index(&self, index: [usize; 3]) -> &Self::Output {
@@ -729,20 +759,20 @@ impl Index<[usize; 3]> for Points<f64> {
     }
 }
 
-impl IndexMut<(usize, usize, usize)> for Points<f64> {
+impl IndexMut<(usize, usize, usize)> for Points<f64, Ix3> {
     fn index_mut(&mut self, index: (usize, usize, usize)) -> &mut Self::Output {
         &mut self.0[index]
     }
 }
 
-impl IndexMut<[usize; 3]> for Points<f64> {
+impl IndexMut<[usize; 3]> for Points<f64, Ix3> {
     fn index_mut(&mut self, index: [usize; 3]) -> &mut Self::Output {
         &mut self.0[index]
     }
 }
 
 // Addition implementations
-impl Add for Points<f64> {
+impl Add for Points<f64, Ix3> {
     type Output = Self;
 
     fn add(self, other: Self) -> Self {
@@ -757,7 +787,7 @@ impl Add for Points<f64> {
     }
 }
 
-impl Add<&Points<f64>> for Points<f64> {
+impl Add<&Points<f64, Ix3>> for Points<f64, Ix3> {
     type Output = Self;
 
     fn add(self, other: &Self) -> Self {
@@ -772,10 +802,10 @@ impl Add<&Points<f64>> for Points<f64> {
     }
 }
 
-impl Add<Points<f64>> for &Points<f64> {
-    type Output = Points<f64>;
+impl Add<Points<f64, Ix3>> for &Points<f64, Ix3> {
+    type Output = Points<f64, Ix3>;
 
-    fn add(self, other: Points<f64>) -> Points<f64> {
+    fn add(self, other: Points<f64, Ix3>) -> Points<f64, Ix3> {
         if self.shape() != other.shape() {
             panic!(
                 "Points dimensions must match for addition: {:?} vs {:?}",
@@ -787,10 +817,10 @@ impl Add<Points<f64>> for &Points<f64> {
     }
 }
 
-impl Add<&Points<f64>> for &Points<f64> {
-    type Output = Points<f64>;
+impl Add<&Points<f64, Ix3>> for &Points<f64, Ix3> {
+    type Output = Points<f64, Ix3>;
 
-    fn add(self, other: &Points<f64>) -> Points<f64> {
+    fn add(self, other: &Points<f64, Ix3>) -> Points<f64, Ix3> {
         if self.shape() != other.shape() {
             panic!(
                 "Points dimensions must match for addition: {:?} vs {:?}",
@@ -803,7 +833,7 @@ impl Add<&Points<f64>> for &Points<f64> {
 }
 
 // Scalar addition with f64
-impl Add<f64> for Points<f64> {
+impl Add<f64> for Points<f64, Ix3> {
     type Output = Self;
 
     fn add(self, scalar: f64) -> Self {
@@ -811,15 +841,15 @@ impl Add<f64> for Points<f64> {
     }
 }
 
-impl Add<f64> for &Points<f64> {
-    type Output = Points<f64>;
+impl Add<f64> for &Points<f64, Ix3> {
+    type Output = Points<f64, Ix3>;
 
-    fn add(self, scalar: f64) -> Points<f64> {
+    fn add(self, scalar: f64) -> Points<f64, Ix3> {
         Points(self.0.map(|x| x + &scalar))
     }
 }
 
-impl Add<&f64> for Points<f64> {
+impl Add<&f64> for Points<f64, Ix3> {
     type Output = Self;
 
     fn add(self, scalar: &f64) -> Self {
@@ -827,16 +857,16 @@ impl Add<&f64> for Points<f64> {
     }
 }
 
-impl Add<&f64> for &Points<f64> {
-    type Output = Points<f64>;
+impl Add<&f64> for &Points<f64, Ix3> {
+    type Output = Points<f64, Ix3>;
 
-    fn add(self, scalar: &f64) -> Points<f64> {
+    fn add(self, scalar: &f64) -> Points<f64, Ix3> {
         Points(self.0.map(|x| x + scalar))
     }
 }
 
 // Subtraction implementations
-impl Sub for Points<f64> {
+impl Sub for Points<f64, Ix3> {
     type Output = Self;
 
     fn sub(self, other: Self) -> Self {
@@ -851,7 +881,7 @@ impl Sub for Points<f64> {
     }
 }
 
-impl Sub<&Points<f64>> for Points<f64> {
+impl Sub<&Points<f64, Ix3>> for Points<f64, Ix3> {
     type Output = Self;
 
     fn sub(self, other: &Self) -> Self {
@@ -866,10 +896,10 @@ impl Sub<&Points<f64>> for Points<f64> {
     }
 }
 
-impl Sub<Points<f64>> for &Points<f64> {
-    type Output = Points<f64>;
+impl Sub<Points<f64, Ix3>> for &Points<f64, Ix3> {
+    type Output = Points<f64, Ix3>;
 
-    fn sub(self, other: Points<f64>) -> Points<f64> {
+    fn sub(self, other: Points<f64, Ix3>) -> Points<f64, Ix3> {
         if self.shape() != other.shape() {
             panic!(
                 "Points dimensions must match for subtraction: {:?} vs {:?}",
@@ -881,10 +911,10 @@ impl Sub<Points<f64>> for &Points<f64> {
     }
 }
 
-impl Sub<&Points<f64>> for &Points<f64> {
-    type Output = Points<f64>;
+impl Sub<&Points<f64, Ix3>> for &Points<f64, Ix3> {
+    type Output = Points<f64, Ix3>;
 
-    fn sub(self, other: &Points<f64>) -> Points<f64> {
+    fn sub(self, other: &Points<f64, Ix3>) -> Points<f64, Ix3> {
         if self.shape() != other.shape() {
             panic!(
                 "Points dimensions must match for subtraction: {:?} vs {:?}",
@@ -897,7 +927,7 @@ impl Sub<&Points<f64>> for &Points<f64> {
 }
 
 // Scalar subtraction
-impl Sub<f64> for Points<f64> {
+impl Sub<f64> for Points<f64, Ix3> {
     type Output = Self;
 
     fn sub(self, scalar: f64) -> Self {
@@ -905,15 +935,15 @@ impl Sub<f64> for Points<f64> {
     }
 }
 
-impl Sub<f64> for &Points<f64> {
-    type Output = Points<f64>;
+impl Sub<f64> for &Points<f64, Ix3> {
+    type Output = Points<f64, Ix3>;
 
-    fn sub(self, scalar: f64) -> Points<f64> {
+    fn sub(self, scalar: f64) -> Points<f64, Ix3> {
         Points(self.0.map(|x| x - &scalar))
     }
 }
 
-impl Sub<&f64> for Points<f64> {
+impl Sub<&f64> for Points<f64, Ix3> {
     type Output = Self;
 
     fn sub(self, scalar: &f64) -> Self {
@@ -921,16 +951,16 @@ impl Sub<&f64> for Points<f64> {
     }
 }
 
-impl Sub<&f64> for &Points<f64> {
-    type Output = Points<f64>;
+impl Sub<&f64> for &Points<f64, Ix3> {
+    type Output = Points<f64, Ix3>;
 
-    fn sub(self, scalar: &f64) -> Points<f64> {
+    fn sub(self, scalar: &f64) -> Points<f64, Ix3> {
         Points(self.0.map(|x| x - scalar))
     }
 }
 
 // Element-wise multiplication
-impl Mul for Points<f64> {
+impl Mul for Points<f64, Ix3> {
     type Output = Self;
 
     fn mul(self, other: Self) -> Self {
@@ -945,7 +975,7 @@ impl Mul for Points<f64> {
     }
 }
 
-impl Mul<&Points<f64>> for Points<f64> {
+impl Mul<&Points<f64, Ix3>> for Points<f64, Ix3> {
     type Output = Self;
 
     fn mul(self, other: &Self) -> Self {
@@ -960,10 +990,10 @@ impl Mul<&Points<f64>> for Points<f64> {
     }
 }
 
-impl Mul<Points<f64>> for &Points<f64> {
-    type Output = Points<f64>;
+impl Mul<Points<f64, Ix3>> for &Points<f64, Ix3> {
+    type Output = Points<f64, Ix3>;
 
-    fn mul(self, other: Points<f64>) -> Points<f64> {
+    fn mul(self, other: Points<f64, Ix3>) -> Points<f64, Ix3> {
         if self.shape() != other.shape() {
             panic!(
                 "Points dimensions must match for element-wise multiplication: {:?} vs {:?}",
@@ -975,10 +1005,10 @@ impl Mul<Points<f64>> for &Points<f64> {
     }
 }
 
-impl Mul<&Points<f64>> for &Points<f64> {
-    type Output = Points<f64>;
+impl Mul<&Points<f64, Ix3>> for &Points<f64, Ix3> {
+    type Output = Points<f64, Ix3>;
 
-    fn mul(self, other: &Points<f64>) -> Points<f64> {
+    fn mul(self, other: &Points<f64, Ix3>) -> Points<f64, Ix3> {
         if self.shape() != other.shape() {
             panic!(
                 "Points dimensions must match for element-wise multiplication: {:?} vs {:?}",
@@ -991,7 +1021,7 @@ impl Mul<&Points<f64>> for &Points<f64> {
 }
 
 // Scalar multiplication
-impl Mul<f64> for Points<f64> {
+impl Mul<f64> for Points<f64, Ix3> {
     type Output = Self;
 
     fn mul(self, scalar: f64) -> Self {
@@ -999,15 +1029,15 @@ impl Mul<f64> for Points<f64> {
     }
 }
 
-impl Mul<f64> for &Points<f64> {
-    type Output = Points<f64>;
+impl Mul<f64> for &Points<f64, Ix3> {
+    type Output = Points<f64, Ix3>;
 
-    fn mul(self, scalar: f64) -> Points<f64> {
+    fn mul(self, scalar: f64) -> Points<f64, Ix3> {
         Points(self.0.map(|x| x * &scalar))
     }
 }
 
-impl Mul<&f64> for Points<f64> {
+impl Mul<&f64> for Points<f64, Ix3> {
     type Output = Self;
 
     fn mul(self, scalar: &f64) -> Self {
@@ -1015,16 +1045,16 @@ impl Mul<&f64> for Points<f64> {
     }
 }
 
-impl Mul<&f64> for &Points<f64> {
-    type Output = Points<f64>;
+impl Mul<&f64> for &Points<f64, Ix3> {
+    type Output = Points<f64, Ix3>;
 
-    fn mul(self, scalar: &f64) -> Points<f64> {
+    fn mul(self, scalar: &f64) -> Points<f64, Ix3> {
         Points(self.0.map(|x| x * scalar))
     }
 }
 
 // Division implementations
-impl Div for Points<f64> {
+impl Div for Points<f64, Ix3> {
     type Output = Self;
 
     fn div(self, other: Self) -> Self {
@@ -1039,7 +1069,7 @@ impl Div for Points<f64> {
     }
 }
 
-impl Div<&Points<f64>> for Points<f64> {
+impl Div<&Points<f64, Ix3>> for Points<f64, Ix3> {
     type Output = Self;
 
     fn div(self, other: &Self) -> Self {
@@ -1054,10 +1084,10 @@ impl Div<&Points<f64>> for Points<f64> {
     }
 }
 
-impl Div<Points<f64>> for &Points<f64> {
-    type Output = Points<f64>;
+impl Div<Points<f64, Ix3>> for &Points<f64, Ix3> {
+    type Output = Points<f64, Ix3>;
 
-    fn div(self, other: Points<f64>) -> Points<f64> {
+    fn div(self, other: Points<f64, Ix3>) -> Points<f64, Ix3> {
         if self.shape() != other.shape() {
             panic!(
                 "Points dimensions must match for element-wise division: {:?} vs {:?}",
@@ -1069,10 +1099,10 @@ impl Div<Points<f64>> for &Points<f64> {
     }
 }
 
-impl Div<&Points<f64>> for &Points<f64> {
-    type Output = Points<f64>;
+impl Div<&Points<f64, Ix3>> for &Points<f64, Ix3> {
+    type Output = Points<f64, Ix3>;
 
-    fn div(self, other: &Points<f64>) -> Points<f64> {
+    fn div(self, other: &Points<f64, Ix3>) -> Points<f64, Ix3> {
         if self.shape() != other.shape() {
             panic!(
                 "Points dimensions must match for element-wise division: {:?} vs {:?}",
@@ -1085,7 +1115,7 @@ impl Div<&Points<f64>> for &Points<f64> {
 }
 
 // Scalar division
-impl Div<f64> for Points<f64> {
+impl Div<f64> for Points<f64, Ix3> {
     type Output = Self;
 
     fn div(self, scalar: f64) -> Self {
@@ -1093,15 +1123,15 @@ impl Div<f64> for Points<f64> {
     }
 }
 
-impl Div<f64> for &Points<f64> {
-    type Output = Points<f64>;
+impl Div<f64> for &Points<f64, Ix3> {
+    type Output = Points<f64, Ix3>;
 
-    fn div(self, scalar: f64) -> Points<f64> {
+    fn div(self, scalar: f64) -> Points<f64, Ix3> {
         Points(self.0.map(|x| x / &scalar))
     }
 }
 
-impl Div<&f64> for Points<f64> {
+impl Div<&f64> for Points<f64, Ix3> {
     type Output = Self;
 
     fn div(self, scalar: &f64) -> Self {
@@ -1109,16 +1139,16 @@ impl Div<&f64> for Points<f64> {
     }
 }
 
-impl Div<&f64> for &Points<f64> {
-    type Output = Points<f64>;
+impl Div<&f64> for &Points<f64, Ix3> {
+    type Output = Points<f64, Ix3>;
 
-    fn div(self, scalar: &f64) -> Points<f64> {
+    fn div(self, scalar: &f64) -> Points<f64, Ix3> {
         Points(self.0.map(|x| x / scalar))
     }
 }
 
 // Negation
-impl Neg for Points<f64> {
+impl Neg for Points<f64, Ix3> {
     type Output = Self;
 
     fn neg(self) -> Self {
@@ -1126,16 +1156,16 @@ impl Neg for Points<f64> {
     }
 }
 
-impl Neg for &Points<f64> {
-    type Output = Points<f64>;
+impl Neg for &Points<f64, Ix3> {
+    type Output = Points<f64, Ix3>;
 
-    fn neg(self) -> Points<f64> {
+    fn neg(self) -> Points<f64, Ix3> {
         Points(-&self.0)
     }
 }
 
 // Assignment operators
-impl AddAssign for Points<f64> {
+impl AddAssign for Points<f64, Ix3> {
     fn add_assign(&mut self, other: Self) {
         if self.shape() != other.shape() {
             panic!(
@@ -1148,8 +1178,8 @@ impl AddAssign for Points<f64> {
     }
 }
 
-impl AddAssign<&Points<f64>> for Points<f64> {
-    fn add_assign(&mut self, other: &Points<f64>) {
+impl AddAssign<&Points<f64, Ix3>> for Points<f64, Ix3> {
+    fn add_assign(&mut self, other: &Points<f64, Ix3>) {
         if self.shape() != other.shape() {
             panic!(
                 "Points dimensions must match for addition: {:?} vs {:?}",
@@ -1161,7 +1191,7 @@ impl AddAssign<&Points<f64>> for Points<f64> {
     }
 }
 
-impl SubAssign for Points<f64> {
+impl SubAssign for Points<f64, Ix3> {
     fn sub_assign(&mut self, other: Self) {
         if self.shape() != other.shape() {
             panic!(
@@ -1174,8 +1204,8 @@ impl SubAssign for Points<f64> {
     }
 }
 
-impl SubAssign<&Points<f64>> for Points<f64> {
-    fn sub_assign(&mut self, other: &Points<f64>) {
+impl SubAssign<&Points<f64, Ix3>> for Points<f64, Ix3> {
+    fn sub_assign(&mut self, other: &Points<f64, Ix3>) {
         if self.shape() != other.shape() {
             panic!(
                 "Points dimensions must match for subtraction: {:?} vs {:?}",
@@ -1187,7 +1217,7 @@ impl SubAssign<&Points<f64>> for Points<f64> {
     }
 }
 
-impl MulAssign for Points<f64> {
+impl MulAssign for Points<f64, Ix3> {
     fn mul_assign(&mut self, other: Self) {
         if self.shape() != other.shape() {
             panic!(
@@ -1200,8 +1230,8 @@ impl MulAssign for Points<f64> {
     }
 }
 
-impl MulAssign<&Points<f64>> for Points<f64> {
-    fn mul_assign(&mut self, other: &Points<f64>) {
+impl MulAssign<&Points<f64, Ix3>> for Points<f64, Ix3> {
+    fn mul_assign(&mut self, other: &Points<f64, Ix3>) {
         if self.shape() != other.shape() {
             panic!(
                 "Points dimensions must match for element-wise multiplication: {:?} vs {:?}",
@@ -1213,7 +1243,7 @@ impl MulAssign<&Points<f64>> for Points<f64> {
     }
 }
 
-impl DivAssign for Points<f64> {
+impl DivAssign for Points<f64, Ix3> {
     fn div_assign(&mut self, other: Self) {
         if self.shape() != other.shape() {
             panic!(
@@ -1226,8 +1256,8 @@ impl DivAssign for Points<f64> {
     }
 }
 
-impl DivAssign<&Points<f64>> for Points<f64> {
-    fn div_assign(&mut self, other: &Points<f64>) {
+impl DivAssign<&Points<f64, Ix3>> for Points<f64, Ix3> {
+    fn div_assign(&mut self, other: &Points<f64, Ix3>) {
         if self.shape() != other.shape() {
             panic!(
                 "Points dimensions must match for element-wise division: {:?} vs {:?}",
@@ -1240,68 +1270,68 @@ impl DivAssign<&Points<f64>> for Points<f64> {
 }
 
 // Scalar assignment operators
-impl AddAssign<f64> for Points<f64> {
+impl AddAssign<f64> for Points<f64, Ix3> {
     fn add_assign(&mut self, scalar: f64) {
         self.0.map_inplace(|x| *x = &*x + &scalar);
     }
 }
 
-impl AddAssign<&f64> for Points<f64> {
+impl AddAssign<&f64> for Points<f64, Ix3> {
     fn add_assign(&mut self, scalar: &f64) {
         self.0.map_inplace(|x| *x = &*x + scalar);
     }
 }
 
-impl SubAssign<f64> for Points<f64> {
+impl SubAssign<f64> for Points<f64, Ix3> {
     fn sub_assign(&mut self, scalar: f64) {
         self.0.map_inplace(|x| *x = &*x - &scalar);
     }
 }
 
-impl SubAssign<&f64> for Points<f64> {
+impl SubAssign<&f64> for Points<f64, Ix3> {
     fn sub_assign(&mut self, scalar: &f64) {
         self.0.map_inplace(|x| *x = &*x - scalar);
     }
 }
 
-impl MulAssign<f64> for Points<f64> {
+impl MulAssign<f64> for Points<f64, Ix3> {
     fn mul_assign(&mut self, scalar: f64) {
         self.0.map_inplace(|x| *x = &*x * &scalar);
     }
 }
 
-impl MulAssign<&f64> for Points<f64> {
+impl MulAssign<&f64> for Points<f64, Ix3> {
     fn mul_assign(&mut self, scalar: &f64) {
         self.0.map_inplace(|x| *x = &*x * scalar);
     }
 }
 
-impl DivAssign<f64> for Points<f64> {
+impl DivAssign<f64> for Points<f64, Ix3> {
     fn div_assign(&mut self, scalar: f64) {
         self.0.map_inplace(|x| *x = &*x / &scalar);
     }
 }
 
-impl DivAssign<&f64> for Points<f64> {
+impl DivAssign<&f64> for Points<f64, Ix3> {
     fn div_assign(&mut self, scalar: &f64) {
         self.0.map_inplace(|x| *x = &*x / scalar);
     }
 }
 
 // Traits
-impl Clone for Points<f64> {
-    fn clone(&self) -> Self {
-        Points(self.0.clone())
-    }
-}
+// impl Clone for Points<f64, Ix3> {
+//     fn clone(&self) -> Self {
+//         Points(self.0.clone())
+//     }
+// }
 
-impl Default for Points<f64> {
+impl Default for Points<f64, Ix3> {
     fn default() -> Self {
         Points::zeros((0, 0, 0))
     }
 }
 
-impl PartialEq for Points<f64> {
+impl PartialEq for Points<f64, Ix3> {
     fn eq(&self, other: &Self) -> bool {
         if self.shape() != other.shape() {
             return false;
@@ -1311,7 +1341,7 @@ impl PartialEq for Points<f64> {
     }
 }
 
-impl Zero for Points<f64> {
+impl Zero for Points<f64, Ix3> {
     fn zero() -> Self {
         Points::zeros((0, 0, 0))
     }
@@ -1322,7 +1352,7 @@ impl Zero for Points<f64> {
 }
 
 // Display implementation
-impl fmt::Display for Points<f64> {
+impl fmt::Display for Points<f64, Ix3> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.len_of(Axis(0)) == 0 || self.len_of(Axis(1)) == 0 || self.len_of(Axis(2)) == 0 {
             return write!(f, "[]");
@@ -1355,7 +1385,7 @@ impl fmt::Display for Points<f64> {
     }
 }
 
-impl fmt::Debug for Points<f64> {
+impl fmt::Debug for Points<f64, Ix3> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
@@ -1369,48 +1399,48 @@ impl fmt::Debug for Points<f64> {
 }
 
 // Conversion traits
-impl From<Array3<f64>> for Points<f64> {
+impl From<Array3<f64>> for Points<f64, Ix3> {
     fn from(array: Array3<f64>) -> Self {
         Points(array)
     }
 }
 
-impl From<ArrayView3<'_, f64>> for Points<f64> {
+impl From<ArrayView3<'_, f64>> for Points<f64, Ix3> {
     fn from(array: ArrayView3<f64>) -> Self {
         Points(array.to_owned())
     }
 }
 
-impl From<Points<f64>> for Array3<f64> {
-    fn from(matrix: Points<f64>) -> Self {
+impl From<Points<f64, Ix3>> for Array3<f64> {
+    fn from(matrix: Points<f64, Ix3>) -> Self {
         matrix.0
     }
 }
 
-impl From<Vec<Vec<Vec<f64>>>> for Points<f64> {
+impl From<Vec<Vec<Vec<f64>>>> for Points<f64, Ix3> {
     fn from(data: Vec<Vec<Vec<f64>>>) -> Self {
-        Points::from_vec_f64(data).expect("Invalid matrix data")
+        Points::<f64, Ix3>::from_vec_f64(data).expect("Invalid matrix data")
     }
 }
 
-impl From<Vec<Vec<Vec<(f64, f64)>>>> for Points<f64> {
+impl From<Vec<Vec<Vec<(f64, f64)>>>> for Points<f64, Ix3> {
     fn from(data: Vec<Vec<Vec<(f64, f64)>>>) -> Self {
-        Points::from_vec_complex(data).expect("Invalid matrix data")
+        Points::<f64, Ix3>::from_vec_complex(data).expect("Invalid matrix data")
     }
 }
 
 #[cfg(test)]
-mod points_f64_tests {
+mod points_ix3_f64_tests {
     use super::*;
 
     #[test]
     fn test_creation() {
-        let zeros = Points::<f64>::zeros((2, 3, 4));
+        let zeros = Points::<f64, Ix3>::zeros((2, 3, 4));
         assert_eq!(zeros.shape(), (2, 3, 4));
         assert!(zeros[(0, 0, 0)].is_zero());
         assert!(zeros[(1, 2, 3)].is_zero());
 
-        let ones = Points::<f64>::ones((3, 2, 1));
+        let ones = Points::<f64, Ix3>::ones((3, 2, 1));
         assert_eq!(ones.shape(), (3, 2, 1));
         assert!(ones[(0, 0, 0)].is_one());
         assert!(ones[(2, 1, 0)].is_one());
@@ -1430,7 +1460,7 @@ mod points_f64_tests {
                 vec![21.0, 22.0, 23.0, 24.0],
             ],
         ];
-        let matrix = Points::<f64>::from_vec(data).unwrap();
+        let matrix = Points::<f64, Ix3>::from_vec(data).unwrap();
 
         assert_eq!(matrix.shape(), (2, 3, 4));
         assert_eq!(matrix[(0, 0, 0)], 1.0);
@@ -1455,7 +1485,7 @@ mod points_f64_tests {
                 vec![21.0, 22.0, 23.0, 24.0],
             ],
         ];
-        let matrix = Points::<f64>::from_vec_f64(data).unwrap();
+        let matrix = Points::<f64, Ix3>::from_vec_f64(data).unwrap();
 
         assert_eq!(matrix.shape(), (2, 3, 4));
         assert_eq!(matrix[(0, 0, 0)], 1.0);
@@ -1475,7 +1505,7 @@ mod points_f64_tests {
                 vec![(13.0, 14.0), (15.0, 16.0)],
             ],
         ];
-        let matrix = Points::<f64>::from_vec_complex(data).unwrap();
+        let matrix = Points::<f64, Ix3>::from_vec_complex(data).unwrap();
 
         assert_eq!(matrix.shape(), (2, 2, 2));
         assert_eq!(matrix[(0, 0, 0)], 1.0);
@@ -1484,13 +1514,13 @@ mod points_f64_tests {
 
     #[test]
     fn test_arithmetic() {
-        let a = Points::<f64>::from_vec_f64(vec![
+        let a = Points::<f64, Ix3>::from_vec_f64(vec![
             vec![vec![1.0, 2.0], vec![3.0, 4.0]],
             vec![vec![5.0, 6.0], vec![7.0, 8.0]],
         ])
         .unwrap();
 
-        let b = Points::<f64>::from_vec_f64(vec![
+        let b = Points::<f64, Ix3>::from_vec_f64(vec![
             vec![vec![5.0, 6.0], vec![7.0, 8.0]],
             vec![vec![9.0, 10.0], vec![11.0, 12.0]],
         ])
@@ -1520,7 +1550,7 @@ mod points_f64_tests {
 
     #[test]
     fn test_scalar_operations() {
-        let matrix = Points::<f64>::from_vec_f64(vec![
+        let matrix = Points::<f64, Ix3>::from_vec_f64(vec![
             vec![vec![1.0, 2.0], vec![3.0, 4.0]],
             vec![vec![5.0, 6.0], vec![7.0, 8.0]],
         ])
@@ -1541,13 +1571,13 @@ mod points_f64_tests {
 
     #[test]
     fn test_assignment_operators() {
-        let mut matrix = Points::<f64>::from_vec_f64(vec![
+        let mut matrix = Points::<f64, Ix3>::from_vec_f64(vec![
             vec![vec![1.0, 2.0], vec![3.0, 4.0]],
             vec![vec![5.0, 6.0], vec![7.0, 8.0]],
         ])
         .unwrap();
 
-        let other = Points::<f64>::from_vec_f64(vec![
+        let other = Points::<f64, Ix3>::from_vec_f64(vec![
             vec![vec![5.0, 6.0], vec![7.0, 8.0]],
             vec![vec![9.0, 10.0], vec![11.0, 12.0]],
         ])
@@ -1566,7 +1596,7 @@ mod points_f64_tests {
 
     #[test]
     fn test_map_functions() {
-        let matrix = Points::<f64>::from_vec_f64(vec![
+        let matrix = Points::<f64, Ix3>::from_vec_f64(vec![
             vec![vec![1.0, 2.0], vec![3.0, 4.0]],
             vec![vec![5.0, 6.0], vec![7.0, 8.0]],
         ])
@@ -1594,7 +1624,7 @@ mod points_f64_tests {
 
     #[test]
     fn test_display() {
-        let matrix = Points::<f64>::from_vec_f64(vec![
+        let matrix = Points::<f64, Ix3>::from_vec_f64(vec![
             vec![vec![1.0, 2.0], vec![3.0, 4.0]],
             vec![vec![5.0, 6.0], vec![7.0, 8.0]],
         ])
@@ -1613,19 +1643,19 @@ mod points_f64_tests {
 
     #[test]
     fn test_equality() {
-        let matrix1 = Points::<f64>::from_vec_f64(vec![
+        let matrix1 = Points::<f64, Ix3>::from_vec_f64(vec![
             vec![vec![1.0, 2.0], vec![3.0, 4.0]],
             vec![vec![5.0, 6.0], vec![7.0, 8.0]],
         ])
         .unwrap();
 
-        let matrix2 = Points::<f64>::from_vec_f64(vec![
+        let matrix2 = Points::<f64, Ix3>::from_vec_f64(vec![
             vec![vec![1.0, 2.0], vec![3.0, 4.0]],
             vec![vec![5.0, 6.0], vec![7.0, 8.0]],
         ])
         .unwrap();
 
-        let matrix3 = Points::<f64>::from_vec_f64(vec![
+        let matrix3 = Points::<f64, Ix3>::from_vec_f64(vec![
             vec![vec![1.0, 2.0], vec![3.0, 5.0]],
             vec![vec![5.0, 6.0], vec![7.0, 9.0]],
         ])
@@ -1638,8 +1668,8 @@ mod points_f64_tests {
     #[test]
     fn test_error_cases() {
         // Test mismatched dimensions for addition
-        let matrix1 = Points::<f64>::zeros((2, 4, 5));
-        let matrix2 = Points::<f64>::zeros((3, 2, 1));
+        let matrix1 = Points::<f64, Ix3>::zeros((2, 4, 5));
+        let matrix2 = Points::<f64, Ix3>::zeros((3, 2, 1));
 
         std::panic::catch_unwind(|| {
             let _ = &matrix1 + &matrix2;
@@ -1655,7 +1685,7 @@ mod points_f64_tests {
         ];
 
         // Test From<Vec<Vec<f64>>>
-        let matrix: Points<f64> = data.into();
+        let matrix: Points<f64, Ix3> = data.into();
         assert_eq!(matrix[(0, 0, 0)], 1.0);
         assert_eq!(matrix[(1, 1, 1)], 8.0);
 
