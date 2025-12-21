@@ -91,7 +91,7 @@ impl Points<f64, Ix2> {
 }
 
 impl Pts<f64, Ix2> for Points<f64, Ix2> {
-    type Dim = (usize, usize);
+    type Idx = (usize, usize);
     type Tuple<'a> = &'a [(f64, f64)];
 
     /// Create a new matrix with given dimensions filled with zeros
@@ -136,7 +136,7 @@ impl Pts<f64, Ix2> for Points<f64, Ix2> {
 
     fn from_shape_fn<F>(shape: impl IntoDimension<Dim = Dim<[usize; 2]>>, f: F) -> Self
     where
-        F: Fn(Self::Dim) -> f64,
+        F: Fn(Self::Idx) -> f64,
     {
         Points(Array2::<f64>::from_shape_fn(shape, f))
     }
@@ -225,7 +225,7 @@ impl Pts<f64, Ix2> for Points<f64, Ix2> {
     }
 
     /// Get the shape as (rows, cols)
-    fn dim(&self) -> Self::Dim {
+    fn dim(&self) -> Self::Idx {
         self.0.dim()
     }
 
@@ -235,7 +235,7 @@ impl Pts<f64, Ix2> for Points<f64, Ix2> {
     }
 
     /// Get the shape as (rows, cols)
-    fn shape(&self) -> Self::Dim {
+    fn shape(&self) -> Self::Idx {
         let shape = self.0.dim();
         (shape.0, shape.1)
     }
@@ -1353,6 +1353,16 @@ impl Zero for Points<f64, Ix2> {
 
     fn is_zero(&self) -> bool {
         self.0.iter().all(|x| x.is_zero())
+    }
+}
+
+impl One for Points<f64, Ix2> {
+    fn one() -> Self {
+        Points::<f64, Ix2>::ones((0, 0))
+    }
+
+    fn is_one(&self) -> bool {
+        self.0.iter().all(|x| x.is_one())
     }
 }
 

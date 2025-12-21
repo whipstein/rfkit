@@ -593,14 +593,9 @@ impl Default for NetworkBuilder {
 #[cfg(test)]
 mod network_builder_tests {
     use super::*;
-    use crate::frequency::FrequencyBuilder;
-    use crate::impedance::*;
-    use crate::scale::*;
-    use crate::unit::*;
-    use crate::util::*;
+    use crate::{frequency::FrequencyBuilder, impedance::*, scale::*, unit::*, util::*};
     use float_cmp::F64Margin;
-    use std::collections::HashMap;
-    use std::hash::Hash;
+    use std::{collections::HashMap, hash::Hash};
 
     const MARGIN: F64Margin = F64Margin {
         // epsilon: f64::EPSILON,

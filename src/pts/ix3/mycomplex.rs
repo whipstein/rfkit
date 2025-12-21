@@ -176,7 +176,7 @@ impl Points<MyComplex, Ix3> {
 }
 
 impl Pts<MyComplex, Ix3> for Points<MyComplex, Ix3> {
-    type Dim = (usize, usize, usize);
+    type Idx = (usize, usize, usize);
     type Tuple<'a> = &'a [(MyFloat, MyFloat)];
 
     /// Create a new matrix with given dimensions filled with zeros
@@ -223,7 +223,7 @@ impl Pts<MyComplex, Ix3> for Points<MyComplex, Ix3> {
 
     fn from_shape_fn<F>(shape: impl IntoDimension<Dim = Dim<[usize; 3]>>, f: F) -> Self
     where
-        F: Fn(Self::Dim) -> MyComplex,
+        F: Fn(Self::Idx) -> MyComplex,
     {
         Points(Array3::<MyComplex>::from_shape_fn(shape, f))
     }
@@ -315,7 +315,7 @@ impl Pts<MyComplex, Ix3> for Points<MyComplex, Ix3> {
     }
 
     /// Get the shape as (len, rows, cols)
-    fn dim(&self) -> Self::Dim {
+    fn dim(&self) -> Self::Idx {
         self.0.dim()
     }
 
@@ -325,7 +325,7 @@ impl Pts<MyComplex, Ix3> for Points<MyComplex, Ix3> {
     }
 
     /// Get the shape as (len, rows, cols)
-    fn shape(&self) -> Self::Dim {
+    fn shape(&self) -> Self::Idx {
         let shape = self.0.dim();
         (shape.0, shape.1, shape.2)
     }
@@ -2017,6 +2017,16 @@ impl Zero for Points<MyComplex, Ix3> {
 
     fn is_zero(&self) -> bool {
         self.0.iter().all(|x| x.is_zero())
+    }
+}
+
+impl One for Points<MyComplex, Ix3> {
+    fn one() -> Self {
+        Points::ones((0, 0, 0))
+    }
+
+    fn is_one(&self) -> bool {
+        self.0.iter().all(|x| x.is_one())
     }
 }
 

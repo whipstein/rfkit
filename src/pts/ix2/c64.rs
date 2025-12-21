@@ -113,7 +113,7 @@ impl Points<Complex64, Ix2> {
 }
 
 impl Pts<Complex64, Ix2> for Points<Complex64, Ix2> {
-    type Dim = (usize, usize);
+    type Idx = (usize, usize);
     type Tuple<'a> = (f64, f64);
 
     /// Create a new matrix with given dimensions filled with zeros
@@ -1580,6 +1580,16 @@ impl Zero for Points<Complex64, Ix2> {
 
     fn is_zero(&self) -> bool {
         self.0.iter().all(|x| x.is_zero())
+    }
+}
+
+impl One for Points<Complex64, Ix2> {
+    fn one() -> Self {
+        Points::ones((0, 0))
+    }
+
+    fn is_one(&self) -> bool {
+        self.0.iter().all(|x| x.is_one())
     }
 }
 

@@ -12,7 +12,7 @@
 pub use crate::file::read_touchstone;
 
 #[doc(no_inline)]
-pub use crate::num::{RFComplex, RFFloat};
+pub use crate::num::{RFComplex, RFFloat, RFNum};
 
 #[doc(no_inline)]
 pub use crate::frequency::{Frequency, FrequencyBuilder};

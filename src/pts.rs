@@ -5,6 +5,11 @@ use ndarray::{
     prelude::*,
 };
 use ndarray_linalg::error::LinalgError;
+use num_traits::{One, Zero};
+use std::{
+    fmt,
+    ops::{Add, AddAssign, Div, DivAssign, Index, IndexMut, Mul, MulAssign, Neg, Sub, SubAssign},
+};
 
 pub mod ix2;
 pub mod ix3;
@@ -21,8 +26,25 @@ pub trait Pts<T, D>
 where
     T: RFNum,
     D: Dimension,
+    Points<T, D>: Add
+        + Sub
+        + Mul
+        + Div
+        + Neg
+        + AddAssign
+        + SubAssign
+        + MulAssign
+        + DivAssign
+        + Default
+        + PartialEq
+        + Zero
+        + One
+        + fmt::Display
+        + fmt::Debug
+        + Index<Self::Idx>
+        + IndexMut<Self::Idx>,
 {
-    type Dim;
+    type Idx;
     type Tuple<'a>
     where
         Self: 'a;
@@ -76,11 +98,11 @@ where
     /// Get the number of columns
     fn ncols(&self) -> usize;
     /// Get the shape as (len, rows, cols)
-    fn dim(&self) -> Self::Dim;
+    fn dim(&self) -> Self::Idx;
     /// Get the dimension
     fn raw_dim(&self) -> D;
     /// Get the shape as (len, rows, cols)
-    fn shape(&self) -> Self::Dim;
+    fn shape(&self) -> Self::Idx;
 
     /// Check if the matrix is square
     fn is_square(&self) -> bool;

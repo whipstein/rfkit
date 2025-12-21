@@ -36,9 +36,11 @@ use std::{
     slice::Iter,
 };
 
-impl NetworkPoint<Points<f64, Ix3>, &[(f64, f64)], Complex64> for Points<Complex64, Ix3> {
+impl NetworkPoint<Complex64, Ix3> for Points<Complex64, Ix3> {
+    type Tuple<'a> = &'a [(f64, f64)];
+
     fn a_to_g(&self) -> Option<Points<Complex64, Ix3>> {
-        let mut out = Points::<Complex64, Ix3>::zeros(self.dim().into_dimension());
+        let mut out = Points::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
             let mut val = match Points::<Complex64, Ix2>::new(self.slice(s![i, .., ..]).to_owned())
                 .a_to_g()
@@ -176,7 +178,7 @@ impl NetworkPoint<Points<f64, Ix3>, &[(f64, f64)], Complex64> for Points<Complex
         out
     }
 
-    fn from_db(data: &[&[(f64, f64)]]) -> Points<Complex64, Ix3> {
+    fn from_db(data: &[Self::Tuple<'_>]) -> Points<Complex64, Ix3> {
         let nports = (data[0].len() as f64).sqrt() as usize;
         let npoints = data.len();
         Points::<Complex64, Ix3>::from_shape_fn(
@@ -190,7 +192,7 @@ impl NetworkPoint<Points<f64, Ix3>, &[(f64, f64)], Complex64> for Points<Complex
         )
     }
 
-    fn from_ma(data: &[&[(f64, f64)]]) -> Points<Complex64, Ix3> {
+    fn from_ma(data: &[Self::Tuple<'_>]) -> Points<Complex64, Ix3> {
         let nports = (data[0].len() as f64).sqrt() as usize;
         let npoints = data.len();
         Points::<Complex64, Ix3>::from_shape_fn(
@@ -204,7 +206,7 @@ impl NetworkPoint<Points<f64, Ix3>, &[(f64, f64)], Complex64> for Points<Complex
         )
     }
 
-    fn from_ri(data: &[&[(f64, f64)]]) -> Points<Complex64, Ix3> {
+    fn from_ri(data: &[Self::Tuple<'_>]) -> Points<Complex64, Ix3> {
         let nports = (data[0].len() as f64).sqrt() as usize;
         let npoints = data.len();
         Points::<Complex64, Ix3>::from_shape_fn(
@@ -872,9 +874,9 @@ impl NetworkPoint<Points<f64, Ix3>, &[(f64, f64)], Complex64> for Points<Complex
     }
 }
 
-impl NetworkPoint<Points<MyFloat, Ix3>, &[(MyFloat, MyFloat)], MyComplex>
-    for Points<MyComplex, Ix3>
-{
+impl NetworkPoint<MyComplex, Ix3> for Points<MyComplex, Ix3> {
+    type Tuple<'a> = &'a [(MyFloat, MyFloat)];
+
     fn a_to_g(&self) -> Option<Points<MyComplex, Ix3>> {
         let mut out = Points::<MyComplex, Ix3>::zeros(self.dim().into_dimension());
         for (i, mut pt) in out.axis_iter_mut(Axis(0)).enumerate() {
@@ -1014,7 +1016,7 @@ impl NetworkPoint<Points<MyFloat, Ix3>, &[(MyFloat, MyFloat)], MyComplex>
         out
     }
 
-    fn from_db(data: &[&[(MyFloat, MyFloat)]]) -> Points<MyComplex, Ix3> {
+    fn from_db(data: &[Self::Tuple<'_>]) -> Points<MyComplex, Ix3> {
         let nports = (data[0].len() as f64).sqrt() as usize;
         let npoints = data.len();
         Points::<MyComplex, Ix3>::from_shape_fn(
@@ -1028,7 +1030,7 @@ impl NetworkPoint<Points<MyFloat, Ix3>, &[(MyFloat, MyFloat)], MyComplex>
         )
     }
 
-    fn from_ma(data: &[&[(MyFloat, MyFloat)]]) -> Points<MyComplex, Ix3> {
+    fn from_ma(data: &[Self::Tuple<'_>]) -> Points<MyComplex, Ix3> {
         let nports = (data[0].len() as f64).sqrt() as usize;
         let npoints = data.len();
         Points::<MyComplex, Ix3>::from_shape_fn(
@@ -1042,7 +1044,7 @@ impl NetworkPoint<Points<MyFloat, Ix3>, &[(MyFloat, MyFloat)], MyComplex>
         )
     }
 
-    fn from_ri(data: &[&[(MyFloat, MyFloat)]]) -> Points<MyComplex, Ix3> {
+    fn from_ri(data: &[Self::Tuple<'_>]) -> Points<MyComplex, Ix3> {
         let nports = (data[0].len() as f64).sqrt() as usize;
         let npoints = data.len();
         Points::<MyComplex, Ix3>::from_shape_fn(
