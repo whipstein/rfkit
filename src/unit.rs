@@ -1,7 +1,7 @@
 use crate::scale::Scale;
+use ndarray::Array1;
 use serde::Serialize;
-use std::fmt;
-use std::str::FromStr;
+use std::{fmt, str::FromStr};
 
 /// Descriptor of sweep type
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize)]
@@ -96,50 +96,91 @@ impl fmt::Display for Unit {
     }
 }
 
-pub trait Unitized {
-    fn val_scaled(&self) -> f64;
-    fn unitval(&self) -> UnitVal;
+pub trait Unitized<T: UnitVal = f64> {
+    fn val_scaled(&self) -> T;
+    fn unitval(&self) -> UnitValue<T>;
     fn scale(&self) -> Scale;
     fn unit(&self) -> Unit;
-    fn set_unitval(&mut self, val: UnitVal);
-    fn set_val_scaled(&mut self, val: f64);
+    fn set_unitval(&mut self, val: UnitValue<T>);
+    fn set_val_scaled(&mut self, val: T);
     fn set_scale(&mut self, scale: Scale);
     fn set_unit(&mut self, unit: Unit);
 }
 
+/// Trait for types that can be used as values in UnitValue.
+/// This allows both scalar values (f64) and array values (Array1<f64>).
+pub trait UnitVal: Clone + serde::Serialize {
+    /// The zero value for this type
+    fn zero_value() -> Self;
+
+    /// Apply scaling (divide by multiplier)
+    fn scale(&self, multiplier: f64) -> Self;
+
+    /// Apply unscaling (multiply by multiplier)
+    fn unscale(&self, multiplier: f64) -> Self;
+}
+
+impl UnitVal for f64 {
+    fn zero_value() -> Self {
+        0.0
+    }
+
+    fn scale(&self, multiplier: f64) -> Self {
+        self / multiplier
+    }
+
+    fn unscale(&self, multiplier: f64) -> Self {
+        self * multiplier
+    }
+}
+
+impl UnitVal for Array1<f64> {
+    fn zero_value() -> Self {
+        Array1::zeros(0)
+    }
+
+    fn scale(&self, multiplier: f64) -> Self {
+        self / multiplier
+    }
+
+    fn unscale(&self, multiplier: f64) -> Self {
+        self * multiplier
+    }
+}
+
 /// Encapsulation of a value with scale. Value is stored unscaled.
-#[derive(Clone, Copy, Debug, PartialEq, Serialize)]
-pub struct UnitVal {
-    val: f64,
+/// Generic over the value type T, which can be a scalar (f64) or an array (Array1<f64>).
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct UnitValue<T: UnitVal = f64> {
+    val: T,
     scale: Scale,
     unit: Unit,
 }
 
-impl UnitVal {
-    pub fn new(val: f64, scale: Scale, unit: Unit) -> Self {
-        UnitVal {
-            val,
-            scale: scale,
-            unit: unit,
+// Implement Copy for UnitValue<f64> to maintain backward compatibility
+impl Copy for UnitValue<f64> {}
+
+impl<T: UnitVal> UnitValue<T> {
+    pub fn new(val: T, scale: Scale, unit: Unit) -> Self {
+        UnitValue { val, scale, unit }
+    }
+
+    pub fn new_scaled(val: T, scale: Scale, unit: Unit) -> Self {
+        UnitValue {
+            val: val.unscale(scale.multiplier()),
+            scale,
+            unit,
         }
     }
 
-    pub fn new_scaled(val: f64, scale: Scale, unit: Unit) -> Self {
-        UnitVal {
-            val: scale.unscale(val),
-            scale: scale,
-            unit: unit,
-        }
-    }
-
-    /// Retrieve value unscaled
-    pub fn val(&self) -> f64 {
-        self.val
+    /// Retrieve value unscaled (as reference)
+    pub fn val_ref(&self) -> &T {
+        &self.val
     }
 
     /// Retrieve value in scaled scale
-    pub fn val_scaled(&self) -> f64 {
-        self.scale.scale(self.val)
+    pub fn val_scaled(&self) -> T {
+        self.val.scale(self.scale.multiplier())
     }
 
     /// Retrieve scale
@@ -153,14 +194,14 @@ impl UnitVal {
     }
 
     /// Set value unscaled
-    pub fn set_val(&mut self, val: f64) -> &Self {
+    pub fn set_val(&mut self, val: T) -> &Self {
         self.val = val;
         self
     }
 
     /// Set value in scaled scale
-    pub fn set_val_scaled(&mut self, val: f64) -> &Self {
-        self.val = self.scale.unscale(val);
+    pub fn set_val_scaled(&mut self, val: T) -> &Self {
+        self.val = val.unscale(self.scale.multiplier());
         self
     }
 
@@ -177,17 +218,26 @@ impl UnitVal {
     }
 }
 
-impl Default for UnitVal {
+/// Specialized implementation for UnitValue<f64> to maintain backward compatibility.
+/// Returns f64 by value (since it's Copy) instead of by reference.
+impl UnitValue<f64> {
+    /// Retrieve value unscaled
+    pub fn val(&self) -> f64 {
+        self.val
+    }
+}
+
+impl<T: UnitVal> Default for UnitValue<T> {
     fn default() -> Self {
-        UnitVal {
-            val: 0.0,
+        UnitValue {
+            val: T::zero_value(),
             scale: Scale::Base,
             unit: Unit::None,
         }
     }
 }
 
-/// Builder design pattern for UnitVal.
+/// Builder design pattern for UnitValue.
 ///
 /// ## Example
 /// ```
@@ -195,29 +245,34 @@ impl Default for UnitVal {
 ///
 /// let unitval = UnitValBuilder::new().val_scaled(1.2, Scale::Pico).build();
 /// ```
-#[derive(Default)]
-pub struct UnitValBuilder {
-    val: f64,
+pub struct UnitValBuilder<T: UnitVal = f64> {
+    val: T,
     scale: Scale,
     unit: Unit,
 }
 
-impl UnitValBuilder {
-    pub fn new() -> Self {
+impl<T: UnitVal> Default for UnitValBuilder<T> {
+    fn default() -> Self {
         UnitValBuilder {
-            val: 0.0,
+            val: T::zero_value(),
             scale: Scale::Base,
             unit: Unit::None,
         }
     }
+}
 
-    pub fn val(mut self, val: f64) -> Self {
+impl<T: UnitVal> UnitValBuilder<T> {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn val(mut self, val: T) -> Self {
         self.val = val;
         self
     }
 
-    pub fn val_scaled(mut self, val: f64, scale: Scale) -> Self {
-        self.val = scale.unscale(val);
+    pub fn val_scaled(mut self, val: T, scale: Scale) -> Self {
+        self.val = val.unscale(scale.multiplier());
         self.scale = scale;
         self
     }
@@ -242,8 +297,8 @@ impl UnitValBuilder {
         self
     }
 
-    pub fn build(self) -> UnitVal {
-        UnitVal {
+    pub fn build(self) -> UnitValue<T> {
+        UnitValue {
             val: self.val,
             scale: self.scale,
             unit: self.unit,
@@ -376,7 +431,7 @@ mod unit_test {
         let val_scaled: f64 = 10.34;
         let scale = Scale::Pico;
         let unit = Unit::Farad;
-        let mut unitval = UnitVal::new(val, scale, unit);
+        let mut unitval = UnitValue::new(val, scale, unit);
         let val2: f64 = 4.74e-15;
         let scale2 = Scale::Femto;
 
@@ -423,7 +478,7 @@ mod unit_test {
             .build();
         assert_eq!(
             unitval,
-            UnitVal {
+            UnitValue {
                 val: val,
                 scale: scale,
                 unit: unit,
@@ -436,7 +491,7 @@ mod unit_test {
             .build();
         assert_eq!(
             unitval2,
-            UnitVal {
+            UnitValue {
                 val: val,
                 scale: scale,
                 unit: unit,
@@ -455,7 +510,7 @@ mod unit_test {
             .build();
         assert_eq!(
             unitval,
-            UnitVal {
+            UnitValue {
                 val: val,
                 scale: scale,
                 unit: unit,
@@ -468,7 +523,7 @@ mod unit_test {
             .build();
         assert_eq!(
             unitval2,
-            UnitVal {
+            UnitValue {
                 val: val,
                 scale: scale,
                 unit: unit,

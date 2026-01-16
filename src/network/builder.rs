@@ -1,10 +1,9 @@
 use crate::{
-    frequency::Frequency,
+    frequency::{FreqArray, Frequency},
     impedance::ComplexNumberType,
     math::*,
-    mycomplex::MyComplex,
-    myfloat::MyFloat,
     network::{Network, NetworkPoint, PortVal, WaveType, network_err_msg},
+    num::{MyComplex, MyFloat},
     parameter::RFParameter,
     pts::{Points, Pts},
     unit::Unit,
@@ -593,7 +592,13 @@ impl Default for NetworkBuilder {
 #[cfg(test)]
 mod network_builder_tests {
     use super::*;
-    use crate::{frequency::FrequencyBuilder, impedance::*, scale::*, unit::*, util::*};
+    use crate::{
+        frequency::{FreqArray, FrequencyBuilder},
+        impedance::*,
+        scale::*,
+        unit::*,
+        util::*,
+    };
     use float_cmp::F64Margin;
     use std::{collections::HashMap, hash::Hash};
 
@@ -622,236 +627,196 @@ mod network_builder_tests {
         ]);
 
         let param = RFParameter::A;
-        comp_points_c64(
-            exemplars.get(&param).unwrap().view(),
-            calc.net(param).view(),
+        comp_pts_ix3(
+            exemplars.get(&param).unwrap(),
+            calc.net(param),
             margin,
             format!("net({})", param).as_str(),
         );
-        comp_points_c64(
-            exemplars.get(&param).unwrap().view(),
-            calc.a().view(),
-            margin,
-            "a()",
-        );
+        comp_pts_ix3(exemplars.get(&param).unwrap(), calc.a(), margin, "a()");
         new_net.set_net(&x, param);
-        comp_points_c64(x.view(), new_net.a().view(), margin, "a(x)");
+        comp_pts_ix3(&x, new_net.a(), margin, "a(x)");
         new_net.set_net(calc.a(), param);
-        comp_points_c64(
-            exemplars.get(&param).unwrap().view(),
-            new_net.a().view(),
+        comp_pts_ix3(
+            exemplars.get(&param).unwrap(),
+            new_net.a(),
             margin,
             "a(new_net)",
         );
 
         let param = RFParameter::G;
-        comp_points_c64(
-            exemplars.get(&param).unwrap().view(),
-            calc.net(param).view(),
+        comp_pts_ix3(
+            exemplars.get(&param).unwrap(),
+            calc.net(param),
             margin,
             format!("net({})", param).as_str(),
         );
-        comp_points_c64(
-            exemplars.get(&param).unwrap().view(),
-            calc.g().view(),
-            margin,
-            "g()",
-        );
+        comp_pts_ix3(exemplars.get(&param).unwrap(), calc.g(), margin, "g()");
         new_net.set_net(&x, param);
-        comp_points_c64(x.view(), new_net.g().view(), margin, "g(x)");
+        comp_pts_ix3(&x, new_net.g(), margin, "g(x)");
         new_net.set_net(calc.g(), param);
-        comp_points_c64(
-            exemplars.get(&param).unwrap().view(),
-            new_net.g().view(),
+        comp_pts_ix3(
+            exemplars.get(&param).unwrap(),
+            new_net.g(),
             margin,
             "g(new_net)",
         );
 
         let param = RFParameter::H;
-        comp_points_c64(
-            exemplars.get(&param).unwrap().view(),
-            calc.net(param).view(),
+        comp_pts_ix3(
+            exemplars.get(&param).unwrap(),
+            calc.net(param),
             margin,
             format!("net({})", param).as_str(),
         );
-        comp_points_c64(
-            exemplars.get(&param).unwrap().view(),
-            calc.h().view(),
-            margin,
-            "h()",
-        );
+        comp_pts_ix3(exemplars.get(&param).unwrap(), calc.h(), margin, "h()");
         new_net.set_net(&x, param);
-        comp_points_c64(x.view(), new_net.h().view(), margin, "h(x)");
+        comp_pts_ix3(&x, new_net.h(), margin, "h(x)");
         new_net.set_net(calc.h(), param);
-        comp_points_c64(
-            exemplars.get(&param).unwrap().view(),
-            new_net.h().view(),
+        comp_pts_ix3(
+            exemplars.get(&param).unwrap(),
+            new_net.h(),
             margin,
             "h(new_net)",
         );
 
         let param = RFParameter::S;
-        comp_points_c64(
-            exemplars.get(&param).unwrap().view(),
-            calc.net(param).view(),
+        comp_pts_ix3(
+            exemplars.get(&param).unwrap(),
+            calc.net(param),
             margin,
             format!("net({})", param).as_str(),
         );
-        comp_points_c64(
-            exemplars.get(&param).unwrap().view(),
-            calc.s().view(),
-            margin,
-            "s()",
-        );
+        comp_pts_ix3(exemplars.get(&param).unwrap(), calc.s(), margin, "s()");
         new_net.set_net(&x, param);
-        comp_points_c64(x.view(), new_net.s().view(), margin, "s(x)");
+        comp_pts_ix3(&x, new_net.s(), margin, "s(x)");
         new_net.set_net(calc.s(), param);
-        comp_points_c64(
-            exemplars.get(&param).unwrap().view(),
-            new_net.s().view(),
+        comp_pts_ix3(
+            exemplars.get(&param).unwrap(),
+            new_net.s(),
             margin,
             "s(new_net)",
         );
 
         let param = RFParameter::SPower;
-        comp_points_c64(
-            exemplars.get(&param).unwrap().view(),
-            calc.net(param).view(),
+        comp_pts_ix3(
+            exemplars.get(&param).unwrap(),
+            calc.net(param),
             margin,
             format!("net({})", param).as_str(),
         );
-        comp_points_c64(
-            exemplars.get(&param).unwrap().view(),
-            calc.s_power().view(),
+        comp_pts_ix3(
+            exemplars.get(&param).unwrap(),
+            calc.s_power(),
             margin,
             "s_power()",
         );
         new_net.set_net(&x, param);
-        comp_points_c64(x.view(), new_net.s_power().view(), margin, "s_power(x)");
+        comp_pts_ix3(&x, new_net.s_power(), margin, "s_power(x)");
         new_net.set_net(calc.s_power(), param);
-        comp_points_c64(
-            exemplars.get(&param).unwrap().view(),
-            new_net.s_power().view(),
+        comp_pts_ix3(
+            exemplars.get(&param).unwrap(),
+            new_net.s_power(),
             margin,
             "s_power(new_net)",
         );
 
         let param = RFParameter::SPseudo;
-        comp_points_c64(
-            exemplars.get(&param).unwrap().view(),
-            calc.net(param).view(),
+        comp_pts_ix3(
+            exemplars.get(&param).unwrap(),
+            calc.net(param),
             margin,
             format!("net({})", param).as_str(),
         );
-        comp_points_c64(
-            exemplars.get(&param).unwrap().view(),
-            calc.s_pseudo().view(),
+        comp_pts_ix3(
+            exemplars.get(&param).unwrap(),
+            calc.s_pseudo(),
             margin,
             "s_pseudo()",
         );
         new_net.set_net(&x, param);
-        comp_points_c64(x.view(), new_net.s_pseudo().view(), margin, "s_pseudo(x)");
+        comp_pts_ix3(&x, new_net.s_pseudo(), margin, "s_pseudo(x)");
         new_net.set_net(calc.s_pseudo(), param);
-        comp_points_c64(
-            exemplars.get(&param).unwrap().view(),
-            new_net.s_pseudo().view(),
+        comp_pts_ix3(
+            exemplars.get(&param).unwrap(),
+            new_net.s_pseudo(),
             margin,
             "s_pseudo(new_net)",
         );
 
         let param = RFParameter::STraveling;
-        comp_points_c64(
-            exemplars.get(&param).unwrap().view(),
-            calc.net(param).view(),
+        comp_pts_ix3(
+            exemplars.get(&param).unwrap(),
+            calc.net(param),
             margin,
             format!("net({})", param).as_str(),
         );
-        comp_points_c64(
-            exemplars.get(&param).unwrap().view(),
-            calc.s_traveling().view(),
+        comp_pts_ix3(
+            exemplars.get(&param).unwrap(),
+            calc.s_traveling(),
             margin,
             "s_traveling()",
         );
         new_net.set_net(&x, param);
-        comp_points_c64(
-            x.view(),
-            new_net.s_traveling().view(),
-            margin,
-            "s_traveling(x)",
-        );
+        comp_pts_ix3(&x, new_net.s_traveling(), margin, "s_traveling(x)");
         new_net.set_net(calc.s_traveling(), param);
-        comp_points_c64(
-            exemplars.get(&param).unwrap().view(),
-            new_net.s_traveling().view(),
+        comp_pts_ix3(
+            exemplars.get(&param).unwrap(),
+            new_net.s_traveling(),
             margin,
             "s_traveling(new_net)",
         );
 
         let param = RFParameter::T;
-        comp_points_c64(
-            exemplars.get(&param).unwrap().view(),
-            calc.net(param).view(),
+        comp_pts_ix3(
+            exemplars.get(&param).unwrap(),
+            calc.net(param),
             margin,
             format!("net({})", param).as_str(),
         );
-        comp_points_c64(
-            exemplars.get(&param).unwrap().view(),
-            calc.t().view(),
-            margin,
-            "t()",
-        );
+        comp_pts_ix3(exemplars.get(&param).unwrap(), calc.t(), margin, "t()");
         new_net.set_net(&x, param);
-        comp_points_c64(x.view(), new_net.t().view(), margin, "t(x)");
+        comp_pts_ix3(&x, new_net.t(), margin, "t(x)");
         new_net.set_net(calc.t(), param);
-        comp_points_c64(
-            exemplars.get(&param).unwrap().view(),
-            new_net.t().view(),
+        comp_pts_ix3(
+            exemplars.get(&param).unwrap(),
+            new_net.t(),
             margin,
             "t(new_net)",
         );
 
         let param = RFParameter::Y;
-        comp_points_c64(
-            exemplars.get(&param).unwrap().view(),
-            calc.net(param).view(),
+        comp_pts_ix3(
+            exemplars.get(&param).unwrap(),
+            calc.net(param),
             margin,
             format!("net({})", param).as_str(),
         );
-        comp_points_c64(
-            exemplars.get(&param).unwrap().view(),
-            calc.y().view(),
-            margin,
-            "y()",
-        );
+        comp_pts_ix3(exemplars.get(&param).unwrap(), calc.y(), margin, "y()");
         new_net.set_net(&x, param);
-        comp_points_c64(x.view(), new_net.y().view(), margin, "y(x)");
+        comp_pts_ix3(&x, new_net.y(), margin, "y(x)");
         new_net.set_net(calc.y(), param);
-        comp_points_c64(
-            exemplars.get(&param).unwrap().view(),
-            new_net.y().view(),
+        comp_pts_ix3(
+            exemplars.get(&param).unwrap(),
+            new_net.y(),
             margin,
             "y(new_net)",
         );
 
         let param = RFParameter::Z;
-        comp_points_c64(
-            exemplars.get(&param).unwrap().view(),
-            calc.net(param).view(),
+        comp_pts_ix3(
+            exemplars.get(&param).unwrap(),
+            calc.net(param),
             margin,
             format!("net({})", param).as_str(),
         );
-        comp_points_c64(
-            exemplars.get(&param).unwrap().view(),
-            calc.z().view(),
-            margin,
-            "z()",
-        );
+        comp_pts_ix3(exemplars.get(&param).unwrap(), calc.z(), margin, "z()");
         new_net.set_net(&x, param);
-        comp_points_c64(x.view(), new_net.z().view(), margin, "z(x)");
+        comp_pts_ix3(&x, new_net.z(), margin, "z(x)");
         new_net.set_net(calc.z(), param);
-        comp_points_c64(
-            exemplars.get(&param).unwrap().view(),
-            new_net.z().view(),
+        comp_pts_ix3(
+            exemplars.get(&param).unwrap(),
+            new_net.z(),
             margin,
             "z(new_net)",
         );

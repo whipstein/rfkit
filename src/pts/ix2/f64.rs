@@ -1,9 +1,9 @@
 use crate::{
     error::InversionError,
     myfloat::MyFloat,
-    pts::{Points, Pts},
+    pts::{Matrix, Points, Pts},
 };
-use ndarray::{IntoDimension, prelude::*};
+use ndarray::{IntoDimension, SliceArg, linalg::Dot, prelude::*};
 use ndarray_linalg::error::LinalgError;
 use num_traits::{One, Zero};
 use std::{
@@ -56,38 +56,6 @@ impl Points<f64, Ix2> {
     fn from_vec_float(data: Vec<Vec<f64>>) -> Result<Self, &'static str> {
         Self::from_vec(data)
     }
-
-    /// Create a matrix from a 2D vector of complex tuples (real, imag)
-    fn from_vec_c64(data: Vec<Vec<(f64, f64)>>) -> Result<Self, &'static str> {
-        if data.is_empty() {
-            return Err("Cannot create matrix from empty data");
-        }
-
-        let rows = data.len();
-        let cols = data[0].len();
-
-        if cols == 0 {
-            return Err("Cannot create matrix with zero columns");
-        }
-
-        if !data.iter().all(|row| row.len() == cols) {
-            return Err("All rows must have the same length");
-        }
-
-        let mut matrix = Self::zeros((rows, cols));
-        for (i, row) in data.iter().enumerate() {
-            for (j, &(real, _)) in row.iter().enumerate() {
-                matrix[[i, j]] = real;
-            }
-        }
-
-        Ok(matrix)
-    }
-
-    /// Create a matrix from a 2D vector of complex tuples (real, imag)
-    fn from_vec_complex(data: Vec<Vec<(f64, f64)>>) -> Result<Self, &'static str> {
-        Self::from_vec_c64(data)
-    }
 }
 
 impl Pts<f64, Ix2> for Points<f64, Ix2> {
@@ -102,16 +70,6 @@ impl Pts<f64, Ix2> for Points<f64, Ix2> {
     /// Create a new matrix with given dimensions filled with ones
     fn ones(shape: impl IntoDimension<Dim = Dim<[usize; 2]>>) -> Self {
         Points(Array2::from_elem(shape, f64::one()))
-    }
-
-    /// Create an identity matrix of given size
-    fn eye(shape: impl IntoDimension<Dim = Dim<[usize; 2]>>) -> Self {
-        Points(Array2::from_shape_fn(
-            shape,
-            |(j, k)| {
-                if j == k { 1.0 } else { 0.0 }
-            },
-        ))
     }
 
     /// Create a matrix from a flat vector with specified dimensions
@@ -204,24 +162,71 @@ impl Pts<f64, Ix2> for Points<f64, Ix2> {
         self.0.push(axis, array)
     }
 
+    /// Get and set outer axis point
+    fn pt<I>(&self, index: usize) -> ndarray::ArrayView<'_, f64, I::OutDim>
+    where
+        I: SliceArg<Ix2, OutDim = Dim<[usize; 1]>>,
+    {
+        if index >= self.nrows() {
+            panic!(
+                "Row index {} out of bounds for matrix with {} points",
+                index,
+                self.nrows()
+            );
+        }
+
+        self.slice(s![index, ..])
+    }
+
+    fn pt_mut<I>(&mut self, index: usize) -> ndarray::ArrayViewMut<'_, f64, I::OutDim>
+    where
+        I: SliceArg<Ix2, OutDim = Dim<[usize; 1]>>,
+    {
+        if index >= self.nrows() {
+            panic!(
+                "Row index {} out of bounds for matrix with {} points",
+                index,
+                self.nrows()
+            );
+        }
+
+        self.slice_mut(s![index, ..])
+    }
+
+    fn set_pt(&mut self, index: usize, pt: Points<f64, Ix1>) {
+        if index >= self.nrows() {
+            panic!(
+                "Row index {} out of bounds for matrix with {} points",
+                index,
+                self.nrows()
+            );
+        }
+        if pt.len() != self.ncols() {
+            panic!(
+                "Col dimensions incompatible: expected {}, got {}",
+                self.ncols(),
+                pt.len()
+            );
+        }
+
+        for k in 0..self.ncols() {
+            self[[index, k]] = pt[k].clone();
+        }
+    }
+
     /// Get the number of rows
     fn len_of(&self, axis: Axis) -> usize {
         self.0.len_of(axis)
     }
 
+    /// Get the length
+    fn len(&self) -> usize {
+        self.0.len()
+    }
+
     /// Get the number of points
     fn npts(&self) -> usize {
         1
-    }
-
-    /// Get the number of rows
-    fn nrows(&self) -> usize {
-        self.0.nrows()
-    }
-
-    /// Get the number of columns
-    fn ncols(&self) -> usize {
-        self.0.ncols()
     }
 
     /// Get the shape as (rows, cols)
@@ -240,11 +245,6 @@ impl Pts<f64, Ix2> for Points<f64, Ix2> {
         (shape.0, shape.1)
     }
 
-    /// Check if the matrix is square
-    fn is_square(&self) -> bool {
-        self.nrows() == self.ncols()
-    }
-
     /// Get a view of the matrix
     fn view(&self) -> ArrayView2<'_, f64> {
         self.0.view()
@@ -253,6 +253,96 @@ impl Pts<f64, Ix2> for Points<f64, Ix2> {
     /// Get a mutable view of the matrix
     fn view_mut(&mut self) -> ArrayViewMut2<'_, f64> {
         self.0.view_mut()
+    }
+
+    /// Access the inner ndarray (for advanced operations)
+    fn inner(&self) -> &Array2<f64> {
+        &self.0
+    }
+
+    /// Convert to inner ndarray (consuming self)
+    fn into_inner(self) -> Array2<f64> {
+        self.0
+    }
+
+    fn into_raw_vec_and_offset(self) -> (Vec<f64>, Option<usize>) {
+        self.0.into_raw_vec_and_offset()
+    }
+
+    /// Create a matrix filled with the given value
+    fn fill(shape: impl IntoDimension<Dim = Dim<[usize; 2]>>, value: f64) -> Self {
+        Points(Array2::from_elem(shape, value))
+    }
+
+    /// Apply a function element-wise
+    fn map<F>(&self, f: F) -> Self
+    where
+        F: Fn(&f64) -> f64,
+    {
+        Points(self.0.map(&f))
+    }
+
+    /// Apply a function element-wise in place
+    fn map_inplace<F>(&mut self, f: F)
+    where
+        F: Fn(&f64) -> f64,
+    {
+        self.0.map_inplace(|x| *x = f(x));
+    }
+
+    /// Check if a matrix is approximately equal to another matrix within a tolerance
+    ///
+    /// # Arguments
+    /// * `a` - First matrix
+    /// * `b` - Second matrix  
+    /// * `tol` - Tolerance for comparison
+    ///
+    /// # Returns
+    /// * `true` if matrices are approximately equal, `false` otherwise
+    fn approx_eq(a: &ArrayView2<f64>, b: &ArrayView2<f64>, tol: f64) -> bool {
+        if a.dim() != b.dim() {
+            return false;
+        }
+
+        let (rows, cols) = a.dim();
+
+        for i in 0..rows {
+            for j in 0..cols {
+                let diff = &a[[i, j]] - &b[[i, j]];
+                if diff.abs() > tol {
+                    return false;
+                }
+            }
+        }
+
+        true
+    }
+}
+
+impl Matrix<f64, Ix2> for Points<f64, Ix2> {
+    /// Create an identity matrix of given size
+    fn eye(shape: impl IntoDimension<Dim = Dim<[usize; 2]>>) -> Self {
+        Points(Array2::from_shape_fn(
+            shape,
+            |(j, k)| {
+                if j == k { 1.0 } else { 0.0 }
+            },
+        ))
+    }
+
+    /// Get the number of rows
+    fn nrows(&self) -> usize {
+        self.0.nrows()
+    }
+
+    /// Get the number of columns
+    fn ncols(&self) -> usize {
+        self.0.ncols()
+    }
+
+    /// Check if the matrix is square
+    fn is_square(&self) -> bool {
+        self.nrows() == self.ncols()
     }
 
     /// Transpose the matrix
@@ -355,32 +445,32 @@ impl Pts<f64, Ix2> for Points<f64, Ix2> {
         Array0::from_elem((), sum.sqrt())
     }
 
-    /// Point multiplication
-    fn dot(&self, other: &Self) -> Self {
-        if self.ncols() != other.nrows() {
-            panic!(
-                "Point dimensions incompatible for multiplication: {}x{} * {}x{}",
-                self.nrows(),
-                self.ncols(),
-                other.nrows(),
-                other.ncols()
-            );
-        }
+    // /// Point multiplication
+    // fn dot(&self, other: &Self) -> Self {
+    //     if self.ncols() != other.nrows() {
+    //         panic!(
+    //             "Point dimensions incompatible for multiplication: {}x{} * {}x{}",
+    //             self.nrows(),
+    //             self.ncols(),
+    //             other.nrows(),
+    //             other.ncols()
+    //         );
+    //     }
 
-        let mut result = Self::zeros((self.nrows(), other.ncols()));
+    //     let mut result = Self::zeros((self.nrows(), other.ncols()));
 
-        for i in 0..self.nrows() {
-            for j in 0..other.ncols() {
-                let mut sum = f64::zero();
-                for k in 0..self.ncols() {
-                    sum += &self[[i, k]] * &other[[k, j]];
-                }
-                result[[i, j]] = sum;
-            }
-        }
+    //     for i in 0..self.nrows() {
+    //         for j in 0..other.ncols() {
+    //             let mut sum = f64::zero();
+    //             for k in 0..self.ncols() {
+    //                 sum += &self[[i, k]] * &other[[k, j]];
+    //             }
+    //             result[[i, j]] = sum;
+    //         }
+    //     }
 
-        result
-    }
+    //     result
+    // }
 
     /// Get a row as a new matrix (1 x ncols)
     fn row(&self, index: usize) -> Self {
@@ -460,41 +550,6 @@ impl Pts<f64, Ix2> for Points<f64, Ix2> {
         for i in 0..self.nrows() {
             self[[i, index]] = col[[i, 0]].clone();
         }
-    }
-
-    /// Access the inner ndarray (for advanced operations)
-    fn inner(&self) -> &Array2<f64> {
-        &self.0
-    }
-
-    /// Convert to inner ndarray (consuming self)
-    fn into_inner(self) -> Array2<f64> {
-        self.0
-    }
-
-    fn into_raw_vec_and_offset(self) -> (Vec<f64>, Option<usize>) {
-        self.0.into_raw_vec_and_offset()
-    }
-
-    /// Create a matrix filled with the given value
-    fn fill(shape: impl IntoDimension<Dim = Dim<[usize; 2]>>, value: f64) -> Self {
-        Points(Array2::from_elem(shape, value))
-    }
-
-    /// Apply a function element-wise
-    fn map<F>(&self, f: F) -> Self
-    where
-        F: Fn(&f64) -> f64,
-    {
-        Points(self.0.map(&f))
-    }
-
-    /// Apply a function element-wise in place
-    fn map_inplace<F>(&mut self, f: F)
-    where
-        F: Fn(&f64) -> f64,
-    {
-        self.0.map_inplace(|x| *x = f(x));
     }
 
     /// Compute the inverse of a square matrix using LU decomposition with partial pivoting
@@ -716,34 +771,6 @@ impl Pts<f64, Ix2> for Points<f64, Ix2> {
         }
 
         Ok(x)
-    }
-
-    /// Check if a matrix is approximately equal to another matrix within a tolerance
-    ///
-    /// # Arguments
-    /// * `a` - First matrix
-    /// * `b` - Second matrix  
-    /// * `tol` - Tolerance for comparison
-    ///
-    /// # Returns
-    /// * `true` if matrices are approximately equal, `false` otherwise
-    fn approx_eq(a: &ArrayView2<f64>, b: &ArrayView2<f64>, tol: f64) -> bool {
-        if a.dim() != b.dim() {
-            return false;
-        }
-
-        let (rows, cols) = a.dim();
-
-        for i in 0..rows {
-            for j in 0..cols {
-                let diff = &a[[i, j]] - &b[[i, j]];
-                if diff.abs() > tol {
-                    return false;
-                }
-            }
-        }
-
-        true
     }
 }
 
@@ -1323,13 +1350,42 @@ impl DivAssign<&f64> for Points<f64, Ix2> {
     }
 }
 
-// Traits
-// impl Clone for Points<f64, Ix2> {
-//     fn clone(&self) -> Self {
-//         Points(self.0.clone())
-//     }
-// }
+// Dot product implementations
+impl Dot<Points<f64, Ix2>> for Points<f64, Ix2> {
+    type Output = Points<f64, Ix2>;
 
+    fn dot(&self, rhs: &Points<f64, Ix2>) -> Self::Output {
+        Points(self.inner().dot(rhs.inner()))
+    }
+}
+
+impl Dot<Points<f64, Ix1>> for Points<f64, Ix2> {
+    type Output = Points<f64, Ix1>;
+
+    fn dot(&self, rhs: &Points<f64, Ix1>) -> Self::Output {
+        Points(self.inner().dot(rhs.inner()))
+    }
+}
+
+impl Dot<Points<MyFloat, Ix2>> for Points<f64, Ix2> {
+    type Output = Points<f64, Ix2>;
+
+    fn dot(&self, rhs: &Points<MyFloat, Ix2>) -> Self::Output {
+        let b: Points<f64, Ix2> = rhs.into();
+        Points(self.inner().dot(b.inner()))
+    }
+}
+
+impl Dot<Points<MyFloat, Ix1>> for Points<f64, Ix2> {
+    type Output = Points<f64, Ix1>;
+
+    fn dot(&self, rhs: &Points<MyFloat, Ix1>) -> Self::Output {
+        let b: Points<f64, Ix1> = rhs.into();
+        Points(self.inner().dot(b.inner()))
+    }
+}
+
+// Traits
 impl Default for Points<f64, Ix2> {
     fn default() -> Self {
         Points::<f64, Ix2>::zeros((0, 0))
@@ -1405,9 +1461,21 @@ impl From<Array2<f64>> for Points<f64, Ix2> {
     }
 }
 
+impl From<Array2<MyFloat>> for Points<f64, Ix2> {
+    fn from(array: Array2<MyFloat>) -> Self {
+        Points(array).into()
+    }
+}
+
 impl From<ArrayView2<'_, f64>> for Points<f64, Ix2> {
     fn from(array: ArrayView2<f64>) -> Self {
         Points(array.to_owned())
+    }
+}
+
+impl From<ArrayView2<'_, MyFloat>> for Points<f64, Ix2> {
+    fn from(array: ArrayView2<MyFloat>) -> Self {
+        Points(array.to_owned()).into()
     }
 }
 
@@ -1423,9 +1491,9 @@ impl From<Vec<Vec<f64>>> for Points<f64, Ix2> {
     }
 }
 
-impl From<Vec<Vec<(f64, f64)>>> for Points<f64, Ix2> {
-    fn from(data: Vec<Vec<(f64, f64)>>) -> Self {
-        Points::<f64, Ix2>::from_vec_complex(data).expect("Invalid matrix data")
+impl From<&Points<f64, Ix2>> for Points<f64, Ix2> {
+    fn from(point: &Points<f64, Ix2>) -> Self {
+        point.clone()
     }
 }
 
@@ -1510,26 +1578,6 @@ mod points_ix2_f64_tests {
     }
 
     #[test]
-    fn test_from_vec_c64() {
-        let data = vec![vec![(1.0, 2.0), (3.0, 4.0)], vec![(5.0, 6.0), (7.0, 8.0)]];
-        let matrix = Points::<f64, Ix2>::from_vec_c64(data).unwrap();
-
-        assert_eq!(matrix.shape(), (2, 2));
-        assert_eq!(matrix[[0, 0]], 1.0);
-        assert_eq!(matrix[[1, 1]], 7.0);
-    }
-
-    #[test]
-    fn test_from_vec_complex() {
-        let data = vec![vec![(1.0, 2.0), (3.0, 4.0)], vec![(5.0, 6.0), (7.0, 8.0)]];
-        let matrix = Points::<f64, Ix2>::from_vec_complex(data).unwrap();
-
-        assert_eq!(matrix.shape(), (2, 2));
-        assert_eq!(matrix[[0, 0]], 1.0);
-        assert_eq!(matrix[[1, 1]], 7.0);
-    }
-
-    #[test]
     fn test_arithmetic() {
         let a = Points::<f64, Ix2>::from_vec_float(vec![vec![1.0, 2.0], vec![3.0, 4.0]]).unwrap();
 
@@ -1591,11 +1639,8 @@ mod points_ix2_f64_tests {
 
     #[test]
     fn test_conjugate_transpose() {
-        let matrix = Points::<f64, Ix2>::from_vec_complex(vec![
-            vec![(1.0, 2.0), (3.0, 4.0)],
-            vec![(5.0, 6.0), (7.0, 8.0)],
-        ])
-        .unwrap();
+        let matrix =
+            Points::<f64, Ix2>::from_vec_float(vec![vec![1.0, 3.0], vec![5.0, 7.0]]).unwrap();
 
         let conj_t = matrix.conj_transpose();
         assert_eq!(conj_t.shape(), (2, 2));

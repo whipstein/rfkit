@@ -1,10 +1,10 @@
 use crate::{
     element::{Elem, ElemType, Lumped, Q, QMode},
-    frequency::Frequency,
+    frequency::{FreqArray, Frequency, new_frequency},
     point,
     pts::{Points, Pts},
     scale::Scale,
-    unit::{Unit, UnitVal, Unitized},
+    unit::{Unit, UnitValue, Unitized},
 };
 use ndarray::{IntoDimension, prelude::*};
 use num::complex::{Complex, Complex64, c64};
@@ -12,7 +12,7 @@ use num::complex::{Complex, Complex64, c64};
 #[derive(Clone, Debug, PartialEq)]
 pub struct Inductor {
     id: String,
-    ind: UnitVal,
+    ind: UnitValue,
     q: Option<Q>,
     nodes: [usize; 2],
     c: Points<Complex64, Ix2>,
@@ -22,7 +22,7 @@ pub struct Inductor {
 impl Inductor {
     pub fn new(
         id: String,
-        ind: UnitVal,
+        ind: UnitValue,
         q: Option<Q>,
         nodes: [usize; 2],
         z0: Complex64,
@@ -58,7 +58,7 @@ impl Default for Inductor {
     fn default() -> Self {
         Self {
             id: "L0".to_string(),
-            ind: *UnitVal::default().set_unit(Unit::Henry),
+            ind: *UnitValue::default().set_unit(Unit::Henry),
             q: None,
             nodes: [1, 2],
             c: point![
@@ -152,7 +152,7 @@ impl Elem for Inductor {
     }
 
     fn z_at(&self, freq: &Frequency, i: usize) -> Complex64 {
-        let freq_pt = Frequency::new(array![freq.freq(i)], freq.scale());
+        let freq_pt = new_frequency(array![freq.freq(i)], freq.scale());
         self.z(&freq_pt).into()
     }
 
@@ -176,7 +176,7 @@ impl Unitized for Inductor {
         self.ind.val_scaled()
     }
 
-    fn unitval(&self) -> UnitVal {
+    fn unitval(&self) -> UnitValue {
         self.ind.clone()
     }
 
@@ -192,7 +192,7 @@ impl Unitized for Inductor {
         self.ind.set_val_scaled(val);
     }
 
-    fn set_unitval(&mut self, val: UnitVal) {
+    fn set_unitval(&mut self, val: UnitValue) {
         self.ind = val;
     }
 
@@ -208,7 +208,7 @@ impl Unitized for Inductor {
 #[derive(Clone)]
 pub struct InductorBuilder {
     id: String,
-    ind: UnitVal,
+    ind: UnitValue,
     q: Option<Q>,
     nodes: [usize; 2],
     z0: Complex64,
@@ -224,7 +224,7 @@ impl InductorBuilder {
         self
     }
 
-    pub fn ind(mut self, ind: UnitVal) -> Self {
+    pub fn ind(mut self, ind: UnitValue) -> Self {
         self.ind = ind;
         self
     }
@@ -275,7 +275,7 @@ impl Default for InductorBuilder {
     fn default() -> Self {
         Self {
             id: "L0".to_string(),
-            ind: *UnitVal::default().set_unit(Unit::Henry),
+            ind: *UnitValue::default().set_unit(Unit::Henry),
             q: None,
             nodes: [1, 2],
             z0: c64(50.0, 0.0),
@@ -288,7 +288,7 @@ mod element_inductor_tests {
     use super::*;
     use crate::{
         unit::UnitValBuilder,
-        util::{comp_c64, comp_point_c64},
+        util::{comp_num, comp_pts_ix2},
     };
     use float_cmp::*;
     use std::f64::consts::PI;
@@ -306,7 +306,7 @@ mod element_inductor_tests {
     #[test]
     fn element_inductor() {
         let freq_unitval = UnitValBuilder::new().val_scaled(1.0, Scale::Giga).build();
-        let freq = Frequency::from_unitval(&freq_unitval);
+        let freq = new_frequency(array![freq_unitval.val()], freq_unitval.scale());
         let val_scaled = 1.0;
         let scale = Scale::Nano;
         let unitval = UnitValBuilder::new().val_scaled(val_scaled, scale).build();
@@ -333,13 +333,8 @@ mod element_inductor_tests {
         assert_eq!(&exemplar.id(), &calc.id());
         assert_eq!(&exemplar.scale(), &calc.scale());
         assert_eq!(&Unit::Henry, &calc.unit());
-        comp_point_c64(
-            exemplar.c(&freq).view(),
-            calc.c(&freq).view(),
-            margin,
-            "calc.c()",
-        );
-        comp_c64(&exemplar_z.into(), &calc.z(&freq), margin, "calc.z()", "0");
+        comp_pts_ix2(&exemplar.c(&freq), &calc.c(&freq), margin, "calc.c()");
+        comp_num(&exemplar_z.into(), &calc.z(&freq), margin, "calc.z()", "0");
     }
 
     mod inductor_tests {
@@ -355,7 +350,7 @@ mod element_inductor_tests {
 
         #[test]
         fn test_inductor_impedance_calculation() {
-            let freq = Frequency::new(array![1e9], Scale::Base);
+            let freq = new_frequency(array![1e9], Scale::Base);
             let ind = InductorBuilder::new().val_scaled(1.0, Scale::Nano).build();
 
             let z = ind.z(&freq);
@@ -368,7 +363,7 @@ mod element_inductor_tests {
         #[test]
         fn test_inductor_frequency_proportional() {
             let freqs = array![1e9, 2e9, 5e9];
-            let freq = Frequency::new(freqs.clone(), Scale::Base);
+            let freq = new_frequency(freqs.clone(), Scale::Base);
             let ind = InductorBuilder::new().val_scaled(1.0, Scale::Nano).build();
 
             let z1 = ind.z_at(&freq, 0);
@@ -380,7 +375,7 @@ mod element_inductor_tests {
 
         #[test]
         fn test_inductor_c_matrix() {
-            let freq = Frequency::new(array![1e9], Scale::Base);
+            let freq = new_frequency(array![1e9], Scale::Base);
             let ind = InductorBuilder::new().build();
             let c_matrix = ind.c(&freq);
 
@@ -406,7 +401,7 @@ mod element_inductor_tests {
 
         #[test]
         fn test_inductor_various_values() {
-            let freq = Frequency::new(array![1e9], Scale::Base);
+            let freq = new_frequency(array![1e9], Scale::Base);
             let test_values = vec![
                 (1.0, Scale::Nano),
                 (10.0, Scale::Nano),
@@ -433,7 +428,7 @@ mod element_inductor_tests {
 
         #[test]
         fn test_inductor_net_matrix() {
-            let freq = Frequency::new(array![1e9, 5e9], Scale::Base);
+            let freq = new_frequency(array![1e9, 5e9], Scale::Base);
             let ind = InductorBuilder::new().build();
             let net = ind.net(&freq);
 

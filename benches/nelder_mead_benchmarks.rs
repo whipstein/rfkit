@@ -1,583 +1,566 @@
-// File: benches/nelder_mead_benchmarks.rs
-
-use criterion::{BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main};
+use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use ndarray::prelude::*;
-use std::time::Duration;
-
-// Import your crate modules - adjust the crate name as needed
-use rfkit::minimize::{
-    F1dim, MinimizerOptions, MultiDimFn, NelderMead, NelderMeadBounded, NelderMeadOptions,
+use rfkit::{
+    minimize::{
+        Minimizer, MultiDimFn, NelderMead, NelderMeadBounded, NelderMeadBoundedOptions,
+        NelderMeadOptions, Powell,
+    },
+    pts::{Points, Points1, Pts},
 };
-use rfkit::prelude::*;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-enum TestType {
-    NelderMead,
-    NelderMeadBounded,
+// ============================================================================
+// Standard Test Functions for Optimization Benchmarks
+// ============================================================================
+
+/// Sphere function: f(x) = sum(x_i^2)
+/// Global minimum: f(0, 0, ..., 0) = 0
+fn sphere(x: &Points1<f64>) -> f64 {
+    x.iter().map(|xi| xi * xi).sum()
 }
 
-impl TestType {
-    pub fn name(&self) -> &'static str {
-        match self {
-            TestType::NelderMead => "NelderMead",
-            TestType::NelderMeadBounded => "NelderMeadBounded",
-        }
+/// Rosenbrock function: f(x) = sum_{i=0}^{n-2} [100(x_{i+1} - x_i^2)^2 + (1 - x_i)^2]
+/// Global minimum: f(1, 1, ..., 1) = 0
+fn rosenbrock(x: &Points1<f64>) -> f64 {
+    let mut sum = 0.0;
+    for i in 0..x.len() - 1 {
+        let term1 = x[i + 1] - x[i] * x[i];
+        let term2 = 1.0 - x[i];
+        sum += 100.0 * term1 * term1 + term2 * term2;
     }
-
-    pub fn all_types() -> Vec<TestType> {
-        vec![TestType::NelderMead, TestType::NelderMeadBounded]
-    }
-
-    pub fn _supports_bounds(&self) -> bool {
-        matches!(self, TestType::NelderMeadBounded)
-    }
+    sum
 }
 
-#[derive(Clone)]
-struct TestProblem {
-    name: String,
-    function: F1dim<f64>,
-    x0: Array1<f64>,
-    scale: Array1<f64>,
-    lb: Array1<f64>,
-    ub: Array1<f64>,
-    expected_min: f64,
-    dimensions: usize,
-}
-
-// Test Functions
-fn sphere_function() -> F1dim<f64> {
-    F1dim::new(MultiDimFn::new(move |x: ArrayView1<f64>| {
-        x.iter().map(|xi| xi * xi).sum()
-    }))
-}
-
-fn rosenbrock_function() -> F1dim<f64> {
-    F1dim::new(MultiDimFn::new(|x: ArrayView1<f64>| {
-        if x.len() < 2 {
-            return 0.0;
-        }
-
-        let mut sum = 0.0;
-        for i in 0..x.len() - 1 {
-            let term1 = 100.0 * (x[i + 1] - x[i] * x[i]) * (x[i + 1] - x[i] * x[i]);
-            let term2 = (1.0 - x[i]) * (1.0 - x[i]);
-            sum += term1 + term2;
-        }
-        sum
-    }))
-}
-
-fn rastrigin_function() -> F1dim<f64> {
-    F1dim::new(MultiDimFn::new(|x: ArrayView1<f64>| {
-        let a = 10.0;
-        let n = x.len() as f64;
-        let pi = std::f64::consts::PI;
-
-        let mut sum = 0.0;
-        for xi in x.iter() {
-            sum += xi * xi - a * (2.0 * pi * xi).cos();
-        }
-        a * n + sum
-    }))
-}
-
-fn ackley_function() -> F1dim<f64> {
-    F1dim::new(MultiDimFn::new(|x: ArrayView1<f64>| {
-        let a = 20.0;
-        let b = 0.2;
-        let c = 2.0 * std::f64::consts::PI;
-        let n = x.len() as f64;
-        let e = std::f64::consts::E;
-
-        let sum1: f64 = x.iter().map(|&xi| xi * xi).sum();
-        let sum2: f64 = x.iter().map(|&xi| (c * xi).cos()).sum();
-
-        -a * (-b * (sum1 / n).sqrt()).exp() - (sum2 / n).exp() + a + e
-    }))
-}
-
-fn himmelblau_function() -> F1dim<f64> {
-    F1dim::new(MultiDimFn::new(|x: ArrayView1<f64>| {
-        if x.len() != 2 {
-            // Extend to n-dimensions by summing pairs
-            let mut result = 0.0;
-            let mut i = 0;
-            while i < x.len() - 1 {
-                if i + 1 < x.len() {
-                    let term1 = (x[i] * x[i] + x[i + 1] - 11.0) * (x[i] * x[i] + x[i + 1] - 11.0);
-                    let term2 =
-                        (x[i] + x[i + 1] * x[i + 1] - 7.0) * (x[i] + x[i + 1] * x[i + 1] - 7.0);
-                    result += term1 + term2;
-                }
-                i += 2;
-            }
-            result
-        } else {
-            let term1 = (x[0] * x[0] + x[1] - 11.0) * (x[0] * x[0] + x[1] - 11.0);
-            let term2 = (x[0] + x[1] * x[1] - 7.0) * (x[0] + x[1] * x[1] - 7.0);
-            term1 + term2
-        }
-    }))
-}
-
-fn setup_test_problems() -> Vec<TestProblem> {
-    vec![
-        // 2D Problems
-        TestProblem {
-            name: "sphere_2d".to_string(),
-            function: sphere_function(),
-            x0: array![1.5, 1.5],
-            scale: array![1.0, 1.0],
-            lb: array![-5.0, -5.0],
-            ub: array![5.0, 5.0],
-            expected_min: 0.0,
-            dimensions: 2,
-        },
-        TestProblem {
-            name: "rosenbrock_2d".to_string(),
-            function: rosenbrock_function(),
-            x0: array![-1.2, 1.0],
-            scale: array![1.0, 1.0],
-            lb: array![-2.0, -2.0],
-            ub: array![2.0, 2.0],
-            expected_min: 0.0,
-            dimensions: 2,
-        },
-        TestProblem {
-            name: "himmelblau_2d".to_string(),
-            function: himmelblau_function(),
-            x0: array![0.0, 0.0],
-            scale: array![1.0, 1.0],
-            lb: array![-5.0, -5.0],
-            ub: array![5.0, 5.0],
-            expected_min: 0.0,
-            dimensions: 2,
-        },
-        // 3D Problems
-        TestProblem {
-            name: "sphere_3d".to_string(),
-            function: sphere_function(),
-            x0: Array1::from_elem(3, 0.5),
-            scale: Array1::ones(3),
-            lb: Array1::from_elem(3, -3.0),
-            ub: Array1::from_elem(3, 3.0),
-            expected_min: 0.0,
-            dimensions: 3,
-        },
-        // 4D Problems
-        TestProblem {
-            name: "sphere_4d".to_string(),
-            function: sphere_function(),
-            x0: Array1::from_elem(4, 0.5),
-            scale: Array1::ones(4),
-            lb: Array1::from_elem(4, -3.0),
-            ub: Array1::from_elem(4, 3.0),
-            expected_min: 0.0,
-            dimensions: 4,
-        },
-        // 5D Problems
-        TestProblem {
-            name: "sphere_5d".to_string(),
-            function: sphere_function(),
-            x0: Array1::from_elem(5, 0.5),
-            scale: Array1::ones(5),
-            lb: Array1::from_elem(5, -3.0),
-            ub: Array1::from_elem(5, 3.0),
-            expected_min: 0.0,
-            dimensions: 5,
-        },
-        TestProblem {
-            name: "rastrigin_5d".to_string(),
-            function: rastrigin_function(),
-            x0: Array1::from_elem(5, 0.1),
-            scale: Array1::ones(5),
-            lb: Array1::from_elem(5, -5.12),
-            ub: Array1::from_elem(5, 5.12),
-            expected_min: 0.0,
-            dimensions: 5,
-        },
-        // 6D Problems
-        TestProblem {
-            name: "sphere_6d".to_string(),
-            function: sphere_function(),
-            x0: Array1::from_elem(6, 0.5),
-            scale: Array1::ones(6),
-            lb: Array1::from_elem(6, -3.0),
-            ub: Array1::from_elem(6, 3.0),
-            expected_min: 0.0,
-            dimensions: 6,
-        },
-        // 7D Problems
-        TestProblem {
-            name: "sphere_7d".to_string(),
-            function: sphere_function(),
-            x0: Array1::from_elem(7, 0.5),
-            scale: Array1::ones(7),
-            lb: Array1::from_elem(7, -3.0),
-            ub: Array1::from_elem(7, 3.0),
-            expected_min: 0.0,
-            dimensions: 7,
-        },
-        // 8D Problems
-        TestProblem {
-            name: "sphere_8d".to_string(),
-            function: sphere_function(),
-            x0: Array1::from_elem(8, 0.5),
-            scale: Array1::ones(8),
-            lb: Array1::from_elem(8, -3.0),
-            ub: Array1::from_elem(8, 3.0),
-            expected_min: 0.0,
-            dimensions: 8,
-        },
-        // 9D Problems
-        TestProblem {
-            name: "sphere_9d".to_string(),
-            function: sphere_function(),
-            x0: Array1::from_elem(9, 0.5),
-            scale: Array1::ones(9),
-            lb: Array1::from_elem(9, -3.0),
-            ub: Array1::from_elem(9, 3.0),
-            expected_min: 0.0,
-            dimensions: 9,
-        },
-        // 10D Problems
-        TestProblem {
-            name: "sphere_10d".to_string(),
-            function: sphere_function(),
-            x0: Array1::from_elem(10, 0.3),
-            scale: Array1::ones(10),
-            lb: Array1::from_elem(10, -2.0),
-            ub: Array1::from_elem(10, 2.0),
-            expected_min: 0.0,
-            dimensions: 10,
-        },
-        TestProblem {
-            name: "ackley_10d".to_string(),
-            function: ackley_function(),
-            x0: Array1::from_elem(10, 0.1),
-            scale: Array1::ones(10),
-            lb: Array1::from_elem(10, -32.768),
-            ub: Array1::from_elem(10, 32.768),
-            expected_min: 0.0,
-            dimensions: 10,
-        },
-    ]
-}
-
-fn run_optimization_benchmark(
-    problem: &TestProblem,
-    category: TestType,
-    _iterations: usize,
-) -> (f64, f64, usize, f64) {
-    // Add small random perturbation to starting point
-    let mut x_start = problem.x0.clone();
-    for i in 0..x_start.len() {
-        x_start[i] += fastrand::f64() * 0.2 - 0.1; // Random perturbation ±0.1
-        x_start[i] = x_start[i].max(problem.lb[i] + 1e-6);
-        x_start[i] = x_start[i].min(problem.ub[i] - 1e-6);
-    }
-
-    // Create boxed optimizer for dynamic dispatch
-    let mut solver: Box<dyn Minimizer<Array1<f64>, f64>> = match category {
-        TestType::NelderMead => Box::new(NelderMead::new(
-            x_start.clone(),
-            problem.scale.clone(),
-            problem.function.clone(),
-        )),
-        TestType::NelderMeadBounded => Box::new(NelderMeadBounded::new(
-            x_start.clone(),
-            problem.scale.clone(),
-            problem.lb.clone(),
-            problem.ub.clone(),
-            problem.function.clone(),
-        )),
-    };
-
-    let options: Box<dyn MinimizerOptions<Array1<f64>, f64>> = Box::new(NelderMeadOptions::new(
-        x_start.clone(),
-        Some(problem.scale.clone()),
-        Some(1),
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-    ));
-    let result = solver.minimize(options).expect("Optimization failed");
-
-    // Calculate final function value
-    let final_value = result.xmin()[0];
-    let error = (final_value - problem.expected_min).abs();
-    let iterations = result.iters();
-    let tolerance = result.tolerance();
-
-    (final_value, error, iterations, tolerance)
-}
-
-// Benchmark functions for each iteration count
-fn bench_iterations_1(c: &mut Criterion) {
-    let problems = setup_test_problems();
-
-    let mut group = c.benchmark_group("nelder_mead_1_iteration");
-    group.measurement_time(Duration::from_secs(10));
-    group.sample_size(20);
-
-    for problem in &problems {
-        for category in TestType::all_types() {
-            group.throughput(Throughput::Elements(problem.dimensions as u64));
-            group.bench_with_input(
-                BenchmarkId::new(format!("optimization_{}", category.name()), &problem.name),
-                &(problem, category),
-                |b, (prob, cat)| {
-                    b.iter(|| {
-                        let (final_value, error, iterations, tolerance) =
-                            run_optimization_benchmark(
-                                black_box(prob),
-                                black_box(*cat),
-                                black_box(1),
-                            );
-                        black_box((final_value, error, iterations, tolerance))
-                    });
-                },
-            );
-        }
-    }
-    group.finish();
-}
-
-fn bench_iterations_10(c: &mut Criterion) {
-    let problems = setup_test_problems();
-
-    let mut group = c.benchmark_group("nelder_mead_10_iterations");
-    group.measurement_time(Duration::from_secs(20));
-    group.sample_size(20);
-
-    for problem in &problems {
-        for category in TestType::all_types() {
-            group.throughput(Throughput::Elements(problem.dimensions as u64));
-            group.bench_with_input(
-                BenchmarkId::new(format!("optimization_{}", category.name()), &problem.name),
-                &(problem, category),
-                |b, (prob, cat)| {
-                    b.iter(|| {
-                        let (final_value, error, iterations, tolerance) =
-                            run_optimization_benchmark(
-                                black_box(prob),
-                                black_box(*cat),
-                                black_box(10),
-                            );
-                        black_box((final_value, error, iterations, tolerance))
-                    });
-                },
-            );
-        }
-    }
-    group.finish();
-}
-
-fn bench_iterations_100(c: &mut Criterion) {
-    let problems = setup_test_problems();
-
-    let mut group = c.benchmark_group("nelder_mead_100_iterations");
-    group.measurement_time(Duration::from_secs(60));
-    group.sample_size(20);
-
-    for problem in &problems {
-        for category in TestType::all_types() {
-            group.throughput(Throughput::Elements(problem.dimensions as u64));
-            group.bench_with_input(
-                BenchmarkId::new(format!("optimization_{}", category.name()), &problem.name),
-                &(problem, category),
-                |b, (prob, cat)| {
-                    b.iter(|| {
-                        let (final_value, error, iterations, tolerance) =
-                            run_optimization_benchmark(
-                                black_box(prob),
-                                black_box(*cat),
-                                black_box(100),
-                            );
-                        black_box((final_value, error, iterations, tolerance))
-                    });
-                },
-            );
-        }
-    }
-    group.finish();
-}
-
-fn bench_iterations_1000(c: &mut Criterion) {
-    let problems = setup_test_problems();
-
-    let mut group = c.benchmark_group("nelder_mead_1000_iterations");
-    group.measurement_time(Duration::from_secs(600));
-    group.sample_size(20);
-
-    for problem in &problems {
-        for category in TestType::all_types() {
-            group.throughput(Throughput::Elements(problem.dimensions as u64));
-            group.bench_with_input(
-                BenchmarkId::new(format!("optimization_{}", category.name()), &problem.name),
-                &(problem, category),
-                |b, (prob, cat)| {
-                    b.iter(|| {
-                        let (final_value, error, iterations, tolerance) =
-                            run_optimization_benchmark(
-                                black_box(prob),
-                                black_box(*cat),
-                                black_box(1000),
-                            );
-                        black_box((final_value, error, iterations, tolerance))
-                    });
-                },
-            );
-        }
-    }
-    group.finish();
-}
-
-// Scaling benchmark - compare different iteration counts on same problem
-fn bench_scaling_analysis(c: &mut Criterion) {
-    let problems = setup_test_problems();
-
-    let mut group = c.benchmark_group("nelder_mead_scaling");
-    group.measurement_time(Duration::from_secs(60));
-    group.sample_size(20);
-
-    // Test with sphere function in different dimensions
-    let sphere_problems: Vec<_> = problems
+/// Rastrigin function: f(x) = 10n + sum_{i=1}^{n} [x_i^2 - 10*cos(2*pi*x_i)]
+/// Global minimum: f(0, 0, ..., 0) = 0
+fn rastrigin(x: &Points1<f64>) -> f64 {
+    let n = x.len() as f64;
+    let sum: f64 = x
         .iter()
-        .filter(|p| p.name.starts_with("sphere"))
-        .collect();
+        .map(|xi| xi * xi - 10.0 * (2.0 * std::f64::consts::PI * xi).cos())
+        .sum();
+    10.0 * n + sum
+}
 
-    for problem in sphere_problems {
-        for category in TestType::all_types() {
-            for &iterations in &[1, 10, 100] {
-                group.bench_with_input(
-                    BenchmarkId::new(
-                        format!("{}_{}_{}_iter", problem.name, category.name(), iterations),
-                        problem.dimensions,
-                    ),
-                    &(problem, category, iterations),
-                    |b, (prob, cat, iter_count)| {
-                        b.iter(|| {
-                            let (final_value, error, iterations, tolerance) =
-                                run_optimization_benchmark(
-                                    black_box(prob),
-                                    black_box(*cat),
-                                    black_box(*iter_count),
-                                );
-                            black_box((final_value, error, iterations, tolerance))
-                        });
-                    },
+/// Ackley function (2D): A challenging function with many local minima
+/// Global minimum: f(0, 0) = 0
+fn ackley(x: &Points1<f64>) -> f64 {
+    let n = x.len() as f64;
+    let sum1: f64 = x.iter().map(|xi| xi * xi).sum();
+    let sum2: f64 = x
+        .iter()
+        .map(|xi| (2.0 * std::f64::consts::PI * xi).cos())
+        .sum();
+
+    -20.0 * (-0.2 * (sum1 / n).sqrt()).exp() - (sum2 / n).exp() + 20.0 + std::f64::consts::E
+}
+
+/// Himmelblau's function (2D): f(x,y) = (x^2 + y - 11)^2 + (x + y^2 - 7)^2
+/// Has four equal minima
+fn himmelblau(x: &Points1<f64>) -> f64 {
+    let x0 = x[0];
+    let x1 = x[1];
+    (x0 * x0 + x1 - 11.0).powi(2) + (x0 + x1 * x1 - 7.0).powi(2)
+}
+
+/// Beale's function (2D): Tests optimizer behavior in narrow curved valley
+/// Global minimum: f(3, 0.5) = 0
+fn beale(x: &Points1<f64>) -> f64 {
+    let x0 = x[0];
+    let x1 = x[1];
+    (1.5 - x0 + x0 * x1).powi(2)
+        + (2.25 - x0 + x0 * x1 * x1).powi(2)
+        + (2.625 - x0 + x0 * x1 * x1 * x1).powi(2)
+}
+
+/// Booth's function (2D): f(x,y) = (x + 2y - 7)^2 + (2x + y - 5)^2
+/// Global minimum: f(1, 3) = 0
+fn booth(x: &Points1<f64>) -> f64 {
+    let x0 = x[0];
+    let x1 = x[1];
+    (x0 + 2.0 * x1 - 7.0).powi(2) + (2.0 * x0 + x1 - 5.0).powi(2)
+}
+
+// ============================================================================
+// Nelder-Mead Benchmarks
+// ============================================================================
+
+fn bench_nelder_mead_sphere(c: &mut Criterion) {
+    let mut group = c.benchmark_group("nelder_mead/sphere");
+
+    for &dim in &[2, 5, 10, 20] {
+        let init = Points(Array1::from_elem(dim, 5.0));
+        let scale = Points1::ones(dim);
+
+        group.bench_with_input(BenchmarkId::new("dim", dim), &dim, |b, _| {
+            b.iter(|| {
+                let options = NelderMeadOptions::new(
+                    &init,
+                    Some(&scale),
+                    Some(500),
+                    Some(1e-8),
+                    None,
+                    None,
+                    None,
+                    None,
+                    Some(0),
                 );
-            }
-        }
+                let objective = MultiDimFn::new(sphere);
+                let mut minimizer = NelderMead::new(objective);
+                black_box(minimizer.minimize(&options))
+            })
+        });
     }
+
     group.finish();
 }
 
-// Convergence quality benchmark - measure final error vs iterations
-fn bench_convergence_quality(c: &mut Criterion) {
-    let problems = setup_test_problems();
+fn bench_nelder_mead_rosenbrock(c: &mut Criterion) {
+    let mut group = c.benchmark_group("nelder_mead/rosenbrock");
 
-    let mut group = c.benchmark_group("nelder_mead_convergence");
-    group.measurement_time(Duration::from_secs(60));
-    group.sample_size(20);
+    for &dim in &[2, 5, 10] {
+        let init = Points(Array1::from_elem(dim, 0.0));
+        let scale = Points1::ones(dim);
 
-    // Test convergence quality for each problem type
-    for problem in &problems {
-        for category in TestType::all_types() {
-            for &iterations in &[1, 10, 100] {
-                group.bench_with_input(
-                    BenchmarkId::new(
-                        format!(
-                            "convergence_{}_{}_{}_iter",
-                            problem.name,
-                            category.name(),
-                            iterations
-                        ),
-                        iterations,
-                    ),
-                    &(problem, category, iterations),
-                    |b, (prob, cat, iter_count)| {
-                        b.iter_custom(|iters| {
-                            let start = std::time::Instant::now();
-                            let mut total_error = 0.0;
-
-                            for _ in 0..iters {
-                                let (_, error, _, _) = run_optimization_benchmark(
-                                    black_box(prob),
-                                    black_box(*cat),
-                                    black_box(*iter_count),
-                                );
-                                total_error += error;
-                            }
-
-                            // Store final error in a way that can be accessed later
-                            let _avg_error = total_error / iters as f64;
-                            black_box(_avg_error);
-
-                            start.elapsed()
-                        });
-                    },
+        group.bench_with_input(BenchmarkId::new("dim", dim), &dim, |b, _| {
+            b.iter(|| {
+                let options = NelderMeadOptions::new(
+                    &init,
+                    Some(&scale),
+                    Some(2000),
+                    Some(1e-8),
+                    None,
+                    None,
+                    None,
+                    None,
+                    Some(0),
                 );
-            }
-        }
+                let objective = MultiDimFn::new(rosenbrock);
+                let mut minimizer = NelderMead::new(objective);
+                black_box(minimizer.minimize(&options))
+            })
+        });
     }
+
     group.finish();
 }
 
-// Function dimension scaling benchmark
-fn bench_dimension_scaling(c: &mut Criterion) {
-    let mut group = c.benchmark_group("nelder_mead_dimensions");
-    group.measurement_time(Duration::from_secs(15));
-    group.sample_size(12);
+fn bench_nelder_mead_2d_functions(c: &mut Criterion) {
+    let mut group = c.benchmark_group("nelder_mead/2d_functions");
 
-    for category in TestType::all_types() {
-        // Create sphere problems with varying dimensions
-        for &dim in &[2, 5, 10, 20] {
-            let problem = TestProblem {
-                name: format!("sphere_{}d", dim),
-                function: sphere_function(),
-                x0: Array1::from_elem(dim, 0.5),
-                scale: Array1::ones(dim),
-                lb: Array1::from_elem(dim, -3.0),
-                ub: Array1::from_elem(dim, 3.0),
-                expected_min: 0.0,
-                dimensions: dim,
-            };
+    let init = array![0.0, 0.0].into();
+    let scale = Points1::ones(2);
 
-            group.throughput(Throughput::Elements(dim as u64));
-            group.bench_with_input(
-                BenchmarkId::new(format!("sphere_{}_10_iter", category.name()), dim),
-                &(problem, category),
-                |b, (prob, cat)| {
-                    b.iter(|| {
-                        let (final_value, error, iterations, tolerance) =
-                            run_optimization_benchmark(
-                                black_box(prob),
-                                black_box(*cat),
-                                black_box(10),
-                            );
-                        black_box((final_value, error, iterations, tolerance))
-                    });
-                },
+    group.bench_function("himmelblau", |b| {
+        b.iter(|| {
+            let options = NelderMeadOptions::new(
+                &init,
+                Some(&scale),
+                Some(500),
+                Some(1e-8),
+                None,
+                None,
+                None,
+                None,
+                Some(0),
             );
-        }
+            let objective = MultiDimFn::new(himmelblau);
+            let mut minimizer = NelderMead::new(objective);
+            black_box(minimizer.minimize(&options))
+        })
+    });
+
+    group.bench_function("beale", |b| {
+        let init = array![0.0, 0.0].into();
+        b.iter(|| {
+            let options = NelderMeadOptions::new(
+                &init,
+                Some(&scale),
+                Some(500),
+                Some(1e-8),
+                None,
+                None,
+                None,
+                None,
+                Some(0),
+            );
+            let objective = MultiDimFn::new(beale);
+            let mut minimizer = NelderMead::new(objective);
+            black_box(minimizer.minimize(&options))
+        })
+    });
+
+    group.bench_function("booth", |b| {
+        let init = array![0.0, 0.0].into();
+        b.iter(|| {
+            let options = NelderMeadOptions::new(
+                &init,
+                Some(&scale),
+                Some(500),
+                Some(1e-8),
+                None,
+                None,
+                None,
+                None,
+                Some(0),
+            );
+            let objective = MultiDimFn::new(booth);
+            let mut minimizer = NelderMead::new(objective);
+            black_box(minimizer.minimize(&options))
+        })
+    });
+
+    group.bench_function("ackley", |b| {
+        let init = array![2.0, 2.0].into();
+        b.iter(|| {
+            let options = NelderMeadOptions::new(
+                &init,
+                Some(&scale),
+                Some(500),
+                Some(1e-8),
+                None,
+                None,
+                None,
+                None,
+                Some(0),
+            );
+            let objective = MultiDimFn::new(ackley);
+            let mut minimizer = NelderMead::new(objective);
+            black_box(minimizer.minimize(&options))
+        })
+    });
+
+    group.finish();
+}
+
+// ============================================================================
+// Nelder-Mead Bounded Benchmarks
+// ============================================================================
+
+fn bench_nelder_mead_bounded_sphere(c: &mut Criterion) {
+    let mut group = c.benchmark_group("nelder_mead_bounded/sphere");
+
+    for &dim in &[2, 5, 10, 20] {
+        let init = Points(Array1::from_elem(dim, 5.0));
+        let scale = Points1::ones(dim);
+        let lb = Points(Array1::from_elem(dim, -10.0));
+        let ub = Points(Array1::from_elem(dim, 10.0));
+
+        group.bench_with_input(BenchmarkId::new("dim", dim), &dim, |b, _| {
+            b.iter(|| {
+                let options = NelderMeadBoundedOptions::new(
+                    &init,
+                    Some(&scale),
+                    Some(&lb),
+                    Some(&ub),
+                    Some(500),
+                    Some(1e-8),
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    Some(0),
+                );
+                let objective = MultiDimFn::new(sphere);
+                let mut minimizer = NelderMeadBounded::new(objective);
+                black_box(minimizer.minimize(&options))
+            })
+        });
     }
+
+    group.finish();
+}
+
+fn bench_nelder_mead_bounded_rosenbrock(c: &mut Criterion) {
+    let mut group = c.benchmark_group("nelder_mead_bounded/rosenbrock");
+
+    for &dim in &[2, 5, 10] {
+        let init = Points(Array1::from_elem(dim, 0.0));
+        let scale = Points1::ones(dim);
+        let lb = Points(Array1::from_elem(dim, -5.0));
+        let ub = Points(Array1::from_elem(dim, 5.0));
+
+        group.bench_with_input(BenchmarkId::new("dim", dim), &dim, |b, _| {
+            b.iter(|| {
+                let options = NelderMeadBoundedOptions::new(
+                    &init,
+                    Some(&scale),
+                    Some(&lb),
+                    Some(&ub),
+                    Some(2000),
+                    Some(1e-8),
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    Some(0),
+                );
+                let objective = MultiDimFn::new(rosenbrock);
+                let mut minimizer = NelderMeadBounded::new(objective);
+                black_box(minimizer.minimize(&options))
+            })
+        });
+    }
+
+    group.finish();
+}
+
+fn bench_nelder_mead_bounded_with_anti_stagnation(c: &mut Criterion) {
+    let mut group = c.benchmark_group("nelder_mead_bounded/anti_stagnation");
+
+    let dim = 5;
+    let init = Points(Array1::from_elem(dim, 2.0));
+    let scale = Points1::ones(dim);
+    let lb = Points(Array1::from_elem(dim, -5.12));
+    let ub = Points(Array1::from_elem(dim, 5.12));
+
+    group.bench_function("rastrigin_basic", |b| {
+        b.iter(|| {
+            let options = NelderMeadBoundedOptions::new(
+                &init,
+                Some(&scale),
+                Some(&lb),
+                Some(&ub),
+                Some(1000),
+                Some(1e-8),
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(0),
+            );
+            let objective = MultiDimFn::new(rastrigin);
+            let mut minimizer = NelderMeadBounded::new(objective);
+            black_box(minimizer.minimize(&options))
+        })
+    });
+
+    group.bench_function("rastrigin_anti_stagnation", |b| {
+        b.iter(|| {
+            let mut options = NelderMeadBoundedOptions::new(
+                &init,
+                Some(&scale),
+                Some(&lb),
+                Some(&ub),
+                Some(1000),
+                Some(1e-8),
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(0),
+            );
+            options.set_random_restart(true);
+            options.set_adaptive_simplex(true);
+            options.enable_anti_stagnation(Some(3), Some(10), Some(0.1));
+
+            let objective = MultiDimFn::new(rastrigin);
+            let mut minimizer = NelderMeadBounded::new(objective);
+            black_box(minimizer.minimize(&options))
+        })
+    });
+
+    group.finish();
+}
+
+// ============================================================================
+// Powell Benchmarks
+// ============================================================================
+
+fn bench_powell_sphere(c: &mut Criterion) {
+    let mut group = c.benchmark_group("powell/sphere");
+
+    for &dim in &[2, 5, 10, 20] {
+        let init = Points(Array1::from_elem(dim, 5.0));
+
+        group.bench_with_input(BenchmarkId::new("dim", dim), &dim, |b, _| {
+            b.iter(|| {
+                let objective = MultiDimFn::new(sphere);
+                let mut minimizer = Powell::new(objective);
+                black_box(minimizer.powell_method(&init, Some(1e-8), Some(500), None))
+            })
+        });
+    }
+
+    group.finish();
+}
+
+fn bench_powell_rosenbrock(c: &mut Criterion) {
+    let mut group = c.benchmark_group("powell/rosenbrock");
+
+    for &dim in &[2, 5, 10] {
+        let init = Points(Array1::from_elem(dim, 0.0));
+
+        group.bench_with_input(BenchmarkId::new("dim", dim), &dim, |b, _| {
+            b.iter(|| {
+                let objective = MultiDimFn::new(rosenbrock);
+                let mut minimizer = Powell::new(objective);
+                black_box(minimizer.powell_method(&init, Some(1e-8), Some(2000), None))
+            })
+        });
+    }
+
+    group.finish();
+}
+
+fn bench_powell_2d_functions(c: &mut Criterion) {
+    let mut group = c.benchmark_group("powell/2d_functions");
+
+    group.bench_function("himmelblau", |b| {
+        let init = array![0.0, 0.0].into();
+        b.iter(|| {
+            let objective = MultiDimFn::new(himmelblau);
+            let mut minimizer = Powell::new(objective);
+            black_box(minimizer.powell_method(&init, Some(1e-8), Some(500), None))
+        })
+    });
+
+    group.bench_function("beale", |b| {
+        let init = array![0.0, 0.0].into();
+        b.iter(|| {
+            let objective = MultiDimFn::new(beale);
+            let mut minimizer = Powell::new(objective);
+            black_box(minimizer.powell_method(&init, Some(1e-8), Some(500), None))
+        })
+    });
+
+    group.bench_function("booth", |b| {
+        let init = array![0.0, 0.0].into();
+        b.iter(|| {
+            let objective = MultiDimFn::new(booth);
+            let mut minimizer = Powell::new(objective);
+            black_box(minimizer.powell_method(&init, Some(1e-8), Some(500), None))
+        })
+    });
+
+    group.bench_function("ackley", |b| {
+        let init = array![2.0, 2.0].into();
+        b.iter(|| {
+            let objective = MultiDimFn::new(ackley);
+            let mut minimizer = Powell::new(objective);
+            black_box(minimizer.powell_method(&init, Some(1e-8), Some(500), None))
+        })
+    });
+
+    group.finish();
+}
+
+// ============================================================================
+// Comparison Benchmarks (same problem, different methods)
+// ============================================================================
+
+fn bench_method_comparison(c: &mut Criterion) {
+    let mut group = c.benchmark_group("comparison/rosenbrock_5d");
+
+    let dim = 5;
+    let init = Points(Array1::from_elem(dim, 0.0));
+    let scale = Points1::ones(dim);
+    let lb = Points(Array1::from_elem(dim, -5.0));
+    let ub = Points(Array1::from_elem(dim, 5.0));
+
+    group.bench_function("nelder_mead", |b| {
+        b.iter(|| {
+            let options = NelderMeadOptions::new(
+                &init,
+                Some(&scale),
+                Some(1000),
+                Some(1e-8),
+                None,
+                None,
+                None,
+                None,
+                Some(0),
+            );
+            let objective = MultiDimFn::new(rosenbrock);
+            let mut minimizer = NelderMead::new(objective);
+            black_box(minimizer.minimize(&options))
+        })
+    });
+
+    group.bench_function("nelder_mead_bounded", |b| {
+        b.iter(|| {
+            let options = NelderMeadBoundedOptions::new(
+                &init,
+                Some(&scale),
+                Some(&lb),
+                Some(&ub),
+                Some(1000),
+                Some(1e-8),
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(0),
+            );
+            let objective = MultiDimFn::new(rosenbrock);
+            let mut minimizer = NelderMeadBounded::new(objective);
+            black_box(minimizer.minimize(&options))
+        })
+    });
+
+    group.bench_function("powell", |b| {
+        b.iter(|| {
+            let objective = MultiDimFn::new(rosenbrock);
+            let mut minimizer = Powell::new(objective);
+            black_box(minimizer.powell_method(&init, Some(1e-8), Some(1000), None))
+        })
+    });
+
+    group.finish();
+}
+
+fn bench_iteration_scaling(c: &mut Criterion) {
+    let mut group = c.benchmark_group("scaling/iterations");
+
+    let dim = 5;
+    let init = Points(Array1::from_elem(dim, 5.0));
+    let scale = Points1::ones(dim);
+
+    for &max_iters in &[10, 50, 100, 500, 1000] {
+        group.bench_with_input(
+            BenchmarkId::new("nelder_mead", max_iters),
+            &max_iters,
+            |b, &iters| {
+                b.iter(|| {
+                    let options = NelderMeadOptions::new(
+                        &init,
+                        Some(&scale),
+                        Some(iters),
+                        Some(1e-8),
+                        None,
+                        None,
+                        None,
+                        None,
+                        Some(0),
+                    );
+                    let objective = MultiDimFn::new(sphere);
+                    let mut minimizer = NelderMead::new(objective);
+                    black_box(minimizer.minimize(&options))
+                })
+            },
+        );
+    }
+
     group.finish();
 }
 
 criterion_group!(
-    nelder_mead_benches,
-    bench_iterations_1,
-    bench_iterations_10,
-    bench_iterations_100,
-    bench_iterations_1000,
-    bench_scaling_analysis,
-    bench_convergence_quality,
-    bench_dimension_scaling,
+    benches,
+    bench_nelder_mead_sphere,
+    bench_nelder_mead_rosenbrock,
+    bench_nelder_mead_2d_functions,
+    bench_nelder_mead_bounded_sphere,
+    bench_nelder_mead_bounded_rosenbrock,
+    bench_nelder_mead_bounded_with_anti_stagnation,
+    bench_powell_sphere,
+    bench_powell_rosenbrock,
+    bench_powell_2d_functions,
+    bench_method_comparison,
+    bench_iteration_scaling,
 );
-criterion_main!(nelder_mead_benches);
+
+criterion_main!(benches);

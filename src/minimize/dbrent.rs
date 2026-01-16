@@ -427,7 +427,7 @@ where
 #[cfg(test)]
 mod minimize_myfloat_dbrent_tests {
     use super::*;
-    use crate::{minimize::SingleDimDerFn, myfloat::MyFloat};
+    use crate::{minimize::SingleDimDerFn, num::MyFloat};
     use float_cmp::F64Margin;
     use std::f64::consts::{E, PI, SQRT_2};
 

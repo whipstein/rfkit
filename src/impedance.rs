@@ -1,6 +1,6 @@
 use crate::math::*;
 use crate::scale::Scale;
-use crate::unit::{Unit, UnitVal, UnitValBuilder};
+use crate::unit::{Unit, UnitValBuilder, UnitValue};
 use num::complex::{Complex64, c64};
 use serde::Serialize;
 use std::f64::consts::PI;
@@ -13,16 +13,21 @@ pub struct Impedance {
     y: Complex64,
     z: Complex64,
     g: Complex64,
-    rp: UnitVal,
-    cp: UnitVal,
-    rs: UnitVal,
-    cs: UnitVal,
+    rp: UnitValue,
+    cp: UnitValue,
+    rs: UnitValue,
+    cs: UnitValue,
     z0: f64,
-    freq: UnitVal,
+    freq: UnitValue,
 }
 
 impl Impedance {
-    pub fn new_from_gamma(gamma: Complex64, z0: f64, freq: &UnitVal, mode: ImpedanceMode) -> Self {
+    pub fn new_from_gamma(
+        gamma: Complex64,
+        z0: f64,
+        freq: &UnitValue,
+        mode: ImpedanceMode,
+    ) -> Self {
         let mut out = Impedance::default();
         if mode == ImpedanceMode::Diff {
             out.mode = ImpedanceMode::Diff;
@@ -34,7 +39,7 @@ impl Impedance {
         out
     }
 
-    pub fn new_from_y(y: Complex64, z0: f64, freq: &UnitVal, mode: ImpedanceMode) -> Self {
+    pub fn new_from_y(y: Complex64, z0: f64, freq: &UnitValue, mode: ImpedanceMode) -> Self {
         let mut out = Impedance::default();
         if mode == ImpedanceMode::Diff {
             out.mode = ImpedanceMode::Diff;
@@ -46,7 +51,7 @@ impl Impedance {
         out
     }
 
-    pub fn new_from_z(z: Complex64, z0: f64, freq: &UnitVal, mode: ImpedanceMode) -> Self {
+    pub fn new_from_z(z: Complex64, z0: f64, freq: &UnitValue, mode: ImpedanceMode) -> Self {
         let mut out = Impedance::default();
         if mode == ImpedanceMode::Diff {
             out.mode = ImpedanceMode::Diff;
@@ -59,10 +64,10 @@ impl Impedance {
     }
 
     pub fn new_from_rpcp(
-        rp: &UnitVal,
-        cp: &UnitVal,
+        rp: &UnitValue,
+        cp: &UnitValue,
         z0: f64,
-        freq: &UnitVal,
+        freq: &UnitValue,
         mode: ImpedanceMode,
     ) -> Self {
         let mut out = Impedance::default();
@@ -78,10 +83,10 @@ impl Impedance {
     }
 
     pub fn new_from_rscs(
-        rs: &UnitVal,
-        cs: &UnitVal,
+        rs: &UnitValue,
+        cs: &UnitValue,
         z0: f64,
-        freq: &UnitVal,
+        freq: &UnitValue,
         mode: ImpedanceMode,
     ) -> Self {
         let mut out = Impedance::default();
@@ -112,19 +117,19 @@ impl Impedance {
         self.z
     }
 
-    pub fn rp(&self) -> UnitVal {
+    pub fn rp(&self) -> UnitValue {
         self.rp
     }
 
-    pub fn cp(&self) -> UnitVal {
+    pub fn cp(&self) -> UnitValue {
         self.cp
     }
 
-    pub fn rs(&self) -> UnitVal {
+    pub fn rs(&self) -> UnitValue {
         self.rs
     }
 
-    pub fn cs(&self) -> UnitVal {
+    pub fn cs(&self) -> UnitValue {
         self.cs
     }
 
@@ -132,7 +137,7 @@ impl Impedance {
         self.z0
     }
 
-    pub fn freq(&self) -> UnitVal {
+    pub fn freq(&self) -> UnitValue {
         self.freq
     }
 
@@ -205,7 +210,7 @@ impl Impedance {
         self
     }
 
-    pub fn set_rp(&mut self, rp: &UnitVal) -> &Self {
+    pub fn set_rp(&mut self, rp: &UnitValue) -> &Self {
         self.rp = *rp;
         let (rs, cs) = rpcp_to_rscs(self.rp.val(), self.cp.val(), &self.freq);
         self.rs.set_val(rs);
@@ -216,7 +221,7 @@ impl Impedance {
         self
     }
 
-    pub fn set_cp(&mut self, cp: &UnitVal) -> &Self {
+    pub fn set_cp(&mut self, cp: &UnitValue) -> &Self {
         self.cp = *cp;
         let (rs, cs) = rpcp_to_rscs(self.rp.val(), self.cp.val(), &self.freq);
         self.rs.set_val(rs);
@@ -227,7 +232,7 @@ impl Impedance {
         self
     }
 
-    pub fn set_rs(&mut self, rs: &UnitVal) -> &Self {
+    pub fn set_rs(&mut self, rs: &UnitValue) -> &Self {
         self.rs = *rs;
         let (rp, cp) = rscs_to_rpcp(self.rs.val(), self.cs.val(), &self.freq);
         self.rp.set_val(rp);
@@ -238,7 +243,7 @@ impl Impedance {
         self
     }
 
-    pub fn set_cs(&mut self, cs: &UnitVal) -> &Self {
+    pub fn set_cs(&mut self, cs: &UnitValue) -> &Self {
         self.cs = *cs;
         let (rp, cp) = rscs_to_rpcp(self.rs.val(), self.cs.val(), &self.freq);
         self.rp.set_val(rp);
@@ -249,7 +254,7 @@ impl Impedance {
         self
     }
 
-    pub fn set_freq(&mut self, freq: &UnitVal) -> &Self {
+    pub fn set_freq(&mut self, freq: &UnitValue) -> &Self {
         let z = rpcp_to_z(self.rp.val(), self.cp.val(), &self.freq);
         self.freq = *freq;
         let (rp, cp) = z_to_rpcp(z, &self.freq);
@@ -270,11 +275,11 @@ impl Default for Impedance {
             z: c64(50.0, 0.0),
             g: c64(0.0, 0.0),
             z0: 50.0,
-            freq: UnitVal::new_scaled(280.0, Scale::Giga, Unit::Hz),
-            rp: UnitVal::new(50.0, Scale::Base, Unit::Ohm),
-            cp: UnitVal::new_scaled(0.0, Scale::Femto, Unit::Farad),
-            rs: UnitVal::new(50.0, Scale::Base, Unit::Ohm),
-            cs: UnitVal::new_scaled(0.0, Scale::Femto, Unit::Farad),
+            freq: UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz),
+            rp: UnitValue::new(50.0, Scale::Base, Unit::Ohm),
+            cp: UnitValue::new_scaled(0.0, Scale::Femto, Unit::Farad),
+            rs: UnitValue::new(50.0, Scale::Base, Unit::Ohm),
+            cs: UnitValue::new_scaled(0.0, Scale::Femto, Unit::Farad),
         }
     }
 }
@@ -287,12 +292,12 @@ pub struct ImpedanceBuilder {
     ri: Complex64,       // real/imaginary form of complex input
     mag: Option<f64>,
     ang: Option<f64>,
-    rp: UnitVal,
-    cp: UnitVal,
-    rs: UnitVal,
-    cs: UnitVal,
+    rp: UnitValue,
+    cp: UnitValue,
+    rs: UnitValue,
+    cs: UnitValue,
     z0: f64,
-    freq: UnitVal,
+    freq: UnitValue,
 }
 
 impl ImpedanceBuilder {
@@ -425,7 +430,7 @@ impl ImpedanceBuilder {
         self
     }
 
-    pub fn rp(mut self, res: UnitVal) -> Self {
+    pub fn rp(mut self, res: UnitValue) -> Self {
         self.rp = res;
         self
     }
@@ -440,7 +445,7 @@ impl ImpedanceBuilder {
         self
     }
 
-    pub fn cp(mut self, cap: UnitVal) -> Self {
+    pub fn cp(mut self, cap: UnitValue) -> Self {
         self.cp = cap;
         self
     }
@@ -455,7 +460,7 @@ impl ImpedanceBuilder {
         self
     }
 
-    pub fn rs(mut self, res: UnitVal) -> Self {
+    pub fn rs(mut self, res: UnitValue) -> Self {
         self.rs = res;
         self
     }
@@ -470,7 +475,7 @@ impl ImpedanceBuilder {
         self
     }
 
-    pub fn cs(mut self, cap: UnitVal) -> Self {
+    pub fn cs(mut self, cap: UnitValue) -> Self {
         self.cs = cap;
         self
     }
@@ -490,7 +495,7 @@ impl ImpedanceBuilder {
         self
     }
 
-    pub fn freq(mut self, freq: UnitVal) -> Self {
+    pub fn freq(mut self, freq: UnitValue) -> Self {
         self.freq = freq;
         self
     }
@@ -614,11 +619,11 @@ impl Default for ImpedanceBuilder {
             ri: c64(0.0, 0.0),
             mag: None,
             ang: None,
-            rp: UnitVal::new(50.0, Scale::Base, Unit::Ohm),
-            cp: UnitVal::new_scaled(0.0, Scale::Base, Unit::Farad),
-            rs: UnitVal::new(50.0, Scale::Base, Unit::Ohm),
-            cs: UnitVal::new_scaled(0.0, Scale::Base, Unit::Farad),
-            freq: UnitVal::new_scaled(1.0, Scale::Giga, Unit::Hz),
+            rp: UnitValue::new(50.0, Scale::Base, Unit::Ohm),
+            cp: UnitValue::new_scaled(0.0, Scale::Base, Unit::Farad),
+            rs: UnitValue::new(50.0, Scale::Base, Unit::Ohm),
+            cs: UnitValue::new_scaled(0.0, Scale::Base, Unit::Farad),
+            freq: UnitValue::new_scaled(1.0, Scale::Giga, Unit::Hz),
             z0: 50.0,
         }
     }
@@ -889,7 +894,7 @@ impl fmt::Display for ComplexNumberType {
 #[cfg(test)]
 mod impedance_tests {
     use super::*;
-    use crate::util::{comp_c64, comp_f64};
+    use crate::util::{comp_f64, comp_num};
     use float_cmp::F64Margin;
 
     const MARGIN: F64Margin = F64Margin {
@@ -900,9 +905,9 @@ mod impedance_tests {
 
     fn comp_impedance(exemplar: &Impedance, calc: &Impedance, margin: F64Margin, test_name: &str) {
         assert_eq!(exemplar.mode(), calc.mode());
-        comp_c64(&exemplar.gamma(), &calc.gamma(), margin, test_name, "gamma");
-        comp_c64(&exemplar.y(), &calc.y(), margin, test_name, "y");
-        comp_c64(&exemplar.z(), &calc.z(), margin, test_name, "z");
+        comp_num(&exemplar.gamma(), &calc.gamma(), margin, test_name, "gamma");
+        comp_num(&exemplar.y(), &calc.y(), margin, test_name, "y");
+        comp_num(&exemplar.z(), &calc.z(), margin, test_name, "z");
         comp_f64(
             &exemplar.rp().val(),
             &calc.rp().val(),
@@ -957,12 +962,12 @@ mod impedance_tests {
                     y: c64(0.02, 0.0),
                     z: c64(50.0, 0.0),
                     g: c64(0.0, 0.0),
-                    rp: UnitVal::new(50.0, Scale::Base, Unit::Ohm),
-                    cp: UnitVal::new(0.0, Scale::Femto, Unit::Farad),
-                    rs: UnitVal::new(50.0, Scale::Base, Unit::Ohm),
-                    cs: UnitVal::new(0.0, Scale::Femto, Unit::Farad),
+                    rp: UnitValue::new(50.0, Scale::Base, Unit::Ohm),
+                    cp: UnitValue::new(0.0, Scale::Femto, Unit::Farad),
+                    rs: UnitValue::new(50.0, Scale::Base, Unit::Ohm),
+                    cs: UnitValue::new(0.0, Scale::Femto, Unit::Farad),
                     z0: 50.0,
-                    freq: UnitVal::new_scaled(280.0, Scale::Giga, Unit::Hz),
+                    freq: UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz),
                 },
                 &test,
                 F64Margin::default(),
@@ -980,12 +985,12 @@ mod impedance_tests {
                     y: c64(0.009716213243381976, 0.004491457065336951),
                     z: c64(84.8, -39.2),
                     g: c64(-0.035651518955561144, -0.21968365553602814),
-                    rp: UnitVal::new(102.92075471698114, Scale::Base, Unit::Ohm),
-                    cp: UnitVal::new(2.552991405833549e-15, Scale::Femto, Unit::Farad),
-                    rs: UnitVal::new(84.8, Scale::Base, Unit::Ohm),
-                    cs: UnitVal::new(1.450026813883886e-14, Scale::Femto, Unit::Farad),
+                    rp: UnitValue::new(102.92075471698114, Scale::Base, Unit::Ohm),
+                    cp: UnitValue::new(2.552991405833549e-15, Scale::Femto, Unit::Farad),
+                    rs: UnitValue::new(84.8, Scale::Base, Unit::Ohm),
+                    cs: UnitValue::new(1.450026813883886e-14, Scale::Femto, Unit::Farad),
                     z0: 100.0,
-                    freq: UnitVal::new_scaled(280.0, Scale::Giga, Unit::Hz),
+                    freq: UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz),
                 },
                 &test,
                 F64Margin::default(),
@@ -1002,12 +1007,12 @@ mod impedance_tests {
                     y: c64(0.01943242648676395, 0.008982914130673902),
                     z: c64(42.4, -19.6),
                     g: c64(-0.035651518955561144, -0.21968365553602814),
-                    rp: UnitVal::new(51.46037735849057, Scale::Base, Unit::Ohm),
-                    cp: UnitVal::new(5.105982811667098e-15, Scale::Femto, Unit::Farad),
-                    rs: UnitVal::new(42.4, Scale::Base, Unit::Ohm),
-                    cs: UnitVal::new(2.900053627767772e-14, Scale::Femto, Unit::Farad),
+                    rp: UnitValue::new(51.46037735849057, Scale::Base, Unit::Ohm),
+                    cp: UnitValue::new(5.105982811667098e-15, Scale::Femto, Unit::Farad),
+                    rs: UnitValue::new(42.4, Scale::Base, Unit::Ohm),
+                    cs: UnitValue::new(2.900053627767772e-14, Scale::Femto, Unit::Farad),
                     z0: 50.0,
-                    freq: UnitVal::new_scaled(280.0, Scale::Giga, Unit::Hz),
+                    freq: UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz),
                 },
                 &test,
                 F64Margin::default(),
@@ -1024,12 +1029,12 @@ mod impedance_tests {
                     y: c64(0.01943242648676395, 0.008982914130673902),
                     z: c64(42.4, -19.6),
                     g: c64(-0.035651518955561144, -0.21968365553602814),
-                    rp: UnitVal::new(51.46037735849057, Scale::Base, Unit::Ohm),
-                    cp: UnitVal::new(5.105982811667098e-15, Scale::Femto, Unit::Farad),
-                    rs: UnitVal::new(42.4, Scale::Base, Unit::Ohm),
-                    cs: UnitVal::new(2.900053627767772e-14, Scale::Femto, Unit::Farad),
+                    rp: UnitValue::new(51.46037735849057, Scale::Base, Unit::Ohm),
+                    cp: UnitValue::new(5.105982811667098e-15, Scale::Femto, Unit::Farad),
+                    rs: UnitValue::new(42.4, Scale::Base, Unit::Ohm),
+                    cs: UnitValue::new(2.900053627767772e-14, Scale::Femto, Unit::Farad),
                     z0: 50.0,
-                    freq: UnitVal::new_scaled(280.0, Scale::Giga, Unit::Hz),
+                    freq: UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz),
                 },
                 &test,
                 F64Margin::default(),
@@ -1047,12 +1052,12 @@ mod impedance_tests {
                     y: c64(0.01943242648676395, 0.008982914130673902),
                     z: c64(42.4, -19.6),
                     g: c64(-0.035651518955561144, -0.21968365553602814),
-                    rp: UnitVal::new(51.46037735849057, Scale::Base, Unit::Ohm),
-                    cp: UnitVal::new(5.105982811667098e-15, Scale::Femto, Unit::Farad),
-                    rs: UnitVal::new(42.4, Scale::Base, Unit::Ohm),
-                    cs: UnitVal::new(2.900053627767772e-14, Scale::Femto, Unit::Farad),
+                    rp: UnitValue::new(51.46037735849057, Scale::Base, Unit::Ohm),
+                    cp: UnitValue::new(5.105982811667098e-15, Scale::Femto, Unit::Farad),
+                    rs: UnitValue::new(42.4, Scale::Base, Unit::Ohm),
+                    cs: UnitValue::new(2.900053627767772e-14, Scale::Femto, Unit::Farad),
                     z0: 50.0,
-                    freq: UnitVal::new_scaled(280.0, Scale::Giga, Unit::Hz),
+                    freq: UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz),
                 },
                 &test,
                 F64Margin::default(),
@@ -1070,12 +1075,12 @@ mod impedance_tests {
                     y: c64(0.01943242648676395, 0.008982914130673902),
                     z: c64(42.4, -19.6),
                     g: c64(-0.035651518955561144, -0.21968365553602814),
-                    rp: UnitVal::new(51.46037735849057, Scale::Base, Unit::Ohm),
-                    cp: UnitVal::new(5.105982811667098e-15, Scale::Femto, Unit::Farad),
-                    rs: UnitVal::new(42.4, Scale::Base, Unit::Ohm),
-                    cs: UnitVal::new(2.900053627767772e-14, Scale::Femto, Unit::Farad),
+                    rp: UnitValue::new(51.46037735849057, Scale::Base, Unit::Ohm),
+                    cp: UnitValue::new(5.105982811667098e-15, Scale::Femto, Unit::Farad),
+                    rs: UnitValue::new(42.4, Scale::Base, Unit::Ohm),
+                    cs: UnitValue::new(2.900053627767772e-14, Scale::Femto, Unit::Farad),
                     z0: 50.0,
-                    freq: UnitVal::new_scaled(280.0, Scale::Giga, Unit::Hz),
+                    freq: UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz),
                 },
                 &test,
                 F64Margin::default(),
@@ -1086,19 +1091,19 @@ mod impedance_tests {
             // set_rp()
             // --------------------------
             let mut test = Impedance::default();
-            test.set_rp(&UnitVal::new(51.46037735849057, Scale::Base, Unit::Ohm));
+            test.set_rp(&UnitValue::new(51.46037735849057, Scale::Base, Unit::Ohm));
             comp_impedance(
                 &Impedance {
                     mode: ImpedanceMode::Se,
                     y: c64(0.01943242648676395, 0.0),
                     z: c64(51.46037735849057, 0.0),
                     g: c64(0.014393573102242738, 0.0),
-                    rp: UnitVal::new(51.46037735849057, Scale::Base, Unit::Ohm),
-                    cp: UnitVal::new(0.0, Scale::Femto, Unit::Farad),
-                    rs: UnitVal::new(51.46037735849057, Scale::Base, Unit::Ohm),
-                    cs: UnitVal::new(0.0, Scale::Femto, Unit::Farad),
+                    rp: UnitValue::new(51.46037735849057, Scale::Base, Unit::Ohm),
+                    cp: UnitValue::new(0.0, Scale::Femto, Unit::Farad),
+                    rs: UnitValue::new(51.46037735849057, Scale::Base, Unit::Ohm),
+                    cs: UnitValue::new(0.0, Scale::Femto, Unit::Farad),
                     z0: 50.0,
-                    freq: UnitVal::new_scaled(280.0, Scale::Giga, Unit::Hz),
+                    freq: UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz),
                 },
                 &test,
                 F64Margin::default(),
@@ -1109,7 +1114,7 @@ mod impedance_tests {
             // set_cp()
             // --------------------------
             let mut test = Impedance::default();
-            test.set_cp(&UnitVal::new(
+            test.set_cp(&UnitValue::new(
                 5.105982811667098e-15,
                 Scale::Femto,
                 Unit::Farad,
@@ -1120,12 +1125,12 @@ mod impedance_tests {
                     y: c64(0.02, 0.008982914130673902),
                     z: c64(41.60661910298355, -18.687434333487882),
                     g: c64(-0.04801159906098788, -0.21379075147581758),
-                    rp: UnitVal::new(50.0, Scale::Base, Unit::Ohm),
-                    cp: UnitVal::new(5.105982811667098e-15, Scale::Femto, Unit::Farad),
-                    rs: UnitVal::new(41.60661910298355, Scale::Base, Unit::Ohm),
-                    cs: UnitVal::new(3.041672285766333e-14, Scale::Femto, Unit::Farad),
+                    rp: UnitValue::new(50.0, Scale::Base, Unit::Ohm),
+                    cp: UnitValue::new(5.105982811667098e-15, Scale::Femto, Unit::Farad),
+                    rs: UnitValue::new(41.60661910298355, Scale::Base, Unit::Ohm),
+                    cs: UnitValue::new(3.041672285766333e-14, Scale::Femto, Unit::Farad),
                     z0: 50.0,
-                    freq: UnitVal::new_scaled(280.0, Scale::Giga, Unit::Hz),
+                    freq: UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz),
                 },
                 &test,
                 F64Margin::default(),
@@ -1138,22 +1143,22 @@ mod impedance_tests {
             let mut test = Impedance::new_from_z(
                 c64(42.4, -19.6),
                 50.0,
-                &UnitVal::new_scaled(280.0, Scale::Giga, Unit::Hz),
+                &UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz),
                 ImpedanceMode::Se,
             );
-            test.set_freq(&UnitVal::new_scaled(27.0, Scale::Giga, Unit::Hz));
+            test.set_freq(&UnitValue::new_scaled(27.0, Scale::Giga, Unit::Hz));
             comp_impedance(
                 &Impedance {
                     mode: ImpedanceMode::Se,
                     y: c64(0.01943242648676395, 0.008982914130673902),
                     z: c64(42.4, -19.6),
                     g: c64(-0.035651518955561144, -0.21968365553602814),
-                    rp: UnitVal::new(51.46037735849057, Scale::Base, Unit::Ohm),
-                    cp: UnitVal::new(5.295093286173287e-14, Scale::Femto, Unit::Farad),
-                    rs: UnitVal::new(42.4, Scale::Base, Unit::Ohm),
-                    cs: UnitVal::new(3.007463021388801e-13, Scale::Femto, Unit::Farad),
+                    rp: UnitValue::new(51.46037735849057, Scale::Base, Unit::Ohm),
+                    cp: UnitValue::new(5.295093286173287e-14, Scale::Femto, Unit::Farad),
+                    rs: UnitValue::new(42.4, Scale::Base, Unit::Ohm),
+                    cs: UnitValue::new(3.007463021388801e-13, Scale::Femto, Unit::Farad),
                     z0: 50.0,
-                    freq: UnitVal::new_scaled(27.0, Scale::Giga, Unit::Hz),
+                    freq: UnitValue::new_scaled(27.0, Scale::Giga, Unit::Hz),
                 },
                 &test,
                 F64Margin::default(),
@@ -1166,7 +1171,7 @@ mod impedance_tests {
             let mut test = Impedance::new_from_z(
                 c64(42.4, -19.6),
                 50.0,
-                &UnitVal::new_scaled(280.0, Scale::Giga, Unit::Hz),
+                &UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz),
                 ImpedanceMode::Se,
             );
             test.set_z0(74.9);
@@ -1176,12 +1181,12 @@ mod impedance_tests {
                     y: c64(0.01943242648676395, 0.008982914130673902),
                     z: c64(42.4, -19.6),
                     g: c64(-0.24238004164471896, -0.20759291403441169),
-                    rp: UnitVal::new(51.46037735849057, Scale::Base, Unit::Ohm),
-                    cp: UnitVal::new(5.105982811667098e-15, Scale::Femto, Unit::Farad),
-                    rs: UnitVal::new(42.4, Scale::Base, Unit::Ohm),
-                    cs: UnitVal::new(2.900053627767772e-14, Scale::Femto, Unit::Farad),
+                    rp: UnitValue::new(51.46037735849057, Scale::Base, Unit::Ohm),
+                    cp: UnitValue::new(5.105982811667098e-15, Scale::Femto, Unit::Farad),
+                    rs: UnitValue::new(42.4, Scale::Base, Unit::Ohm),
+                    cs: UnitValue::new(2.900053627767772e-14, Scale::Femto, Unit::Farad),
                     z0: 74.9,
-                    freq: UnitVal::new_scaled(280.0, Scale::Giga, Unit::Hz),
+                    freq: UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz),
                 },
                 &test,
                 F64Margin::default(),
@@ -1202,7 +1207,7 @@ mod impedance_tests {
                     .kind(ImpedanceType::Gamma)
                     .ri(c64(-0.035651518955561144, -0.21968365553602814))
                     .z0(50.0)
-                    .freq(UnitVal::new_scaled(280.0, Scale::Giga, Unit::Hz))
+                    .freq(UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz))
                     .build();
                 comp_impedance(
                     &Impedance {
@@ -1210,12 +1215,12 @@ mod impedance_tests {
                         y: c64(0.01943242648676395, 0.008982914130673902),
                         z: c64(42.4, -19.6),
                         g: c64(-0.035651518955561144, -0.21968365553602814),
-                        rp: UnitVal::new(51.46037735849057, Scale::Base, Unit::Ohm),
-                        cp: UnitVal::new(5.105982811667098e-15, Scale::Femto, Unit::Farad),
-                        rs: UnitVal::new(42.4, Scale::Base, Unit::Ohm),
-                        cs: UnitVal::new(2.900053627767772e-14, Scale::Femto, Unit::Farad),
+                        rp: UnitValue::new(51.46037735849057, Scale::Base, Unit::Ohm),
+                        cp: UnitValue::new(5.105982811667098e-15, Scale::Femto, Unit::Farad),
+                        rs: UnitValue::new(42.4, Scale::Base, Unit::Ohm),
+                        cs: UnitValue::new(2.900053627767772e-14, Scale::Femto, Unit::Farad),
                         z0: 50.0,
-                        freq: UnitVal::new_scaled(280.0, Scale::Giga, Unit::Hz),
+                        freq: UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz),
                     },
                     &test,
                     F64Margin::default(),
@@ -1227,7 +1232,7 @@ mod impedance_tests {
                     .ri(c64(-0.035651518955561144, -0.21968365553602814))
                     .mag(0.0)
                     .z0(50.0)
-                    .freq(UnitVal::new_scaled(280.0, Scale::Giga, Unit::Hz))
+                    .freq(UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz))
                     .build();
                 comp_impedance(
                     &Impedance {
@@ -1235,12 +1240,12 @@ mod impedance_tests {
                         y: c64(0.01943242648676395, 0.008982914130673902),
                         z: c64(42.4, -19.6),
                         g: c64(-0.035651518955561144, -0.21968365553602814),
-                        rp: UnitVal::new(51.46037735849057, Scale::Base, Unit::Ohm),
-                        cp: UnitVal::new(5.105982811667098e-15, Scale::Femto, Unit::Farad),
-                        rs: UnitVal::new(42.4, Scale::Base, Unit::Ohm),
-                        cs: UnitVal::new(2.900053627767772e-14, Scale::Femto, Unit::Farad),
+                        rp: UnitValue::new(51.46037735849057, Scale::Base, Unit::Ohm),
+                        cp: UnitValue::new(5.105982811667098e-15, Scale::Femto, Unit::Farad),
+                        rs: UnitValue::new(42.4, Scale::Base, Unit::Ohm),
+                        cs: UnitValue::new(2.900053627767772e-14, Scale::Femto, Unit::Farad),
                         z0: 50.0,
-                        freq: UnitVal::new_scaled(280.0, Scale::Giga, Unit::Hz),
+                        freq: UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz),
                     },
                     &test,
                     F64Margin::default(),
@@ -1255,7 +1260,7 @@ mod impedance_tests {
                     .mode(ImpedanceMode::Diff)
                     .ri(c64(-0.035651518955561144, -0.21968365553602814))
                     .z0(100.0)
-                    .freq(UnitVal::new_scaled(280.0, Scale::Giga, Unit::Hz))
+                    .freq(UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz))
                     .build();
                 comp_impedance(
                     &Impedance {
@@ -1263,12 +1268,12 @@ mod impedance_tests {
                         y: c64(0.009716213243381976, 0.004491457065336951),
                         z: c64(84.8, -39.2),
                         g: c64(-0.035651518955561144, -0.21968365553602814),
-                        rp: UnitVal::new(102.92075471698114, Scale::Base, Unit::Ohm),
-                        cp: UnitVal::new(2.552991405833549e-15, Scale::Femto, Unit::Farad),
-                        rs: UnitVal::new(84.8, Scale::Base, Unit::Ohm),
-                        cs: UnitVal::new(1.450026813883886e-14, Scale::Femto, Unit::Farad),
+                        rp: UnitValue::new(102.92075471698114, Scale::Base, Unit::Ohm),
+                        cp: UnitValue::new(2.552991405833549e-15, Scale::Femto, Unit::Farad),
+                        rs: UnitValue::new(84.8, Scale::Base, Unit::Ohm),
+                        cs: UnitValue::new(1.450026813883886e-14, Scale::Femto, Unit::Farad),
                         z0: 100.0,
-                        freq: UnitVal::new_scaled(280.0, Scale::Giga, Unit::Hz),
+                        freq: UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz),
                     },
                     &test,
                     F64Margin::default(),
@@ -1283,7 +1288,7 @@ mod impedance_tests {
                     .x(-0.035651518955561144)
                     .y(-0.21968365553602814)
                     .z0(50.0)
-                    .freq(UnitVal::new_scaled(280.0, Scale::Giga, Unit::Hz))
+                    .freq(UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz))
                     .build();
                 comp_impedance(
                     &Impedance {
@@ -1291,12 +1296,12 @@ mod impedance_tests {
                         y: c64(0.01943242648676395, 0.008982914130673902),
                         z: c64(42.4, -19.6),
                         g: c64(-0.035651518955561144, -0.21968365553602814),
-                        rp: UnitVal::new(51.46037735849057, Scale::Base, Unit::Ohm),
-                        cp: UnitVal::new(5.105982811667098e-15, Scale::Femto, Unit::Farad),
-                        rs: UnitVal::new(42.4, Scale::Base, Unit::Ohm),
-                        cs: UnitVal::new(2.900053627767772e-14, Scale::Femto, Unit::Farad),
+                        rp: UnitValue::new(51.46037735849057, Scale::Base, Unit::Ohm),
+                        cp: UnitValue::new(5.105982811667098e-15, Scale::Femto, Unit::Farad),
+                        rs: UnitValue::new(42.4, Scale::Base, Unit::Ohm),
+                        cs: UnitValue::new(2.900053627767772e-14, Scale::Femto, Unit::Farad),
                         z0: 50.0,
-                        freq: UnitVal::new_scaled(280.0, Scale::Giga, Unit::Hz),
+                        freq: UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz),
                     },
                     &test,
                     F64Margin::default(),
@@ -1311,7 +1316,7 @@ mod impedance_tests {
                     .mag(0.22255772130732962)
                     .ang(-99.21792403733895)
                     .z0(50.0)
-                    .freq(UnitVal::new_scaled(280.0, Scale::Giga, Unit::Hz))
+                    .freq(UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz))
                     .build();
                 comp_impedance(
                     &Impedance {
@@ -1319,12 +1324,12 @@ mod impedance_tests {
                         y: c64(0.01943242648676395, 0.008982914130673902),
                         z: c64(42.4, -19.6),
                         g: c64(-0.035651518955561144, -0.21968365553602814),
-                        rp: UnitVal::new(51.46037735849057, Scale::Base, Unit::Ohm),
-                        cp: UnitVal::new(5.105982811667098e-15, Scale::Femto, Unit::Farad),
-                        rs: UnitVal::new(42.4, Scale::Base, Unit::Ohm),
-                        cs: UnitVal::new(2.900053627767772e-14, Scale::Femto, Unit::Farad),
+                        rp: UnitValue::new(51.46037735849057, Scale::Base, Unit::Ohm),
+                        cp: UnitValue::new(5.105982811667098e-15, Scale::Femto, Unit::Farad),
+                        rs: UnitValue::new(42.4, Scale::Base, Unit::Ohm),
+                        cs: UnitValue::new(2.900053627767772e-14, Scale::Femto, Unit::Farad),
                         z0: 50.0,
-                        freq: UnitVal::new_scaled(280.0, Scale::Giga, Unit::Hz),
+                        freq: UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz),
                     },
                     &test,
                     F64Margin::default(),
@@ -1337,7 +1342,7 @@ mod impedance_tests {
                     .mag(0.22255772130732962)
                     .ang(-99.21792403733895)
                     .z0(50.0)
-                    .freq(UnitVal::new_scaled(280.0, Scale::Giga, Unit::Hz))
+                    .freq(UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz))
                     .build();
                 comp_impedance(
                     &Impedance {
@@ -1345,12 +1350,12 @@ mod impedance_tests {
                         y: c64(0.01943242648676395, 0.008982914130673902),
                         z: c64(42.4, -19.6),
                         g: c64(-0.035651518955561144, -0.21968365553602814),
-                        rp: UnitVal::new(51.46037735849057, Scale::Base, Unit::Ohm),
-                        cp: UnitVal::new(5.105982811667098e-15, Scale::Femto, Unit::Farad),
-                        rs: UnitVal::new(42.4, Scale::Base, Unit::Ohm),
-                        cs: UnitVal::new(2.900053627767772e-14, Scale::Femto, Unit::Farad),
+                        rp: UnitValue::new(51.46037735849057, Scale::Base, Unit::Ohm),
+                        cp: UnitValue::new(5.105982811667098e-15, Scale::Femto, Unit::Farad),
+                        rs: UnitValue::new(42.4, Scale::Base, Unit::Ohm),
+                        cs: UnitValue::new(2.900053627767772e-14, Scale::Femto, Unit::Farad),
                         z0: 50.0,
-                        freq: UnitVal::new_scaled(280.0, Scale::Giga, Unit::Hz),
+                        freq: UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz),
                     },
                     &test,
                     F64Margin::default(),
@@ -1364,7 +1369,7 @@ mod impedance_tests {
                     .ang(2.0)
                     .ri(c64(-0.035651518955561144, -0.21968365553602814))
                     .z0(50.0)
-                    .freq(UnitVal::new_scaled(280.0, Scale::Giga, Unit::Hz))
+                    .freq(UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz))
                     .build();
                 comp_impedance(
                     &Impedance {
@@ -1372,12 +1377,12 @@ mod impedance_tests {
                         y: c64(0.01943242648676395, 0.008982914130673902),
                         z: c64(42.4, -19.6),
                         g: c64(-0.035651518955561144, -0.21968365553602814),
-                        rp: UnitVal::new(51.46037735849057, Scale::Base, Unit::Ohm),
-                        cp: UnitVal::new(5.105982811667098e-15, Scale::Femto, Unit::Farad),
-                        rs: UnitVal::new(42.4, Scale::Base, Unit::Ohm),
-                        cs: UnitVal::new(2.900053627767772e-14, Scale::Femto, Unit::Farad),
+                        rp: UnitValue::new(51.46037735849057, Scale::Base, Unit::Ohm),
+                        cp: UnitValue::new(5.105982811667098e-15, Scale::Femto, Unit::Farad),
+                        rs: UnitValue::new(42.4, Scale::Base, Unit::Ohm),
+                        cs: UnitValue::new(2.900053627767772e-14, Scale::Femto, Unit::Farad),
                         z0: 50.0,
-                        freq: UnitVal::new_scaled(280.0, Scale::Giga, Unit::Hz),
+                        freq: UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz),
                     },
                     &test,
                     F64Margin::default(),
@@ -1390,7 +1395,7 @@ mod impedance_tests {
                     .mag(0.22255772130732962)
                     .ang(-99.21792403733895)
                     .z0(50.0)
-                    .freq(UnitVal::new_scaled(280.0, Scale::Giga, Unit::Hz))
+                    .freq(UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz))
                     .build();
                 comp_impedance(
                     &Impedance {
@@ -1398,12 +1403,12 @@ mod impedance_tests {
                         y: c64(0.01943242648676395, 0.008982914130673902),
                         z: c64(42.4, -19.6),
                         g: c64(-0.035651518955561144, -0.21968365553602814),
-                        rp: UnitVal::new(51.46037735849057, Scale::Base, Unit::Ohm),
-                        cp: UnitVal::new(5.105982811667098e-15, Scale::Femto, Unit::Farad),
-                        rs: UnitVal::new(42.4, Scale::Base, Unit::Ohm),
-                        cs: UnitVal::new(2.900053627767772e-14, Scale::Femto, Unit::Farad),
+                        rp: UnitValue::new(51.46037735849057, Scale::Base, Unit::Ohm),
+                        cp: UnitValue::new(5.105982811667098e-15, Scale::Femto, Unit::Farad),
+                        rs: UnitValue::new(42.4, Scale::Base, Unit::Ohm),
+                        cs: UnitValue::new(2.900053627767772e-14, Scale::Femto, Unit::Farad),
                         z0: 50.0,
-                        freq: UnitVal::new_scaled(280.0, Scale::Giga, Unit::Hz),
+                        freq: UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz),
                     },
                     &test,
                     F64Margin::default(),
@@ -1416,7 +1421,7 @@ mod impedance_tests {
                     .x(0.22255772130732962)
                     .y(-99.21792403733895)
                     .z0(50.0)
-                    .freq(UnitVal::new_scaled(280.0, Scale::Giga, Unit::Hz))
+                    .freq(UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz))
                     .build();
                 comp_impedance(
                     &Impedance {
@@ -1424,12 +1429,12 @@ mod impedance_tests {
                         y: c64(0.01943242648676395, 0.008982914130673902),
                         z: c64(42.4, -19.6),
                         g: c64(-0.035651518955561144, -0.21968365553602814),
-                        rp: UnitVal::new(51.46037735849057, Scale::Base, Unit::Ohm),
-                        cp: UnitVal::new(5.105982811667098e-15, Scale::Femto, Unit::Farad),
-                        rs: UnitVal::new(42.4, Scale::Base, Unit::Ohm),
-                        cs: UnitVal::new(2.900053627767772e-14, Scale::Femto, Unit::Farad),
+                        rp: UnitValue::new(51.46037735849057, Scale::Base, Unit::Ohm),
+                        cp: UnitValue::new(5.105982811667098e-15, Scale::Femto, Unit::Farad),
+                        rs: UnitValue::new(42.4, Scale::Base, Unit::Ohm),
+                        cs: UnitValue::new(2.900053627767772e-14, Scale::Femto, Unit::Farad),
                         z0: 50.0,
-                        freq: UnitVal::new_scaled(280.0, Scale::Giga, Unit::Hz),
+                        freq: UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz),
                     },
                     &test,
                     F64Margin::default(),
@@ -1444,7 +1449,7 @@ mod impedance_tests {
                     .db(-13.051146678449534)
                     .ang(-99.21792403733895)
                     .z0(50.0)
-                    .freq(UnitVal::new_scaled(280.0, Scale::Giga, Unit::Hz))
+                    .freq(UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz))
                     .build();
                 comp_impedance(
                     &Impedance {
@@ -1452,12 +1457,12 @@ mod impedance_tests {
                         y: c64(0.01943242648676395, 0.008982914130673902),
                         z: c64(42.4, -19.6),
                         g: c64(-0.035651518955561144, -0.21968365553602814),
-                        rp: UnitVal::new(51.46037735849057, Scale::Base, Unit::Ohm),
-                        cp: UnitVal::new(5.105982811667098e-15, Scale::Femto, Unit::Farad),
-                        rs: UnitVal::new(42.4, Scale::Base, Unit::Ohm),
-                        cs: UnitVal::new(2.900053627767772e-14, Scale::Femto, Unit::Farad),
+                        rp: UnitValue::new(51.46037735849057, Scale::Base, Unit::Ohm),
+                        cp: UnitValue::new(5.105982811667098e-15, Scale::Femto, Unit::Farad),
+                        rs: UnitValue::new(42.4, Scale::Base, Unit::Ohm),
+                        cs: UnitValue::new(2.900053627767772e-14, Scale::Femto, Unit::Farad),
                         z0: 50.0,
-                        freq: UnitVal::new_scaled(280.0, Scale::Giga, Unit::Hz),
+                        freq: UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz),
                     },
                     &test,
                     F64Margin::default(),
@@ -1475,7 +1480,7 @@ mod impedance_tests {
                     .kind(ImpedanceType::Y)
                     .ri(c64(0.01943242648676395, 0.008982914130673902))
                     .z0(50.0)
-                    .freq(UnitVal::new_scaled(280.0, Scale::Giga, Unit::Hz))
+                    .freq(UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz))
                     .build();
                 comp_impedance(
                     &Impedance {
@@ -1483,12 +1488,12 @@ mod impedance_tests {
                         y: c64(0.01943242648676395, 0.008982914130673902),
                         z: c64(42.4, -19.6),
                         g: c64(-0.035651518955561144, -0.21968365553602814),
-                        rp: UnitVal::new(51.46037735849057, Scale::Base, Unit::Ohm),
-                        cp: UnitVal::new(5.105982811667098e-15, Scale::Femto, Unit::Farad),
-                        rs: UnitVal::new(42.4, Scale::Base, Unit::Ohm),
-                        cs: UnitVal::new(2.900053627767772e-14, Scale::Femto, Unit::Farad),
+                        rp: UnitValue::new(51.46037735849057, Scale::Base, Unit::Ohm),
+                        cp: UnitValue::new(5.105982811667098e-15, Scale::Femto, Unit::Farad),
+                        rs: UnitValue::new(42.4, Scale::Base, Unit::Ohm),
+                        cs: UnitValue::new(2.900053627767772e-14, Scale::Femto, Unit::Farad),
                         z0: 50.0,
-                        freq: UnitVal::new_scaled(280.0, Scale::Giga, Unit::Hz),
+                        freq: UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz),
                     },
                     &test,
                     F64Margin::default(),
@@ -1503,7 +1508,7 @@ mod impedance_tests {
                     .mode(ImpedanceMode::Diff)
                     .ri(c64(0.009716213243381976, 0.004491457065336951))
                     .z0(100.0)
-                    .freq(UnitVal::new_scaled(280.0, Scale::Giga, Unit::Hz))
+                    .freq(UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz))
                     .build();
                 comp_impedance(
                     &Impedance {
@@ -1511,12 +1516,12 @@ mod impedance_tests {
                         y: c64(0.009716213243381976, 0.004491457065336951),
                         z: c64(84.8, -39.2),
                         g: c64(-0.035651518955561144, -0.21968365553602814),
-                        rp: UnitVal::new(102.92075471698114, Scale::Base, Unit::Ohm),
-                        cp: UnitVal::new(2.552991405833549e-15, Scale::Femto, Unit::Farad),
-                        rs: UnitVal::new(84.8, Scale::Base, Unit::Ohm),
-                        cs: UnitVal::new(1.450026813883886e-14, Scale::Femto, Unit::Farad),
+                        rp: UnitValue::new(102.92075471698114, Scale::Base, Unit::Ohm),
+                        cp: UnitValue::new(2.552991405833549e-15, Scale::Femto, Unit::Farad),
+                        rs: UnitValue::new(84.8, Scale::Base, Unit::Ohm),
+                        cs: UnitValue::new(1.450026813883886e-14, Scale::Femto, Unit::Farad),
                         z0: 100.0,
-                        freq: UnitVal::new_scaled(280.0, Scale::Giga, Unit::Hz),
+                        freq: UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz),
                     },
                     &test,
                     F64Margin::default(),
@@ -1531,7 +1536,7 @@ mod impedance_tests {
                     .x(0.01943242648676395)
                     .y(0.008982914130673902)
                     .z0(50.0)
-                    .freq(UnitVal::new_scaled(280.0, Scale::Giga, Unit::Hz))
+                    .freq(UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz))
                     .build();
                 comp_impedance(
                     &Impedance {
@@ -1539,12 +1544,12 @@ mod impedance_tests {
                         y: c64(0.01943242648676395, 0.008982914130673902),
                         z: c64(42.4, -19.6),
                         g: c64(-0.035651518955561144, -0.21968365553602814),
-                        rp: UnitVal::new(51.46037735849057, Scale::Base, Unit::Ohm),
-                        cp: UnitVal::new(5.105982811667098e-15, Scale::Femto, Unit::Farad),
-                        rs: UnitVal::new(42.4, Scale::Base, Unit::Ohm),
-                        cs: UnitVal::new(2.900053627767772e-14, Scale::Femto, Unit::Farad),
+                        rp: UnitValue::new(51.46037735849057, Scale::Base, Unit::Ohm),
+                        cp: UnitValue::new(5.105982811667098e-15, Scale::Femto, Unit::Farad),
+                        rs: UnitValue::new(42.4, Scale::Base, Unit::Ohm),
+                        cs: UnitValue::new(2.900053627767772e-14, Scale::Femto, Unit::Farad),
                         z0: 50.0,
-                        freq: UnitVal::new_scaled(280.0, Scale::Giga, Unit::Hz),
+                        freq: UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz),
                     },
                     &test,
                     F64Margin::default(),
@@ -1562,7 +1567,7 @@ mod impedance_tests {
                     .kind(ImpedanceType::Z)
                     .ri(c64(42.4, -19.6))
                     .z0(50.0)
-                    .freq(UnitVal::new_scaled(280.0, Scale::Giga, Unit::Hz))
+                    .freq(UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz))
                     .build();
                 comp_impedance(
                     &Impedance {
@@ -1570,12 +1575,12 @@ mod impedance_tests {
                         y: c64(0.01943242648676395, 0.008982914130673902),
                         z: c64(42.4, -19.6),
                         g: c64(-0.035651518955561144, -0.21968365553602814),
-                        rp: UnitVal::new(51.46037735849057, Scale::Base, Unit::Ohm),
-                        cp: UnitVal::new(5.105982811667098e-15, Scale::Femto, Unit::Farad),
-                        rs: UnitVal::new(42.4, Scale::Base, Unit::Ohm),
-                        cs: UnitVal::new(2.900053627767772e-14, Scale::Femto, Unit::Farad),
+                        rp: UnitValue::new(51.46037735849057, Scale::Base, Unit::Ohm),
+                        cp: UnitValue::new(5.105982811667098e-15, Scale::Femto, Unit::Farad),
+                        rs: UnitValue::new(42.4, Scale::Base, Unit::Ohm),
+                        cs: UnitValue::new(2.900053627767772e-14, Scale::Femto, Unit::Farad),
                         z0: 50.0,
-                        freq: UnitVal::new_scaled(280.0, Scale::Giga, Unit::Hz),
+                        freq: UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz),
                     },
                     &test,
                     F64Margin::default(),
@@ -1590,7 +1595,7 @@ mod impedance_tests {
                     .mode(ImpedanceMode::Diff)
                     .ri(c64(84.8, -39.2))
                     .z0(100.0)
-                    .freq(UnitVal::new_scaled(280.0, Scale::Giga, Unit::Hz))
+                    .freq(UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz))
                     .build();
                 comp_impedance(
                     &Impedance {
@@ -1598,12 +1603,12 @@ mod impedance_tests {
                         y: c64(0.009716213243381976, 0.004491457065336951),
                         z: c64(84.8, -39.2),
                         g: c64(-0.035651518955561144, -0.21968365553602814),
-                        rp: UnitVal::new(102.92075471698114, Scale::Base, Unit::Ohm),
-                        cp: UnitVal::new(2.552991405833549e-15, Scale::Femto, Unit::Farad),
-                        rs: UnitVal::new(84.8, Scale::Base, Unit::Ohm),
-                        cs: UnitVal::new(1.450026813883886e-14, Scale::Femto, Unit::Farad),
+                        rp: UnitValue::new(102.92075471698114, Scale::Base, Unit::Ohm),
+                        cp: UnitValue::new(2.552991405833549e-15, Scale::Femto, Unit::Farad),
+                        rs: UnitValue::new(84.8, Scale::Base, Unit::Ohm),
+                        cs: UnitValue::new(1.450026813883886e-14, Scale::Femto, Unit::Farad),
                         z0: 100.0,
-                        freq: UnitVal::new_scaled(280.0, Scale::Giga, Unit::Hz),
+                        freq: UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz),
                     },
                     &test,
                     F64Margin::default(),
@@ -1618,7 +1623,7 @@ mod impedance_tests {
                     .x(42.4)
                     .y(-19.6)
                     .z0(50.0)
-                    .freq(UnitVal::new_scaled(280.0, Scale::Giga, Unit::Hz))
+                    .freq(UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz))
                     .build();
                 comp_impedance(
                     &Impedance {
@@ -1626,12 +1631,12 @@ mod impedance_tests {
                         y: c64(0.01943242648676395, 0.008982914130673902),
                         z: c64(42.4, -19.6),
                         g: c64(-0.035651518955561144, -0.21968365553602814),
-                        rp: UnitVal::new(51.46037735849057, Scale::Base, Unit::Ohm),
-                        cp: UnitVal::new(5.105982811667098e-15, Scale::Femto, Unit::Farad),
-                        rs: UnitVal::new(42.4, Scale::Base, Unit::Ohm),
-                        cs: UnitVal::new(2.900053627767772e-14, Scale::Femto, Unit::Farad),
+                        rp: UnitValue::new(51.46037735849057, Scale::Base, Unit::Ohm),
+                        cp: UnitValue::new(5.105982811667098e-15, Scale::Femto, Unit::Farad),
+                        rs: UnitValue::new(42.4, Scale::Base, Unit::Ohm),
+                        cs: UnitValue::new(2.900053627767772e-14, Scale::Femto, Unit::Farad),
                         z0: 50.0,
-                        freq: UnitVal::new_scaled(280.0, Scale::Giga, Unit::Hz),
+                        freq: UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz),
                     },
                     &test,
                     F64Margin::default(),
@@ -1647,14 +1652,14 @@ mod impedance_tests {
             fn test_se() {
                 let test = ImpedanceBuilder::new()
                     .kind(ImpedanceType::Rpcp)
-                    .rp(UnitVal::new(51.46037735849057, Scale::Base, Unit::Ohm))
-                    .cp(UnitVal::new(
+                    .rp(UnitValue::new(51.46037735849057, Scale::Base, Unit::Ohm))
+                    .cp(UnitValue::new(
                         5.105982811667098e-15,
                         Scale::Femto,
                         Unit::Farad,
                     ))
                     .z0(50.0)
-                    .freq(UnitVal::new_scaled(280.0, Scale::Giga, Unit::Hz))
+                    .freq(UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz))
                     .build();
                 comp_impedance(
                     &Impedance {
@@ -1662,12 +1667,12 @@ mod impedance_tests {
                         y: c64(0.01943242648676395, 0.008982914130673902),
                         z: c64(42.4, -19.6),
                         g: c64(-0.035651518955561144, -0.21968365553602814),
-                        rp: UnitVal::new(51.46037735849057, Scale::Base, Unit::Ohm),
-                        cp: UnitVal::new(5.105982811667098e-15, Scale::Femto, Unit::Farad),
-                        rs: UnitVal::new(42.4, Scale::Base, Unit::Ohm),
-                        cs: UnitVal::new(2.900053627767772e-14, Scale::Femto, Unit::Farad),
+                        rp: UnitValue::new(51.46037735849057, Scale::Base, Unit::Ohm),
+                        cp: UnitValue::new(5.105982811667098e-15, Scale::Femto, Unit::Farad),
+                        rs: UnitValue::new(42.4, Scale::Base, Unit::Ohm),
+                        cs: UnitValue::new(2.900053627767772e-14, Scale::Femto, Unit::Farad),
                         z0: 50.0,
-                        freq: UnitVal::new_scaled(280.0, Scale::Giga, Unit::Hz),
+                        freq: UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz),
                     },
                     &test,
                     F64Margin::default(),
@@ -1680,14 +1685,14 @@ mod impedance_tests {
                 let test = ImpedanceBuilder::new()
                     .kind(ImpedanceType::Rpcp)
                     .mode(ImpedanceMode::Diff)
-                    .rp(UnitVal::new(102.92075471698114, Scale::Base, Unit::Ohm))
-                    .cp(UnitVal::new(
+                    .rp(UnitValue::new(102.92075471698114, Scale::Base, Unit::Ohm))
+                    .cp(UnitValue::new(
                         2.552991405833549e-15,
                         Scale::Femto,
                         Unit::Farad,
                     ))
                     .z0(100.0)
-                    .freq(UnitVal::new_scaled(280.0, Scale::Giga, Unit::Hz))
+                    .freq(UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz))
                     .build();
                 comp_impedance(
                     &Impedance {
@@ -1695,12 +1700,12 @@ mod impedance_tests {
                         y: c64(0.009716213243381976, 0.004491457065336951),
                         z: c64(84.8, -39.2),
                         g: c64(-0.035651518955561144, -0.21968365553602814),
-                        rp: UnitVal::new(102.92075471698114, Scale::Base, Unit::Ohm),
-                        cp: UnitVal::new(2.552991405833549e-15, Scale::Femto, Unit::Farad),
-                        rs: UnitVal::new(84.8, Scale::Base, Unit::Ohm),
-                        cs: UnitVal::new(1.450026813883886e-14, Scale::Femto, Unit::Farad),
+                        rp: UnitValue::new(102.92075471698114, Scale::Base, Unit::Ohm),
+                        cp: UnitValue::new(2.552991405833549e-15, Scale::Femto, Unit::Farad),
+                        rs: UnitValue::new(84.8, Scale::Base, Unit::Ohm),
+                        cs: UnitValue::new(1.450026813883886e-14, Scale::Femto, Unit::Farad),
                         z0: 100.0,
-                        freq: UnitVal::new_scaled(280.0, Scale::Giga, Unit::Hz),
+                        freq: UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz),
                     },
                     &test,
                     F64Margin::default(),
@@ -1716,7 +1721,7 @@ mod impedance_tests {
                     .x(51.46037735849057)
                     .y(5.105982811667098)
                     .z0(50.0)
-                    .freq(UnitVal::new_scaled(280.0, Scale::Giga, Unit::Hz))
+                    .freq(UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz))
                     .build();
                 comp_impedance(
                     &Impedance {
@@ -1724,12 +1729,12 @@ mod impedance_tests {
                         y: c64(0.01943242648676395, 0.008982914130673902),
                         z: c64(42.4, -19.6),
                         g: c64(-0.035651518955561144, -0.21968365553602814),
-                        rp: UnitVal::new(51.46037735849057, Scale::Base, Unit::Ohm),
-                        cp: UnitVal::new(5.105982811667098e-15, Scale::Femto, Unit::Farad),
-                        rs: UnitVal::new(42.4, Scale::Base, Unit::Ohm),
-                        cs: UnitVal::new(2.900053627767772e-14, Scale::Femto, Unit::Farad),
+                        rp: UnitValue::new(51.46037735849057, Scale::Base, Unit::Ohm),
+                        cp: UnitValue::new(5.105982811667098e-15, Scale::Femto, Unit::Farad),
+                        rs: UnitValue::new(42.4, Scale::Base, Unit::Ohm),
+                        cs: UnitValue::new(2.900053627767772e-14, Scale::Femto, Unit::Farad),
                         z0: 50.0,
-                        freq: UnitVal::new_scaled(280.0, Scale::Giga, Unit::Hz),
+                        freq: UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz),
                     },
                     &test,
                     F64Margin::default(),
@@ -1742,7 +1747,7 @@ mod impedance_tests {
                     .y(5.105982811667098e-15)
                     .c_scale(Scale::Femto)
                     .z0(50.0)
-                    .freq(UnitVal::new_scaled(280.0, Scale::Giga, Unit::Hz))
+                    .freq(UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz))
                     .build();
                 comp_impedance(
                     &Impedance {
@@ -1750,12 +1755,12 @@ mod impedance_tests {
                         y: c64(0.01943242648676395, 0.008982914130673902),
                         z: c64(42.4, -19.6),
                         g: c64(-0.035651518955561144, -0.21968365553602814),
-                        rp: UnitVal::new(51.46037735849057, Scale::Base, Unit::Ohm),
-                        cp: UnitVal::new(5.105982811667098e-15, Scale::Femto, Unit::Farad),
-                        rs: UnitVal::new(42.4, Scale::Base, Unit::Ohm),
-                        cs: UnitVal::new(2.900053627767772e-14, Scale::Femto, Unit::Farad),
+                        rp: UnitValue::new(51.46037735849057, Scale::Base, Unit::Ohm),
+                        cp: UnitValue::new(5.105982811667098e-15, Scale::Femto, Unit::Farad),
+                        rs: UnitValue::new(42.4, Scale::Base, Unit::Ohm),
+                        cs: UnitValue::new(2.900053627767772e-14, Scale::Femto, Unit::Farad),
                         z0: 50.0,
-                        freq: UnitVal::new_scaled(280.0, Scale::Giga, Unit::Hz),
+                        freq: UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz),
                     },
                     &test,
                     F64Margin::default(),
@@ -1771,14 +1776,14 @@ mod impedance_tests {
             fn test_se() {
                 let test = ImpedanceBuilder::new()
                     .kind(ImpedanceType::Rscs)
-                    .rs(UnitVal::new(42.4, Scale::Base, Unit::Ohm))
-                    .cs(UnitVal::new(
+                    .rs(UnitValue::new(42.4, Scale::Base, Unit::Ohm))
+                    .cs(UnitValue::new(
                         2.900053627767772e-14,
                         Scale::Femto,
                         Unit::Farad,
                     ))
                     .z0(50.0)
-                    .freq(UnitVal::new_scaled(280.0, Scale::Giga, Unit::Hz))
+                    .freq(UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz))
                     .build();
                 comp_impedance(
                     &Impedance {
@@ -1786,12 +1791,12 @@ mod impedance_tests {
                         y: c64(0.01943242648676395, 0.008982914130673902),
                         z: c64(42.4, -19.6),
                         g: c64(-0.035651518955561144, -0.21968365553602814),
-                        rp: UnitVal::new(51.46037735849057, Scale::Base, Unit::Ohm),
-                        cp: UnitVal::new(5.105982811667098e-15, Scale::Femto, Unit::Farad),
-                        rs: UnitVal::new(42.4, Scale::Base, Unit::Ohm),
-                        cs: UnitVal::new(2.900053627767772e-14, Scale::Femto, Unit::Farad),
+                        rp: UnitValue::new(51.46037735849057, Scale::Base, Unit::Ohm),
+                        cp: UnitValue::new(5.105982811667098e-15, Scale::Femto, Unit::Farad),
+                        rs: UnitValue::new(42.4, Scale::Base, Unit::Ohm),
+                        cs: UnitValue::new(2.900053627767772e-14, Scale::Femto, Unit::Farad),
                         z0: 50.0,
-                        freq: UnitVal::new_scaled(280.0, Scale::Giga, Unit::Hz),
+                        freq: UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz),
                     },
                     &test,
                     F64Margin::default(),
@@ -1804,14 +1809,14 @@ mod impedance_tests {
                 let test = ImpedanceBuilder::new()
                     .kind(ImpedanceType::Rscs)
                     .mode(ImpedanceMode::Diff)
-                    .rs(UnitVal::new(84.8, Scale::Base, Unit::Ohm))
-                    .cs(UnitVal::new(
+                    .rs(UnitValue::new(84.8, Scale::Base, Unit::Ohm))
+                    .cs(UnitValue::new(
                         1.450026813883886e-14,
                         Scale::Femto,
                         Unit::Farad,
                     ))
                     .z0(100.0)
-                    .freq(UnitVal::new_scaled(280.0, Scale::Giga, Unit::Hz))
+                    .freq(UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz))
                     .build();
                 comp_impedance(
                     &Impedance {
@@ -1819,12 +1824,12 @@ mod impedance_tests {
                         y: c64(0.009716213243381976, 0.004491457065336951),
                         z: c64(84.8, -39.2),
                         g: c64(-0.035651518955561144, -0.21968365553602814),
-                        rp: UnitVal::new(102.92075471698114, Scale::Base, Unit::Ohm),
-                        cp: UnitVal::new(2.552991405833549e-15, Scale::Femto, Unit::Farad),
-                        rs: UnitVal::new(84.8, Scale::Base, Unit::Ohm),
-                        cs: UnitVal::new(1.450026813883886e-14, Scale::Femto, Unit::Farad),
+                        rp: UnitValue::new(102.92075471698114, Scale::Base, Unit::Ohm),
+                        cp: UnitValue::new(2.552991405833549e-15, Scale::Femto, Unit::Farad),
+                        rs: UnitValue::new(84.8, Scale::Base, Unit::Ohm),
+                        cs: UnitValue::new(1.450026813883886e-14, Scale::Femto, Unit::Farad),
                         z0: 100.0,
-                        freq: UnitVal::new_scaled(280.0, Scale::Giga, Unit::Hz),
+                        freq: UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz),
                     },
                     &test,
                     F64Margin::default(),
@@ -1840,7 +1845,7 @@ mod impedance_tests {
                     .y(2.900053627767772e-14)
                     .c_scale(Scale::Femto)
                     .z0(50.0)
-                    .freq(UnitVal::new_scaled(280.0, Scale::Giga, Unit::Hz))
+                    .freq(UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz))
                     .build();
                 comp_impedance(
                     &Impedance {
@@ -1848,12 +1853,12 @@ mod impedance_tests {
                         y: c64(0.01943242648676395, 0.008982914130673902),
                         z: c64(42.4, -19.6),
                         g: c64(-0.035651518955561144, -0.21968365553602814),
-                        rp: UnitVal::new(51.46037735849057, Scale::Base, Unit::Ohm),
-                        cp: UnitVal::new(5.105982811667098e-15, Scale::Femto, Unit::Farad),
-                        rs: UnitVal::new(42.4, Scale::Base, Unit::Ohm),
-                        cs: UnitVal::new(2.900053627767772e-14, Scale::Femto, Unit::Farad),
+                        rp: UnitValue::new(51.46037735849057, Scale::Base, Unit::Ohm),
+                        cp: UnitValue::new(5.105982811667098e-15, Scale::Femto, Unit::Farad),
+                        rs: UnitValue::new(42.4, Scale::Base, Unit::Ohm),
+                        cs: UnitValue::new(2.900053627767772e-14, Scale::Femto, Unit::Farad),
                         z0: 50.0,
-                        freq: UnitVal::new_scaled(280.0, Scale::Giga, Unit::Hz),
+                        freq: UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz),
                     },
                     &test,
                     F64Margin::default(),
@@ -1962,7 +1967,7 @@ mod impedance_tests {
             .kind(ComplexNumberType::MagAng)
             .build();
         assert_eq!(test.convert(ComplexNumberType::ReIm).kind, exemplar_ri.kind);
-        comp_c64(
+        comp_num(
             &test.convert(ComplexNumberType::ReIm).ri(),
             &val,
             F64Margin::default(),

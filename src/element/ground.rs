@@ -1,5 +1,5 @@
 use crate::element::{Elem, ElemType, Term};
-use crate::frequency::Frequency;
+use crate::frequency::{new_frequency, FreqArray, Frequency};
 use crate::point;
 use crate::pts::{Points, Pts};
 use ndarray::{IntoDimension, prelude::*};
@@ -70,7 +70,7 @@ impl Elem for Ground {
     }
 
     fn z_at(&self, freq: &Frequency, i: usize) -> Complex64 {
-        let freq_pt = Frequency::new(array![freq.freq(i)], freq.scale());
+        let freq_pt = new_frequency(array![freq.freq(i)], freq.scale());
         self.z(&freq_pt).into()
     }
 
@@ -118,7 +118,7 @@ mod element_ground_tests {
 
         #[test]
         fn test_ground_zero_impedance() {
-            let freq = Frequency::new(array![1e9, 10e9, 100e9], Scale::Base);
+            let freq = new_frequency(array![1e9, 10e9, 100e9], Scale::Base);
             let gnd = Ground::new();
 
             for i in 0..3 {
@@ -129,7 +129,7 @@ mod element_ground_tests {
 
         #[test]
         fn test_ground_c_matrix() {
-            let freq = Frequency::new(array![1e9], Scale::Base);
+            let freq = new_frequency(array![1e9], Scale::Base);
             let gnd = Ground::new();
             let c_matrix = gnd.c(&freq);
 
@@ -151,7 +151,7 @@ mod element_ground_tests {
 
         #[test]
         fn test_ground_net_matrix() {
-            let freq = Frequency::new(array![1e9], Scale::Base);
+            let freq = new_frequency(array![1e9], Scale::Base);
             let gnd = Ground::new();
             let net = gnd.net(&freq);
 

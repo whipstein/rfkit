@@ -2,8 +2,8 @@ use ndarray::Array1;
 use std::fmt;
 use std::str::FromStr;
 
-use crate::frequency::Frequency;
-use crate::unit::{Unit, UnitVal};
+use crate::frequency::{FreqArray, Frequency};
+use crate::unit::{Unit, UnitValue};
 
 #[derive(Copy, Clone, Debug, Default, PartialEq)]
 pub enum QMode {
@@ -47,7 +47,7 @@ impl fmt::Display for QMode {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Q {
-    rdc: UnitVal,
+    rdc: UnitValue,
     q: f64,
     fq: Frequency,
     alpha: f64,
@@ -55,7 +55,7 @@ pub struct Q {
 }
 
 impl Q {
-    pub fn new(rdc: UnitVal, q: f64, fq: Frequency, alpha: f64, mode: QMode) -> Q {
+    pub fn new(rdc: UnitValue, q: f64, fq: Frequency, alpha: f64, mode: QMode) -> Q {
         Q {
             rdc,
             q,
@@ -65,7 +65,7 @@ impl Q {
         }
     }
 
-    pub fn rdc(&self) -> UnitVal {
+    pub fn rdc(&self) -> UnitValue {
         self.rdc.clone()
     }
 
@@ -95,7 +95,7 @@ impl Q {
         self.mode
     }
 
-    pub fn set_rdc(&mut self, val: UnitVal) {
+    pub fn set_rdc(&mut self, val: UnitValue) {
         self.rdc = val;
     }
 
@@ -115,7 +115,7 @@ impl Q {
 impl Default for Q {
     fn default() -> Self {
         Self {
-            rdc: *UnitVal::default().set_unit(Unit::Ohm),
+            rdc: *UnitValue::default().set_unit(Unit::Ohm),
             q: 200.0,
             fq: Frequency::default(),
             alpha: 0.0,
@@ -126,7 +126,7 @@ impl Default for Q {
 
 #[derive(Clone)]
 pub struct QBuilder {
-    rdc: UnitVal,
+    rdc: UnitValue,
     q: f64,
     fq: Frequency,
     alpha: f64,
@@ -138,7 +138,7 @@ impl QBuilder {
         QBuilder::default()
     }
 
-    pub fn rdc(mut self, rdc: UnitVal) -> Self {
+    pub fn rdc(mut self, rdc: UnitValue) -> Self {
         self.rdc = rdc;
         self
     }
@@ -177,7 +177,7 @@ impl QBuilder {
 impl Default for QBuilder {
     fn default() -> Self {
         Self {
-            rdc: *UnitVal::default().set_unit(Unit::Ohm),
+            rdc: *UnitValue::default().set_unit(Unit::Ohm),
             q: 200.0,
             fq: Frequency::default(),
             alpha: 0.0,

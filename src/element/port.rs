@@ -1,6 +1,6 @@
 use crate::{
     element::{Elem, ElemType, Term},
-    frequency::Frequency,
+    frequency::{FreqArray, Frequency, new_frequency},
     point,
     pts::{Points, Pts},
 };
@@ -75,7 +75,7 @@ impl Elem for Port {
     }
 
     fn z_at(&self, freq: &Frequency, i: usize) -> Complex64 {
-        let freq_pt = Frequency::new(array![freq.freq(i)], freq.scale());
+        let freq_pt = new_frequency(array![freq.freq(i)], freq.scale());
         self.z(&freq_pt).into()
     }
 
@@ -149,7 +149,7 @@ mod element_port_tests {
     use crate::{
         scale::Scale,
         unit::UnitValBuilder,
-        util::{comp_c64, comp_point_c64},
+        util::{comp_num, comp_pts_ix2},
     };
     use float_cmp::*;
 
@@ -166,7 +166,7 @@ mod element_port_tests {
     #[test]
     fn element_port() {
         let freq_unitval = UnitValBuilder::new().val_scaled(1.0, Scale::Giga).build();
-        let freq = Frequency::from_unitval(&freq_unitval);
+        let freq = new_frequency(array![freq_unitval.val()], freq_unitval.scale());
         let val = c64(50.0, 0.0);
         let exemplar = Port {
             id: "P1".to_string(),
@@ -179,13 +179,8 @@ mod element_port_tests {
         let margin = F64Margin::default();
 
         assert_eq!(&exemplar.id(), &calc.id());
-        comp_point_c64(
-            exemplar.c(&freq).view(),
-            calc.c(&freq).view(),
-            margin,
-            "calc.c()",
-        );
-        comp_c64(&exemplar_z.into(), &calc.z(&freq), margin, "calc.z()", "0");
+        comp_pts_ix2(&exemplar.c(&freq), &calc.c(&freq), margin, "calc.c()");
+        comp_num(&exemplar_z.into(), &calc.z(&freq), margin, "calc.z()", "0");
     }
 
     mod port_tests {
@@ -207,7 +202,7 @@ mod element_port_tests {
                 c64(50.0, 10.0), // With imaginary part
             ];
 
-            let freq = Frequency::new(array![1e9], Scale::Base);
+            let freq = new_frequency(array![1e9], Scale::Base);
 
             for z_val in impedances {
                 let port = PortBuilder::new().z(z_val).build();
@@ -220,7 +215,7 @@ mod element_port_tests {
         #[test]
         fn test_port_frequency_independent() {
             let freqs = array![1e6, 1e9, 10e9, 100e9];
-            let freq = Frequency::new(freqs.clone(), Scale::Base);
+            let freq = new_frequency(freqs.clone(), Scale::Base);
             let port = PortBuilder::new().z(c64(50.0, 0.0)).build();
 
             for i in 0..freqs.len() {
@@ -241,7 +236,7 @@ mod element_port_tests {
 
         #[test]
         fn test_port_c_matrix() {
-            let freq = Frequency::new(array![1e9], Scale::Base);
+            let freq = new_frequency(array![1e9], Scale::Base);
             let port = PortBuilder::new().build();
             let c_matrix = port.c(&freq);
 

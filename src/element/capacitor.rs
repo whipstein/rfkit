@@ -1,10 +1,10 @@
 use crate::{
     element::{Elem, ElemType, Lumped, Q, QMode},
-    frequency::Frequency,
+    frequency::{FreqArray, Frequency, new_frequency},
     point,
     pts::{Points, Pts},
     scale::Scale,
-    unit::{Unit, UnitVal, Unitized},
+    unit::{Unit, UnitValue, Unitized},
 };
 use ndarray::{IntoDimension, prelude::*};
 use num::complex::{Complex64, c64};
@@ -12,7 +12,7 @@ use num::complex::{Complex64, c64};
 #[derive(Clone, Debug, PartialEq)]
 pub struct Capacitor {
     id: String,
-    cap: UnitVal,
+    cap: UnitValue,
     q: Option<Q>,
     nodes: [usize; 2],
     c: Points<Complex64, Ix2>,
@@ -22,7 +22,7 @@ pub struct Capacitor {
 impl Capacitor {
     pub fn new(
         id: String,
-        cap: UnitVal,
+        cap: UnitValue,
         q: Option<Q>,
         nodes: [usize; 2],
         z0: Complex64,
@@ -58,7 +58,7 @@ impl Default for Capacitor {
     fn default() -> Self {
         Self {
             id: "C0".to_string(),
-            cap: UnitVal::default(),
+            cap: UnitValue::default(),
             q: None,
             nodes: [1, 2],
             c: point![
@@ -141,7 +141,7 @@ impl Elem for Capacitor {
     }
 
     fn z_at(&self, freq: &Frequency, i: usize) -> Complex64 {
-        let freq_pt = Frequency::new(array![freq.freq(i)], freq.scale());
+        let freq_pt = new_frequency(array![freq.freq(i)], freq.scale());
         self.z(&freq_pt).into()
     }
 
@@ -165,7 +165,7 @@ impl Unitized for Capacitor {
         self.cap.val_scaled()
     }
 
-    fn unitval(&self) -> UnitVal {
+    fn unitval(&self) -> UnitValue {
         self.cap.clone()
     }
 
@@ -181,7 +181,7 @@ impl Unitized for Capacitor {
         self.cap.set_val_scaled(val);
     }
 
-    fn set_unitval(&mut self, val: UnitVal) {
+    fn set_unitval(&mut self, val: UnitValue) {
         self.cap = val;
     }
 
@@ -197,7 +197,7 @@ impl Unitized for Capacitor {
 #[derive(Clone)]
 pub struct CapacitorBuilder {
     id: String,
-    cap: UnitVal,
+    cap: UnitValue,
     q: Option<Q>,
     nodes: [usize; 2],
     z0: Complex64,
@@ -213,7 +213,7 @@ impl CapacitorBuilder {
         self
     }
 
-    pub fn cap(mut self, cap: UnitVal) -> Self {
+    pub fn cap(mut self, cap: UnitValue) -> Self {
         self.cap = cap;
         self
     }
@@ -264,7 +264,7 @@ impl Default for CapacitorBuilder {
     fn default() -> Self {
         Self {
             id: "C0".to_string(),
-            cap: *UnitVal::default().set_unit(Unit::Farad),
+            cap: *UnitValue::default().set_unit(Unit::Farad),
             q: None,
             nodes: [1, 2],
             z0: c64(50.0, 0.0),
@@ -277,7 +277,7 @@ mod element_capacitor_tests {
     use super::*;
     use crate::{
         unit::UnitValBuilder,
-        util::{comp_c64, comp_point_c64},
+        util::{comp_num, comp_pts_ix2},
     };
     use float_cmp::*;
     use std::f64::consts::PI;
@@ -295,7 +295,7 @@ mod element_capacitor_tests {
     #[test]
     fn element_capacitor() {
         let freq_unitval = UnitValBuilder::new().val_scaled(1.0, Scale::Giga).build();
-        let freq = Frequency::from_unitval(&freq_unitval);
+        let freq = new_frequency(array![freq_unitval.val()], freq_unitval.scale());
         let val_scaled = 1.0;
         let scale = Scale::Pico;
         let unitval = UnitValBuilder::new()
@@ -325,13 +325,8 @@ mod element_capacitor_tests {
         assert_eq!(&exemplar.id(), &calc.id());
         assert_eq!(&exemplar.scale(), &calc.scale());
         assert_eq!(&Unit::Farad, &calc.unit());
-        comp_point_c64(
-            exemplar.c(&freq).view(),
-            calc.c(&freq).view(),
-            margin,
-            "calc.c()",
-        );
-        comp_c64(&exemplar_z, &calc.z(&freq), margin, "calc.z()", "0");
+        comp_pts_ix2(&exemplar.c(&freq), &calc.c(&freq), margin, "calc.c()");
+        comp_num(&exemplar_z, &calc.z(&freq), margin, "calc.z()", "0");
     }
 
     mod capacitor_tests {
@@ -362,7 +357,7 @@ mod element_capacitor_tests {
 
         #[test]
         fn test_capacitor_impedance_calculation() {
-            let freq = Frequency::new(array![1e9], Scale::Base);
+            let freq = new_frequency(array![1e9], Scale::Base);
             let cap = CapacitorBuilder::new().val_scaled(1.0, Scale::Pico).build();
 
             let z = cap.z(&freq);
@@ -374,7 +369,7 @@ mod element_capacitor_tests {
 
         #[test]
         fn test_capacitor_c_matrix_structure() {
-            let freq = Frequency::new(array![1e9], Scale::Base);
+            let freq = new_frequency(array![1e9], Scale::Base);
             let cap = CapacitorBuilder::new().build();
             let c_matrix = cap.c(&freq);
 
@@ -408,7 +403,7 @@ mod element_capacitor_tests {
         #[test]
         fn test_capacitor_multiple_frequencies() {
             let freqs = array![1e9, 2e9, 5e9, 10e9];
-            let freq = Frequency::new(freqs.clone(), Scale::Base);
+            let freq = new_frequency(freqs.clone(), Scale::Base);
             let cap = CapacitorBuilder::new().val_scaled(1.0, Scale::Pico).build();
 
             for i in 0..freqs.len() {
@@ -451,7 +446,7 @@ mod element_capacitor_tests {
 
         #[test]
         fn test_capacitor_net_matrix() {
-            let freq = Frequency::new(array![1e9, 2e9], Scale::Base);
+            let freq = new_frequency(array![1e9, 2e9], Scale::Base);
             let cap = CapacitorBuilder::new().build();
             let net = cap.net(&freq);
 

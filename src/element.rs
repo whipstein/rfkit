@@ -2,7 +2,7 @@ use crate::{
     frequency::Frequency,
     pts::Points,
     scale::Scale,
-    unit::{Unit, UnitVal, Unitized},
+    unit::{Unit, UnitValue, Unitized},
 };
 use ndarray::prelude::*;
 use num::complex::{Complex64, c64};
@@ -285,18 +285,18 @@ define_elem_impl!(
 #[derive(Default)]
 pub struct ElementBuilder {
     id: String,
-    unitval: UnitVal,
+    unitval: UnitValue,
     val: f64,
     q: Option<Q>,
-    width: UnitVal,
-    length: UnitVal,
+    width: UnitValue,
+    length: UnitValue,
     gamma: Complex64,
     miter: bool,
     sub: Msub,
     er: f64,
     tand: f64,
-    height: UnitVal,
-    thickness: UnitVal,
+    height: UnitValue,
+    thickness: UnitValue,
     z: Complex64,
     nodes: Vec<usize>,
     elemtype: ElemType,
@@ -307,18 +307,18 @@ impl ElementBuilder {
     pub fn new() -> Self {
         ElementBuilder {
             id: "".to_string(),
-            unitval: UnitVal::default(),
+            unitval: UnitValue::default(),
             val: 1.0,
             q: None,
-            width: *UnitVal::default().set_unit(Unit::Meter),
-            length: *UnitVal::default().set_unit(Unit::Meter),
+            width: *UnitValue::default().set_unit(Unit::Meter),
+            length: *UnitValue::default().set_unit(Unit::Meter),
             gamma: Complex64::ZERO,
             miter: false,
             sub: Msub::default(),
             er: 1.0,
             tand: 0.0,
-            height: UnitVal::default(),
-            thickness: UnitVal::default(),
+            height: UnitValue::default(),
+            thickness: UnitValue::default(),
             z: Complex64::ZERO,
             nodes: vec![],
             elemtype: ElemType::None,
@@ -351,8 +351,8 @@ impl ElementBuilder {
         self
     }
 
-    /// Provide element UnitVal
-    pub fn unitval(mut self, val: UnitVal) -> Self {
+    /// Provide element UnitValue
+    pub fn unitval(mut self, val: UnitValue) -> Self {
         self.unitval = val;
         self
     }
@@ -394,8 +394,8 @@ impl ElementBuilder {
         self
     }
 
-    /// Provide element width UnitVal
-    pub fn width(mut self, val: UnitVal) -> Self {
+    /// Provide element width UnitValue
+    pub fn width(mut self, val: UnitValue) -> Self {
         self.width = val;
         self
     }
@@ -425,8 +425,8 @@ impl ElementBuilder {
         self
     }
 
-    /// Provide element length UnitVal
-    pub fn length(mut self, val: UnitVal) -> Self {
+    /// Provide element length UnitValue
+    pub fn length(mut self, val: UnitValue) -> Self {
         self.length = val;
         self
     }
@@ -566,7 +566,7 @@ impl ElementBuilder {
 }
 
 /// Calculate exponent in radians for use in exp(-gamma * L) MLIN calculations
-pub fn mlin_exp(len: UnitVal, gamma: Complex64) -> Complex64 {
+pub fn mlin_exp(len: UnitValue, gamma: Complex64) -> Complex64 {
     match len.unit() {
         Unit::Degree => -c64(0.0, len.val() * std::f64::consts::PI / 180.0),
         Unit::Radian => -c64(0.0, len.val()),
@@ -840,6 +840,7 @@ macro_rules! define_mlin_calcs {
 #[cfg(test)]
 mod element_tests {
     use super::*;
+    use crate::frequency::new_frequency;
     use crate::pts::Pts;
     use float_cmp::*;
     use std::f64::consts::PI;
@@ -856,10 +857,11 @@ mod element_tests {
 
     mod integration_tests {
         use super::*;
+        use crate::frequency::new_frequency;
 
         #[test]
         fn test_rlc_series_combination() {
-            let freq = Frequency::new(array![1e9], Scale::Base);
+            let freq = new_frequency(array![1e9], Scale::Base);
 
             let r = ResistorBuilder::new().val(50.0).build();
             let l = InductorBuilder::new().val_scaled(1.0, Scale::Nano).build();
@@ -891,7 +893,7 @@ mod element_tests {
 
         #[test]
         fn test_lumped_elements_share_c_matrix_structure() {
-            let freq = Frequency::new(array![1e9], Scale::Base);
+            let freq = new_frequency(array![1e9], Scale::Base);
 
             let cap = CapacitorBuilder::new().build();
             let res = ResistorBuilder::new().build();
@@ -919,7 +921,7 @@ mod element_tests {
         #[test]
         fn test_frequency_sweep_consistency() {
             let freqs = array![1e6, 1e7, 1e8, 1e9, 10e9];
-            let freq = Frequency::new(freqs.clone(), Scale::Base);
+            let freq = new_frequency(freqs.clone(), Scale::Base);
 
             let cap = CapacitorBuilder::new().val_scaled(1.0, Scale::Pico).build();
 
@@ -970,7 +972,7 @@ mod element_tests {
 
         #[test]
         fn test_very_small_component_values() {
-            let freq = Frequency::new(array![1e9], Scale::Base);
+            let freq = new_frequency(array![1e9], Scale::Base);
 
             let cap = CapacitorBuilder::new()
                 .val_scaled(1.0, Scale::Femto)
@@ -983,7 +985,7 @@ mod element_tests {
 
         #[test]
         fn test_very_large_component_values() {
-            let freq = Frequency::new(array![1e9], Scale::Base);
+            let freq = new_frequency(array![1e9], Scale::Base);
 
             let cap = CapacitorBuilder::new()
                 .val_scaled(1.0, Scale::Milli)
@@ -995,7 +997,7 @@ mod element_tests {
 
         #[test]
         fn test_zero_frequency_handling() {
-            let freq = Frequency::new(array![0.0], Scale::Base);
+            let freq = new_frequency(array![0.0], Scale::Base);
             let res = ResistorBuilder::new().val(50.0).build();
 
             let z = res.z(&freq);
@@ -1004,7 +1006,7 @@ mod element_tests {
 
         #[test]
         fn test_very_high_frequency() {
-            let freq = Frequency::new(array![1e12], Scale::Base); // 1 THz
+            let freq = new_frequency(array![1e12], Scale::Base); // 1 THz
 
             let cap = CapacitorBuilder::new().val_scaled(1.0, Scale::Pico).build();
 
@@ -1128,7 +1130,7 @@ mod element_tests {
 
         #[test]
         fn test_elem_trait_common_methods() {
-            let freq = Frequency::new(array![1e9], Scale::Base);
+            let freq = new_frequency(array![1e9], Scale::Base);
 
             let elements: Vec<Box<dyn Elem>> = vec![
                 Box::new(CapacitorBuilder::new().build()),
@@ -1153,7 +1155,7 @@ mod element_tests {
         #[test]
         fn test_numerical_stability_extreme_frequencies() {
             let freqs = array![1e-3, 1e0, 1e3, 1e6, 1e9, 1e12];
-            let freq = Frequency::new(freqs.clone(), Scale::Base);
+            let freq = new_frequency(freqs.clone(), Scale::Base);
 
             let cap = CapacitorBuilder::new().val_scaled(1.0, Scale::Pico).build();
 
@@ -1166,7 +1168,7 @@ mod element_tests {
 
         #[test]
         fn test_matrix_operations_consistency() {
-            let freq = Frequency::new(array![1e9], Scale::Base);
+            let freq = new_frequency(array![1e9], Scale::Base);
             let cap = CapacitorBuilder::new().build();
 
             let c1 = cap.c(&freq);
@@ -1182,7 +1184,7 @@ mod element_tests {
 
         #[test]
         fn test_c_at_equals_c_matrix_element() {
-            let freq = Frequency::new(array![1e9], Scale::Base);
+            let freq = new_frequency(array![1e9], Scale::Base);
             let cap = CapacitorBuilder::new().build();
 
             let c_matrix = cap.c(&freq);
@@ -1205,8 +1207,8 @@ mod element_tests {
             let freqs = vec![1e6, 1e7, 1e8, 1e9];
 
             for &f in &freqs {
-                let freq1 = Frequency::new(array![f], Scale::Base);
-                let freq2 = Frequency::new(array![2.0 * f], Scale::Base);
+                let freq1 = new_frequency(array![f], Scale::Base);
+                let freq2 = new_frequency(array![2.0 * f], Scale::Base);
 
                 let cap = CapacitorBuilder::new().val_scaled(1.0, Scale::Pico).build();
 
@@ -1224,8 +1226,8 @@ mod element_tests {
             let freqs = vec![1e6, 1e7, 1e8, 1e9];
 
             for &f in &freqs {
-                let freq1 = Frequency::new(array![f], Scale::Base);
-                let freq2 = Frequency::new(array![2.0 * f], Scale::Base);
+                let freq1 = new_frequency(array![f], Scale::Base);
+                let freq2 = new_frequency(array![2.0 * f], Scale::Base);
 
                 let ind = InductorBuilder::new().val_scaled(1.0, Scale::Nano).build();
 
@@ -1241,7 +1243,7 @@ mod element_tests {
         fn test_resistor_frequency_invariance() {
             // Property: Z(f1) = Z(f2) for all frequencies for resistors
             let freqs = array![1e3, 1e6, 1e9, 1e12];
-            let freq = Frequency::new(freqs.clone(), Scale::Base);
+            let freq = new_frequency(freqs.clone(), Scale::Base);
 
             let res = ResistorBuilder::new().val(100.0).build();
 
@@ -1256,7 +1258,7 @@ mod element_tests {
         #[test]
         fn test_series_impedance_additivity() {
             // Property: Z_total = Z1 + Z2 + Z3 for series connection
-            let freq = Frequency::new(array![1e9], Scale::Base);
+            let freq = new_frequency(array![1e9], Scale::Base);
 
             let r = ResistorBuilder::new().val(50.0).build();
             let l = InductorBuilder::new().val_scaled(10.0, Scale::Nano).build();
@@ -1279,7 +1281,7 @@ mod element_tests {
         fn test_capacitor_reactance_sign() {
             // Property: Capacitive reactance is always negative
             let freqs = array![1e6, 1e7, 1e8, 1e9, 1e10];
-            let freq = Frequency::new(freqs.clone(), Scale::Base);
+            let freq = new_frequency(freqs.clone(), Scale::Base);
 
             let cap = CapacitorBuilder::new().val_scaled(1.0, Scale::Pico).build();
 
@@ -1293,7 +1295,7 @@ mod element_tests {
         fn test_inductor_reactance_sign() {
             // Property: Inductive reactance is always positive
             let freqs = array![1e6, 1e7, 1e8, 1e9, 1e10];
-            let freq = Frequency::new(freqs.clone(), Scale::Base);
+            let freq = new_frequency(freqs.clone(), Scale::Base);
 
             let ind = InductorBuilder::new().val_scaled(1.0, Scale::Nano).build();
 
@@ -1306,7 +1308,7 @@ mod element_tests {
         #[test]
         fn test_c_matrix_symmetry_lumped() {
             // Property: C matrix should be symmetric for lumped elements
-            let freq = Frequency::new(array![1e9], Scale::Base);
+            let freq = new_frequency(array![1e9], Scale::Base);
 
             let elements = vec![
                 Box::new(CapacitorBuilder::new().build()) as Box<dyn Elem>,
@@ -1357,7 +1359,7 @@ mod element_tests {
                 (10.0, Scale::Nano),
             ];
 
-            let freq = Frequency::new(array![1e9], Scale::Base);
+            let freq = new_frequency(array![1e9], Scale::Base);
 
             for (val, scale) in test_values {
                 let cap = CapacitorBuilder::new().val_scaled(val, scale).build();
@@ -1373,7 +1375,7 @@ mod element_tests {
         #[test]
         fn test_resistor_values_parametric() {
             let resistances = vec![1.0, 10.0, 50.0, 75.0, 100.0, 1000.0, 10000.0];
-            let freq = Frequency::new(array![1e9], Scale::Base);
+            let freq = new_frequency(array![1e9], Scale::Base);
 
             for r_val in resistances {
                 let res = ResistorBuilder::new().val(r_val).build();
@@ -1396,7 +1398,7 @@ mod element_tests {
                 (1.0, Scale::Micro),
             ];
 
-            let freq = Frequency::new(array![1e9], Scale::Base);
+            let freq = new_frequency(array![1e9], Scale::Base);
 
             for (val, scale) in test_values {
                 let ind = InductorBuilder::new().val_scaled(val, scale).build();
@@ -1424,7 +1426,7 @@ mod element_tests {
             let cap = CapacitorBuilder::new().val_scaled(1.0, Scale::Pico).build();
 
             for &f in &frequencies {
-                let freq = Frequency::new(array![f], Scale::Base);
+                let freq = new_frequency(array![f], Scale::Base);
                 let z = cap.z(&freq);
 
                 let expected_reactance = -1.0 / (2.0 * PI * f * 1e-12);
@@ -1443,7 +1445,7 @@ mod element_tests {
                 c64(25.0, 25.0),
             ];
 
-            let freq = Frequency::new(array![1e9], Scale::Base);
+            let freq = new_frequency(array![1e9], Scale::Base);
 
             for z_val in impedances {
                 let port = PortBuilder::new().z(z_val).build();
@@ -1464,7 +1466,7 @@ mod element_tests {
             let c_val = 1.59e-7; // ~159 nF
             let fc = 1.0 / (2.0 * PI * r_val * c_val); // Cutoff frequency ~1 kHz
 
-            let freq = Frequency::new(array![fc], Scale::Base);
+            let freq = new_frequency(array![fc], Scale::Base);
             let r = ResistorBuilder::new().val(r_val).build();
             let c = CapacitorBuilder::new().val(c_val).build();
 
@@ -1482,7 +1484,7 @@ mod element_tests {
             let l_val = 1.59e-3; // ~1.59 mH
             let fc = r_val / (2.0 * PI * l_val); // Cutoff frequency ~10 kHz
 
-            let freq = Frequency::new(array![fc], Scale::Base);
+            let freq = new_frequency(array![fc], Scale::Base);
             let r = ResistorBuilder::new().val(r_val).build();
             let l = InductorBuilder::new().val(l_val).build();
 
@@ -1501,7 +1503,7 @@ mod element_tests {
             let mid_val: f64 = l_val * c_val;
             let f_res = 1.0 / (2.0 * PI * mid_val.sqrt()); // ~159 MHz
 
-            let freq = Frequency::new(array![f_res], Scale::Base);
+            let freq = new_frequency(array![f_res], Scale::Base);
             let l = InductorBuilder::new().val(l_val).build();
             let c = CapacitorBuilder::new().val(c_val).build();
 
@@ -1516,7 +1518,7 @@ mod element_tests {
         #[test]
         fn test_impedance_matching_network() {
             // Test 50 ohm to 75 ohm matching at 1 GHz
-            let freq = Frequency::new(array![1e9], Scale::Base);
+            let freq = new_frequency(array![1e9], Scale::Base);
 
             let port_in = PortBuilder::new().z(c64(50.0, 0.0)).nodes([1]).build();
 
@@ -1564,7 +1566,7 @@ mod element_tests {
                 .thickness_scaled(1.0, Scale::Micro)
                 .build();
 
-            let freq = Frequency::new(array![1e9], Scale::Base);
+            let freq = new_frequency(array![1e9], Scale::Base);
 
             // Test both mitered and non-mitered bends
             let bend_no_miter = MbendBuilder::new()
@@ -1630,7 +1632,7 @@ mod element_tests {
 
         #[test]
         fn test_minimum_capacitance() {
-            let freq = Frequency::new(array![1e9], Scale::Base);
+            let freq = new_frequency(array![1e9], Scale::Base);
             let cap = CapacitorBuilder::new()
                 .val_scaled(1.0, Scale::Femto) // 1 fF
                 .build();
@@ -1642,7 +1644,7 @@ mod element_tests {
 
         #[test]
         fn test_maximum_capacitance() {
-            let freq = Frequency::new(array![1e9], Scale::Base);
+            let freq = new_frequency(array![1e9], Scale::Base);
             let cap = CapacitorBuilder::new()
                 .val_scaled(1.0, Scale::Milli) // 1 mF
                 .build();
@@ -1654,7 +1656,7 @@ mod element_tests {
 
         #[test]
         fn test_minimum_inductance() {
-            let freq = Frequency::new(array![1e9], Scale::Base);
+            let freq = new_frequency(array![1e9], Scale::Base);
             let ind = InductorBuilder::new()
                 .val_scaled(1.0, Scale::Pico) // 1 pH
                 .build();
@@ -1666,7 +1668,7 @@ mod element_tests {
 
         #[test]
         fn test_maximum_inductance() {
-            let freq = Frequency::new(array![1e9], Scale::Base);
+            let freq = new_frequency(array![1e9], Scale::Base);
             let ind = InductorBuilder::new()
                 .val_scaled(1.0, Scale::Milli) // 1 mH
                 .build();
@@ -1678,7 +1680,7 @@ mod element_tests {
 
         #[test]
         fn test_minimum_resistance() {
-            let freq = Frequency::new(array![1e9], Scale::Base);
+            let freq = new_frequency(array![1e9], Scale::Base);
             let res = ResistorBuilder::new()
                 .val_scaled(1.0, Scale::Milli) // 1 mOhm
                 .build();
@@ -1689,7 +1691,7 @@ mod element_tests {
 
         #[test]
         fn test_maximum_resistance() {
-            let freq = Frequency::new(array![1e9], Scale::Base);
+            let freq = new_frequency(array![1e9], Scale::Base);
             let res = ResistorBuilder::new()
                 .val_scaled(1.0, Scale::Mega) // 1 MOhm
                 .build();
@@ -1733,7 +1735,7 @@ mod element_tests {
 
         #[test]
         fn test_frequency_at_boundary_zero() {
-            let freq = Frequency::new(array![1e-12], Scale::Base); // Near zero
+            let freq = new_frequency(array![1e-12], Scale::Base); // Near zero
             let res = ResistorBuilder::new().val(50.0).build();
 
             let z = res.z(&freq);
@@ -1742,7 +1744,7 @@ mod element_tests {
 
         #[test]
         fn test_frequency_at_boundary_high() {
-            let freq = Frequency::new(array![1e15], Scale::Base); // 1 PHz
+            let freq = new_frequency(array![1e15], Scale::Base); // 1 PHz
             let res = ResistorBuilder::new().val(50.0).build();
 
             let z = res.z(&freq);
@@ -1786,7 +1788,7 @@ mod element_tests {
 
         #[test]
         fn test_impedance_calculation_deterministic() {
-            let freq = Frequency::new(array![1e9], Scale::Base);
+            let freq = new_frequency(array![1e9], Scale::Base);
             let cap = CapacitorBuilder::new().val_scaled(1.0, Scale::Pico).build();
 
             let z1 = cap.z(&freq);
@@ -1809,7 +1811,7 @@ mod element_tests {
 
         #[test]
         fn test_c_matrix_dimensions_consistency() {
-            let freq = Frequency::new(array![1e9], Scale::Base);
+            let freq = new_frequency(array![1e9], Scale::Base);
 
             let two_port_elements: Vec<Box<dyn Elem>> = vec![
                 Box::new(CapacitorBuilder::new().build()),
@@ -1836,7 +1838,7 @@ mod element_tests {
         #[test]
         fn test_net_matrix_dimensions_consistency() {
             let freqs = array![1e9, 2e9, 5e9];
-            let freq = Frequency::new(freqs.clone(), Scale::Base);
+            let freq = new_frequency(freqs.clone(), Scale::Base);
 
             let cap = CapacitorBuilder::new().build();
             let net = cap.net(&freq);
@@ -1857,7 +1859,7 @@ mod element_tests {
                 .nodes([1, 2])
                 .build();
 
-            let freq = Frequency::new(array![1e9], Scale::Base);
+            let freq = new_frequency(array![1e9], Scale::Base);
             let z = cap.z(&freq);
 
             assert!(z.is_finite());
@@ -1872,7 +1874,7 @@ mod element_tests {
                 .nodes([1, 2])
                 .build();
 
-            let freq = Frequency::new(array![1e9], Scale::Base);
+            let freq = new_frequency(array![1e9], Scale::Base);
             let z = res.z(&freq);
 
             assert!(approx_eq!(f64, z.re, 50.0, epsilon = 1e-10));
@@ -1886,7 +1888,7 @@ mod element_tests {
                 .nodes([1, 2])
                 .build();
 
-            let freq = Frequency::new(array![1e9], Scale::Base);
+            let freq = new_frequency(array![1e9], Scale::Base);
             let z = ind.z(&freq);
 
             assert!(z.is_finite());

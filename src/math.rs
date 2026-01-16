@@ -1,4 +1,4 @@
-use crate::unit::UnitVal;
+use crate::unit::UnitValue;
 use ndarray::prelude::*;
 use num::complex::{Complex64, c64};
 use rug::Assign;
@@ -18,7 +18,7 @@ pub fn z_to_gamma(z: Complex64, z0: f64) -> Complex64 {
     (z - z0) / (z + z0)
 }
 
-pub fn rc_to_gamma(r: f64, c: f64, z0: f64, freq: &UnitVal) -> Complex64 {
+pub fn rc_to_gamma(r: f64, c: f64, z0: f64, freq: &UnitValue) -> Complex64 {
     let z = 1.0 / c64(1.0 / r, 2.0 * std::f64::consts::PI * freq.val() * c);
 
     (z - z0) / (z + z0)
@@ -32,7 +32,7 @@ pub fn gamma_to_z_normalized(gamma: Complex64, z0: f64) -> Complex64 {
     gamma_to_z(gamma, z0) / z0
 }
 
-pub fn rpcp_to_rscs(rp: f64, cp: f64, freq: &UnitVal) -> (f64, f64) {
+pub fn rpcp_to_rscs(rp: f64, cp: f64, freq: &UnitValue) -> (f64, f64) {
     if cp == 0.0 {
         (rp, 0_f64)
     } else {
@@ -41,7 +41,7 @@ pub fn rpcp_to_rscs(rp: f64, cp: f64, freq: &UnitVal) -> (f64, f64) {
     }
 }
 
-pub fn rscs_to_rpcp(rs: f64, cs: f64, freq: &UnitVal) -> (f64, f64) {
+pub fn rscs_to_rpcp(rs: f64, cs: f64, freq: &UnitValue) -> (f64, f64) {
     if cs == 0.0 {
         (rs, 0_f64)
     } else {
@@ -50,11 +50,11 @@ pub fn rscs_to_rpcp(rs: f64, cs: f64, freq: &UnitVal) -> (f64, f64) {
     }
 }
 
-pub fn rpcp_to_z(rp: f64, cp: f64, freq: &UnitVal) -> Complex64 {
+pub fn rpcp_to_z(rp: f64, cp: f64, freq: &UnitValue) -> Complex64 {
     1.0 / c64(1.0 / rp, 2.0 * std::f64::consts::PI * freq.val() * cp)
 }
 
-pub fn z_to_rpcp(z: Complex64, freq: &UnitVal) -> (f64, f64) {
+pub fn z_to_rpcp(z: Complex64, freq: &UnitValue) -> (f64, f64) {
     let y = 1.0 / z;
 
     if y.im == 0.0 {
@@ -64,11 +64,11 @@ pub fn z_to_rpcp(z: Complex64, freq: &UnitVal) -> (f64, f64) {
     }
 }
 
-pub fn rscs_to_z(rs: f64, cs: f64, freq: &UnitVal) -> Complex64 {
+pub fn rscs_to_z(rs: f64, cs: f64, freq: &UnitValue) -> Complex64 {
     c64(rs, -1.0 / (2.0 * std::f64::consts::PI * freq.val() * cs))
 }
 
-pub fn z_to_rscs(z: Complex64, freq: &UnitVal) -> (f64, f64) {
+pub fn z_to_rscs(z: Complex64, freq: &UnitValue) -> (f64, f64) {
     if z.im == 0.0 {
         (z.re, 0_f64)
     } else {
@@ -382,7 +382,7 @@ mod math_tests {
     use super::*;
     use crate::scale::Scale;
     use crate::unit::UnitValBuilder;
-    use crate::util::{comp_c64, comp_f64, comp_vec_c64, comp_vec_f64};
+    use crate::util::{comp_f64, comp_num, comp_vec_c64, comp_vec_f64};
     use float_cmp::F64Margin;
 
     #[test]
@@ -550,8 +550,8 @@ mod math_tests {
         let z = c64(42.4, -19.6);
         let y = c64(0.01943242648676395, 0.008982914130673902);
 
-        comp_c64(&z_to_y(z), &y, F64Margin::default(), "z_to_y()", "y");
-        comp_c64(&y_to_z(z), &y, F64Margin::default(), "y_to_z()", "z");
+        comp_num(&z_to_y(z), &y, F64Margin::default(), "z_to_y()", "y");
+        comp_num(&y_to_z(z), &y, F64Margin::default(), "y_to_z()", "z");
     }
 
     #[test]
@@ -561,7 +561,7 @@ mod math_tests {
         let gamma = c64(-0.03565151895556114, -0.21968365553602814);
         let test = z_to_gamma(z, z0);
 
-        comp_c64(&test, &gamma, F64Margin::default(), "z_to_gamma()", "gamma");
+        comp_num(&test, &gamma, F64Margin::default(), "z_to_gamma()", "gamma");
     }
 
     #[test]
@@ -571,7 +571,7 @@ mod math_tests {
         let z = c64(13.096841624374102, -131.24096072255193);
         let test = gamma_to_z(gamma, z0);
 
-        comp_c64(&test, &z, F64Margin::default(), "gamma_to_z()", "z");
+        comp_num(&test, &z, F64Margin::default(), "gamma_to_z()", "z");
     }
 
     #[test]
@@ -598,7 +598,7 @@ mod math_tests {
             &UnitValBuilder::new().val_scaled(f, Scale::Giga).build(),
         );
 
-        comp_c64(&test, &z, F64Margin::default(), "rpcp_to_z()", "z");
+        comp_num(&test, &z, F64Margin::default(), "rpcp_to_z()", "z");
     }
 
     #[test]
@@ -626,7 +626,7 @@ mod math_tests {
                 &UnitValBuilder::new().val_scaled(f, Scale::Giga).build(),
             );
 
-        comp_c64(&test, &y, F64Margin::default(), "rscs_to_y()", "y");
+        comp_num(&test, &y, F64Margin::default(), "rscs_to_y()", "y");
     }
 
     #[test]
@@ -641,7 +641,7 @@ mod math_tests {
             &UnitValBuilder::new().val_scaled(f, Scale::Giga).build(),
         );
 
-        comp_c64(&test, &z, F64Margin::default(), "rscs_to_z()", "z");
+        comp_num(&test, &z, F64Margin::default(), "rscs_to_z()", "z");
     }
 
     #[test]

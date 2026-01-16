@@ -3,8 +3,8 @@ use crate::{
     error::MinimizerError,
     minimize::{Bracket, F1dim, ObjFn},
     num::RFFloat,
+    pts::Points1,
 };
-use ndarray::prelude::*;
 use std::fmt;
 
 /// Result of Brent's method root finding
@@ -91,8 +91,8 @@ where
     /// Brent's method for more robust line search
     pub fn line_search(
         &mut self,
-        point: ArrayView1<T>,
-        direction: ArrayView1<T>,
+        point: &Points1<T>,
+        direction: &Points1<T>,
         initial_step: &T,
         tol: &T,
         max_evaluations: usize,
@@ -462,7 +462,7 @@ where
         b: &T,
         subdivisions: Option<usize>,
         tol: Option<T>,
-    ) -> Array1<T> {
+    ) -> Points1<T> {
         let n_sub = subdivisions.unwrap_or(100);
         let tol = tol.unwrap_or(1e-12.into());
         let mut roots = Vec::new();
@@ -512,7 +512,7 @@ where
         }
 
         roots.sort_by(|a, b| a.partial_cmp(b).unwrap());
-        Array1::from_vec(roots)
+        Points1::from_vec(roots)
     }
 
     pub fn xmin(&self) -> T {
@@ -549,8 +549,9 @@ where
 #[cfg(test)]
 mod minimize_brent_tests {
     use super::*;
-    use crate::{minimize::SingleDimFn, myfloat::MyFloat};
+    use crate::{minimize::SingleDimFn, num::MyFloat, pts::Pts};
     use float_cmp::{F64Margin, approx_eq};
+    use ndarray::prelude::*;
     use std::f64::consts::{E, PI};
 
     const MARGIN: F64Margin = F64Margin {
@@ -1171,17 +1172,11 @@ mod minimize_brent_tests {
             let objective = SingleDimFn::new(f);
             let mut brent = Brent::new(objective);
 
-            let point = array![1.0.into()];
-            let direction = array![MyFloat::new(-1.0)]; // Search towards x = 0
+            let point = array![1.0.into()].into();
+            let direction = array![MyFloat::new(-1.0)].into(); // Search towards x = 0
 
             let result = brent
-                .line_search(
-                    point.view(),
-                    direction.view(),
-                    &0.1.into(),
-                    &1e-6.into(),
-                    100,
-                )
+                .line_search(&point, &direction, &0.1.into(), &1e-6.into(), 100)
                 .unwrap();
 
             // The line search finds optimal step size
@@ -1196,17 +1191,11 @@ mod minimize_brent_tests {
             let objective = SingleDimFn::new(f);
             let mut brent = Brent::new(objective);
 
-            let point = array![2.0.into(), 3.0.into()]; // Starting point in 2D
-            let direction = array![MyFloat::new(-1.0), 0.0.into()]; // Search in x-direction only
+            let point = array![2.0.into(), 3.0.into()].into(); // Starting point in 2D
+            let direction = array![MyFloat::new(-1.0), 0.0.into()].into(); // Search in x-direction only
 
             // Test that line search doesn't crash with multidimensional inputs
-            let result = brent.line_search(
-                point.view(),
-                direction.view(),
-                &0.5.into(),
-                &1e-6.into(),
-                50,
-            );
+            let result = brent.line_search(&point, &direction, &0.5.into(), &1e-6.into(), 50);
 
             // The behavior depends on how F1dim handles multidimensional inputs
             // At minimum, it should not panic

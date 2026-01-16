@@ -1,12 +1,11 @@
 use crate::{
-    frequency::Frequency,
+    frequency::{FreqArray, Frequency, new_frequency, new_frequency_scaled},
     impedance::ComplexNumberType,
     math::*,
-    mycomplex::MyComplex,
-    myfloat::MyFloat,
     network::{NetworkPoint, PortPoints, PortVal, WaveType, network_err_msg},
+    num::{MyComplex, MyFloat},
     parameter::RFParameter,
-    pts::{Points, Pts},
+    pts::{Matrix, Points, Pts},
     scale::Scale,
     unit::Unit,
 };
@@ -1422,8 +1421,14 @@ impl fmt::Debug for Network {
 mod network_network_tests {
     use super::*;
     use crate::{
-        frequency::FrequencyBuilder, impedance::*, network::NetworkBuilder, points, scale::*,
-        unit::*, util::*,
+        frequency::FrequencyBuilder,
+        impedance::*,
+        network::NetworkBuilder,
+        points,
+        pts::{Matrix, Points1, Points2, Points3, Pts},
+        scale::*,
+        unit::*,
+        util::*,
     };
     use float_cmp::F64Margin;
     use std::collections::HashMap;
@@ -1454,236 +1459,196 @@ mod network_network_tests {
         ]);
 
         let param = RFParameter::A;
-        comp_points_c64(
-            exemplars.get(&param).unwrap().view(),
-            calc.net(param).view(),
+        comp_pts_ix3(
+            exemplars.get(&param).unwrap(),
+            calc.net(param),
             margin,
             format!("net({})", param).as_str(),
         );
-        comp_points_c64(
-            exemplars.get(&param).unwrap().view(),
-            calc.a().view(),
-            margin,
-            "a()",
-        );
+        comp_pts_ix3(exemplars.get(&param).unwrap(), calc.a(), margin, "a()");
         new_net.set_net(&x, param);
-        comp_points_c64(x.view(), new_net.a().view(), margin, "a(x)");
+        comp_pts_ix3(&x, new_net.a(), margin, "a(x)");
         new_net.set_net(calc.a(), param);
-        comp_points_c64(
-            exemplars.get(&param).unwrap().view(),
-            new_net.a().view(),
+        comp_pts_ix3(
+            exemplars.get(&param).unwrap(),
+            new_net.a(),
             margin,
             "a(new_net)",
         );
 
         let param = RFParameter::G;
-        comp_points_c64(
-            exemplars.get(&param).unwrap().view(),
-            calc.net(param).view(),
+        comp_pts_ix3(
+            exemplars.get(&param).unwrap(),
+            calc.net(param),
             margin,
             format!("net({})", param).as_str(),
         );
-        comp_points_c64(
-            exemplars.get(&param).unwrap().view(),
-            calc.g().view(),
-            margin,
-            "g()",
-        );
+        comp_pts_ix3(exemplars.get(&param).unwrap(), calc.g(), margin, "g()");
         new_net.set_net(&x, param);
-        comp_points_c64(x.view(), new_net.g().view(), margin, "g(x)");
+        comp_pts_ix3(&x, new_net.g(), margin, "g(x)");
         new_net.set_net(calc.g(), param);
-        comp_points_c64(
-            exemplars.get(&param).unwrap().view(),
-            new_net.g().view(),
+        comp_pts_ix3(
+            exemplars.get(&param).unwrap(),
+            new_net.g(),
             margin,
             "g(new_net)",
         );
 
         let param = RFParameter::H;
-        comp_points_c64(
-            exemplars.get(&param).unwrap().view(),
-            calc.net(param).view(),
+        comp_pts_ix3(
+            exemplars.get(&param).unwrap(),
+            calc.net(param),
             margin,
             format!("net({})", param).as_str(),
         );
-        comp_points_c64(
-            exemplars.get(&param).unwrap().view(),
-            calc.h().view(),
-            margin,
-            "h()",
-        );
+        comp_pts_ix3(exemplars.get(&param).unwrap(), calc.h(), margin, "h()");
         new_net.set_net(&x, param);
-        comp_points_c64(x.view(), new_net.h().view(), margin, "h(x)");
+        comp_pts_ix3(&x, new_net.h(), margin, "h(x)");
         new_net.set_net(calc.h(), param);
-        comp_points_c64(
-            exemplars.get(&param).unwrap().view(),
-            new_net.h().view(),
+        comp_pts_ix3(
+            exemplars.get(&param).unwrap(),
+            new_net.h(),
             margin,
             "h(new_net)",
         );
 
         let param = RFParameter::S;
-        comp_points_c64(
-            exemplars.get(&param).unwrap().view(),
-            calc.net(param).view(),
+        comp_pts_ix3(
+            exemplars.get(&param).unwrap(),
+            calc.net(param),
             margin,
             format!("net({})", param).as_str(),
         );
-        comp_points_c64(
-            exemplars.get(&param).unwrap().view(),
-            calc.s().view(),
-            margin,
-            "s()",
-        );
+        comp_pts_ix3(exemplars.get(&param).unwrap(), calc.s(), margin, "s()");
         new_net.set_net(&x, param);
-        comp_points_c64(x.view(), new_net.s().view(), margin, "s(x)");
+        comp_pts_ix3(&x, new_net.s(), margin, "s(x)");
         new_net.set_net(calc.s(), param);
-        comp_points_c64(
-            exemplars.get(&param).unwrap().view(),
-            new_net.s().view(),
+        comp_pts_ix3(
+            exemplars.get(&param).unwrap(),
+            new_net.s(),
             margin,
             "s(new_net)",
         );
 
         let param = RFParameter::SPower;
-        comp_points_c64(
-            exemplars.get(&param).unwrap().view(),
-            calc.net(param).view(),
+        comp_pts_ix3(
+            exemplars.get(&param).unwrap(),
+            calc.net(param),
             margin,
             format!("net({})", param).as_str(),
         );
-        comp_points_c64(
-            exemplars.get(&param).unwrap().view(),
-            calc.s_power().view(),
+        comp_pts_ix3(
+            exemplars.get(&param).unwrap(),
+            calc.s_power(),
             margin,
             "s_power()",
         );
         new_net.set_net(&x, param);
-        comp_points_c64(x.view(), new_net.s_power().view(), margin, "s_power(x)");
+        comp_pts_ix3(&x, new_net.s_power(), margin, "s_power(x)");
         new_net.set_net(calc.s_power(), param);
-        comp_points_c64(
-            exemplars.get(&param).unwrap().view(),
-            new_net.s_power().view(),
+        comp_pts_ix3(
+            exemplars.get(&param).unwrap(),
+            new_net.s_power(),
             margin,
             "s_power(new_net)",
         );
 
         let param = RFParameter::SPseudo;
-        comp_points_c64(
-            exemplars.get(&param).unwrap().view(),
-            calc.net(param).view(),
+        comp_pts_ix3(
+            exemplars.get(&param).unwrap(),
+            calc.net(param),
             margin,
             format!("net({})", param).as_str(),
         );
-        comp_points_c64(
-            exemplars.get(&param).unwrap().view(),
-            calc.s_pseudo().view(),
+        comp_pts_ix3(
+            exemplars.get(&param).unwrap(),
+            calc.s_pseudo(),
             margin,
             "s_pseudo()",
         );
         new_net.set_net(&x, param);
-        comp_points_c64(x.view(), new_net.s_pseudo().view(), margin, "s_pseudo(x)");
+        comp_pts_ix3(&x, new_net.s_pseudo(), margin, "s_pseudo(x)");
         new_net.set_net(calc.s_pseudo(), param);
-        comp_points_c64(
-            exemplars.get(&param).unwrap().view(),
-            new_net.s_pseudo().view(),
+        comp_pts_ix3(
+            exemplars.get(&param).unwrap(),
+            new_net.s_pseudo(),
             margin,
             "s_pseudo(new_net)",
         );
 
         let param = RFParameter::STraveling;
-        comp_points_c64(
-            exemplars.get(&param).unwrap().view(),
-            calc.net(param).view(),
+        comp_pts_ix3(
+            exemplars.get(&param).unwrap(),
+            calc.net(param),
             margin,
             format!("net({})", param).as_str(),
         );
-        comp_points_c64(
-            exemplars.get(&param).unwrap().view(),
-            calc.s_traveling().view(),
+        comp_pts_ix3(
+            exemplars.get(&param).unwrap(),
+            calc.s_traveling(),
             margin,
             "s_traveling()",
         );
         new_net.set_net(&x, param);
-        comp_points_c64(
-            x.view(),
-            new_net.s_traveling().view(),
-            margin,
-            "s_traveling(x)",
-        );
+        comp_pts_ix3(&x, new_net.s_traveling(), margin, "s_traveling(x)");
         new_net.set_net(calc.s_traveling(), param);
-        comp_points_c64(
-            exemplars.get(&param).unwrap().view(),
-            new_net.s_traveling().view(),
+        comp_pts_ix3(
+            exemplars.get(&param).unwrap(),
+            new_net.s_traveling(),
             margin,
             "s_traveling(new_net)",
         );
 
         let param = RFParameter::T;
-        comp_points_c64(
-            exemplars.get(&param).unwrap().view(),
-            calc.net(param).view(),
+        comp_pts_ix3(
+            exemplars.get(&param).unwrap(),
+            calc.net(param),
             margin,
             format!("net({})", param).as_str(),
         );
-        comp_points_c64(
-            exemplars.get(&param).unwrap().view(),
-            calc.t().view(),
-            margin,
-            "t()",
-        );
+        comp_pts_ix3(exemplars.get(&param).unwrap(), calc.t(), margin, "t()");
         new_net.set_net(&x, param);
-        comp_points_c64(x.view(), new_net.t().view(), margin, "t(x)");
+        comp_pts_ix3(&x, new_net.t(), margin, "t(x)");
         new_net.set_net(calc.t(), param);
-        comp_points_c64(
-            exemplars.get(&param).unwrap().view(),
-            new_net.t().view(),
+        comp_pts_ix3(
+            exemplars.get(&param).unwrap(),
+            new_net.t(),
             margin,
             "t(new_net)",
         );
 
         let param = RFParameter::Y;
-        comp_points_c64(
-            exemplars.get(&param).unwrap().view(),
-            calc.net(param).view(),
+        comp_pts_ix3(
+            exemplars.get(&param).unwrap(),
+            calc.net(param),
             margin,
             format!("net({})", param).as_str(),
         );
-        comp_points_c64(
-            exemplars.get(&param).unwrap().view(),
-            calc.y().view(),
-            margin,
-            "y()",
-        );
+        comp_pts_ix3(exemplars.get(&param).unwrap(), calc.y(), margin, "y()");
         new_net.set_net(&x, param);
-        comp_points_c64(x.view(), new_net.y().view(), margin, "y(x)");
+        comp_pts_ix3(&x, new_net.y(), margin, "y(x)");
         new_net.set_net(calc.y(), param);
-        comp_points_c64(
-            exemplars.get(&param).unwrap().view(),
-            new_net.y().view(),
+        comp_pts_ix3(
+            exemplars.get(&param).unwrap(),
+            new_net.y(),
             margin,
             "y(new_net)",
         );
 
         let param = RFParameter::Z;
-        comp_points_c64(
-            exemplars.get(&param).unwrap().view(),
-            calc.net(param).view(),
+        comp_pts_ix3(
+            exemplars.get(&param).unwrap(),
+            calc.net(param),
             margin,
             format!("net({})", param).as_str(),
         );
-        comp_points_c64(
-            exemplars.get(&param).unwrap().view(),
-            calc.z().view(),
-            margin,
-            "z()",
-        );
+        comp_pts_ix3(exemplars.get(&param).unwrap(), calc.z(), margin, "z()");
         new_net.set_net(&x, param);
-        comp_points_c64(x.view(), new_net.z().view(), margin, "z(x)");
+        comp_pts_ix3(&x, new_net.z(), margin, "z(x)");
         new_net.set_net(calc.z(), param);
-        comp_points_c64(
-            exemplars.get(&param).unwrap().view(),
-            new_net.z().view(),
+        comp_pts_ix3(
+            exemplars.get(&param).unwrap(),
+            new_net.z(),
             margin,
             "z(new_net)",
         );
@@ -1695,7 +1660,7 @@ mod network_network_tests {
         #[test]
         fn network_reciprocity() {
             let calc = Network::new(
-                Frequency::new_scaled(array![1.0], Scale::Giga),
+                new_frequency_scaled(array![1.0], Scale::Giga),
                 array![c64::from(50.0), c64::from(50.0),],
                 RFParameter::S,
                 Points::<Complex64, Ix3>::new(array![[
@@ -1707,16 +1672,16 @@ mod network_network_tests {
             );
 
             let exemplar = Points::<f64, Ix3>::zeros((1, 2, 2));
-            comp_points_f64(
-                exemplar.view(),
-                calc.reciprocity().view(),
+            comp_pts_ix3(
+                &exemplar,
+                &calc.reciprocity(),
                 F64Margin::default(),
                 "reciprocity(1)",
             );
             assert_eq!(true, calc.is_reciprocal());
 
             let calc = Network::new(
-                Frequency::new_scaled(array![1.0], Scale::Giga),
+                new_frequency_scaled(array![1.0], Scale::Giga),
                 array![c64::from(50.0), c64::from(50.0),],
                 RFParameter::S,
                 Points::<Complex64, Ix3>::new(array![[
@@ -1732,9 +1697,9 @@ mod network_network_tests {
                 [0.860811245279707, 0.0],
             ]]);
 
-            comp_points_f64(
-                exemplar.view(),
-                calc.reciprocity().view(),
+            comp_pts_ix3(
+                &exemplar,
+                &calc.reciprocity(),
                 F64Margin::default(),
                 "reciprocity(2)",
             );
@@ -1916,7 +1881,7 @@ mod network_network_tests {
         #[test]
         fn network_chop_in_half() {
             let base = Network::new(
-                Frequency::new_scaled(array![1.0], Scale::Giga),
+                new_frequency_scaled(array![1.0], Scale::Giga),
                 array![c64::from(50.0), c64::from(50.0),],
                 RFParameter::S,
                 Points::<Complex64, Ix3>::new(array![[
@@ -1940,12 +1905,7 @@ mod network_network_tests {
 
             let calc = base.chop_in_half();
 
-            comp_points_c64(
-                exemplar.view(),
-                calc.s().view(),
-                F64Margin::default(),
-                "chop_in_half",
-            );
+            comp_pts_ix3(&exemplar, calc.s(), F64Margin::default(), "chop_in_half");
         }
 
         #[test]
@@ -2013,7 +1973,7 @@ mod network_network_tests {
             ]);
 
             let net = Network::new(
-                Frequency::new_scaled(array![1.0, 2.0, 3.0], Scale::Giga),
+                new_frequency_scaled(array![1.0, 2.0, 3.0], Scale::Giga),
                 array![c64::from(50.0), c64::from(50.0),],
                 param,
                 net_a.clone(),
@@ -2026,12 +1986,7 @@ mod network_network_tests {
                 epsilon: f64::EPSILON,
                 ulps: 10,
             };
-            comp_points_c64(
-                exemplar.view(),
-                test.s().view(),
-                margin,
-                "connect(1, net, 0)",
-            );
+            comp_pts_ix3(&exemplar, test.s(), margin, "connect(1, net, 0)");
 
             // let param = RFParameter::S;
             // let net_a = array![
@@ -2084,7 +2039,7 @@ mod network_network_tests {
             // ];
 
             // let net = Network::new(
-            //     Frequency::new_scaled(array![1.0, 2.0, 3.0], Scale::Giga),
+            //     new_frequency_scaled(array![1.0, 2.0, 3.0], Scale::Giga),
             //     array![c64::from(50.0), c64::from(50.0),],
             //     param,
             //     net_a.clone(),
@@ -2097,7 +2052,7 @@ mod network_network_tests {
             //     epsilon: f64::EPSILON,
             //     ulps: 10,
             // };
-            // comp_points_c64(&exemplar, &test.s(), margin, "connect(1, net2, 0)");
+            // comp_pts_ix3(&exemplar, &test.s(), margin, "connect(1, net2, 0)");
         }
 
         #[test]
@@ -2106,10 +2061,10 @@ mod network_network_tests {
                 epsilon: 1e-15,
                 ulps: 4,
             };
-            let exemplar: Array1<f64> =
-                array![-90.132597176469145, 49.955810487903721, 190.04421815227662];
+            let exemplar: Points1<f64> =
+                array![-90.132597176469145, 49.955810487903721, 190.04421815227662].into();
             let calc = Network::new(
-                Frequency::new_scaled(array![1.0, 2.0, 3.0], Scale::Giga),
+                new_frequency_scaled(array![1.0, 2.0, 3.0], Scale::Giga),
                 array![c64::from(50.0), c64::from(50.0),],
                 RFParameter::S,
                 Points::<Complex64, Ix3>::new(array![
@@ -2129,14 +2084,14 @@ mod network_network_tests {
                 String::from(""),
                 String::from(""),
             );
-            comp_array_f64(
-                exemplar.view(),
-                calc.gd((1, 0), Scale::Pico).view(),
+            comp_pts_ix1(
+                &exemplar,
+                &Points::new(calc.gd((1, 0), Scale::Pico)),
                 margin,
                 "group_delay1((1,0), Scale::Pico)",
             );
 
-            let exemplar: Array1<f64> = array![
+            let exemplar: Points1<f64> = array![
                 22.9888888888889,
                 22.98888888888887,
                 22.894444444444417,
@@ -2357,7 +2312,8 @@ mod network_network_tests {
                 0.419444444444448,
                 -2.163888888888875,
                 -3.616666666666581,
-            ];
+            ]
+            .into();
             let calc = Network::new_from(
                 FrequencyBuilder::new()
                     .start_stop_step_scaled(0.5, 110.0, 0.5, Scale::Giga)
@@ -3726,21 +3682,22 @@ mod network_network_tests {
             Vg(mA) = -0.000",
                 ),
             );
-            comp_array_f64(
-                exemplar.view(),
-                calc.gd((1, 0), Scale::Pico).view(),
+            comp_pts_ix1(
+                &exemplar,
+                &Points::new(calc.gd((1, 0), Scale::Pico)),
                 margin,
                 "group_delay2((1,0), Scale::Pico)",
             );
 
-            let exemplar: Array1<f64> = array![
+            let exemplar: Points1<f64> = array![
                 29.5388888888888596784634058095,
                 26.0111111111110881427605181177,
                 25.8111111111111116857075525184,
                 29.1388888888889067643574746108,
-            ];
+            ]
+            .into();
             let calc = Network::new(
-                Frequency::new_scaled(array![0.5, 1.0, 1.5, 2.0], Scale::Giga),
+                new_frequency_scaled(array![0.5, 1.0, 1.5, 2.0], Scale::Giga),
                 array![c64::from(50.0), c64::from(50.0),],
                 RFParameter::S,
                 Points::<Complex64, Ix3>::new(array![
@@ -3820,14 +3777,14 @@ mod network_network_tests {
             Vd(mA) = 11.076",
                 ),
             );
-            comp_array_f64(
-                exemplar.view(),
-                calc.gd((1, 0), Scale::Pico).view(),
+            comp_pts_ix1(
+                &exemplar,
+                &Points::new(calc.gd((1, 0), Scale::Pico)),
                 margin,
                 "group_delay3((1,0), Scale::Pico)",
             );
 
-            let exemplar: Array1<f64> = array![
+            let exemplar: Points1<f64> = array![
                 23.54444444444442,
                 23.411111111111122,
                 22.952777777777776,
@@ -4048,7 +4005,8 @@ mod network_network_tests {
                 -0.463888888888918,
                 -2.466666666666642,
                 -4.922222222222105,
-            ];
+            ]
+            .into();
             let calc = Network::new_from(
                 FrequencyBuilder::new()
                     .start_stop_step_scaled(0.5, 110.0, 0.5, Scale::Giga)
@@ -5417,14 +5375,14 @@ mod network_network_tests {
             Vg(mA) = -0.000",
                 ),
             );
-            comp_array_f64(
-                exemplar.view(),
-                calc.gd((0, 1), Scale::Pico).view(),
+            comp_pts_ix1(
+                &exemplar,
+                &Points::new(calc.gd((0, 1), Scale::Pico)),
                 margin,
                 "group_delay4((1,0), Scale::Pico)",
             );
 
-            let exemplar: Array1<f64> = array![
+            let exemplar: Points1<f64> = array![
                 13.666666666666593,
                 13.650000000000007,
                 13.611111111111148,
@@ -5645,7 +5603,8 @@ mod network_network_tests {
                 -0.716666666666639,
                 -0.874999999999984,
                 -0.605555555555522,
-            ];
+            ]
+            .into();
             let calc = Network::new_from(
                 FrequencyBuilder::new()
                     .start_stop_step_scaled(0.5, 110.0, 0.5, Scale::Giga)
@@ -7009,9 +6968,9 @@ mod network_network_tests {
             Vd(mA) = 0.002\n",
                 ),
             );
-            comp_array_f64(
-                exemplar.view(),
-                calc.gd((1, 0), Scale::Pico).view(),
+            comp_pts_ix1(
+                &exemplar,
+                &Points::new(calc.gd((1, 0), Scale::Pico)),
                 margin,
                 "group_delay5((1,0), Scale::Pico)",
             );
@@ -7024,13 +6983,14 @@ mod network_network_tests {
                 ulps: 4,
             };
 
-            let exemplar: Array1<f64> = array![
+            let exemplar: Points1<f64> = array![
                 1.6755019249092201e-01,
                 2.5496798991797386e+04,
                 -2.6328854393938734e+01,
-            ];
+            ]
+            .into();
             let calc = Network::new(
-                Frequency::new_scaled(array![1.0, 2.0, 3.0], Scale::Giga),
+                new_frequency_scaled(array![1.0, 2.0, 3.0], Scale::Giga),
                 array![c64::from(50.0), c64::from(50.0),],
                 RFParameter::S,
                 Points::<Complex64, Ix3>::new(array![
@@ -7050,17 +7010,18 @@ mod network_network_tests {
                 String::from(""),
                 String::from(""),
             );
-            comp_array_f64(exemplar.view(), calc.k().view(), margin, "k(1)");
+            comp_pts_ix1(&exemplar, &Points::new(calc.k()), margin, "k(1)");
 
             // test.s2p
-            let exemplar: Array1<f64> = array![
+            let exemplar: Points1<f64> = array![
                 0.024742798510455,
                 0.026829555623131,
                 0.010327404229363,
                 0.019609843571699,
-            ];
+            ]
+            .into();
             let calc = Network::new(
-                Frequency::new_scaled(array![0.5, 1.0, 1.5, 2.0], Scale::Giga),
+                new_frequency_scaled(array![0.5, 1.0, 1.5, 2.0], Scale::Giga),
                 array![c64::from(50.0), c64::from(50.0),],
                 RFParameter::S,
                 Points::<Complex64, Ix3>::new(array![
@@ -7140,10 +7101,10 @@ mod network_network_tests {
             Vd(mA) = 11.076",
                 ),
             );
-            comp_array_f64(exemplar.view(), calc.k().view(), margin, "k(2)");
+            comp_pts_ix1(&exemplar, &Points::new(calc.k()), margin, "k(2)");
 
             // test_2.s2p
-            let exemplar: Array1<f64> = array![
+            let exemplar: Points1<f64> = array![
                 0.999898913654026,
                 1.000010680478558,
                 1.000186508060361,
@@ -7364,7 +7325,8 @@ mod network_network_tests {
                 -0.82009381095375,
                 -1.133718049566681,
                 -1.76816575468236,
-            ];
+            ]
+            .into();
             let calc = Network::new_from(
                 FrequencyBuilder::new()
                     .start_stop_step_scaled(0.5, 110.0, 0.5, Scale::Giga)
@@ -8733,10 +8695,10 @@ mod network_network_tests {
             Vg(mA) = -0.000",
                 ),
             );
-            comp_array_f64(exemplar.view(), calc.k().view(), margin, "k(3)");
+            comp_pts_ix1(&exemplar, &Points::new(calc.k()), margin, "k(3)");
 
             // test_3.s2p
-            let exemplar: Array1<f64> = array![
+            let exemplar: Points1<f64> = array![
                 0.99884491752086,
                 0.999824832484492,
                 0.99990721490354,
@@ -8957,7 +8919,8 @@ mod network_network_tests {
                 0.79979328604525,
                 0.85811807687309,
                 0.909882228843024,
-            ];
+            ]
+            .into();
             let calc = Network::new_from(
                 FrequencyBuilder::new()
                     .start_stop_step_scaled(0.5, 110.0, 0.5, Scale::Giga)
@@ -10321,7 +10284,7 @@ mod network_network_tests {
             Vd(mA) = 0.002\n",
                 ),
             );
-            comp_array_f64(exemplar.view(), calc.k().view(), margin, "k(4)");
+            comp_pts_ix1(&exemplar, &Points::new(calc.k()), margin, "k(4)");
         }
 
         #[test]
@@ -10331,18 +10294,20 @@ mod network_network_tests {
                 ulps: 4,
             };
 
-            let exemplar_max_gain: Array1<f64> = array![
+            let exemplar_max_gain: Points1<f64> = array![
                 2.598182739029478e-02,
                 2.269447098311342e-05,
                 7.858595949885737e-03,
-            ];
-            let exemplar_max_stable_gain: Array1<f64> = array![
+            ]
+            .into();
+            let exemplar_max_stable_gain: Points1<f64> = array![
                 0.025981827390294778,
                 1.1572727293181975,
                 0.007858595949885737,
-            ];
+            ]
+            .into();
             let calc = Network::new(
-                Frequency::new_scaled(array![1.0, 2.0, 3.0], Scale::Giga),
+                new_frequency_scaled(array![1.0, 2.0, 3.0], Scale::Giga),
                 array![c64::from(50.0), c64::from(50.0),],
                 RFParameter::S,
                 Points::<Complex64, Ix3>::new(array![
@@ -10362,20 +10327,20 @@ mod network_network_tests {
                 String::from(""),
                 String::from(""),
             );
-            comp_array_f64(
-                exemplar_max_gain.view(),
-                calc.max_gain().view(),
+            comp_pts_ix1(
+                &exemplar_max_gain,
+                &Points::new(calc.max_gain()),
                 margin,
                 "max_gain(1)",
             );
-            comp_array_f64(
-                exemplar_max_stable_gain.view(),
-                calc.max_stable_gain().view(),
+            comp_pts_ix1(
+                &exemplar_max_stable_gain,
+                &Points::new(calc.max_stable_gain()),
                 margin,
                 "max_stable_gain(1)",
             );
 
-            let exemplar_max_gain: Array1<f64> = array![
+            let exemplar_max_gain: Points1<f64> = array![
                 1.0,
                 0.994092797323051,
                 0.980871982283681,
@@ -10596,8 +10561,9 @@ mod network_network_tests {
                 0.997574777687955,
                 1.000809061488673,
                 1.000806451612903,
-            ];
-            let exemplar_max_stable_gain: Array1<f64> = array![
+            ]
+            .into();
+            let exemplar_max_stable_gain: Points1<f64> = array![
                 1.0,
                 0.998697916666667,
                 1.0,
@@ -10818,7 +10784,8 @@ mod network_network_tests {
                 0.997574777687955,
                 1.000809061488673,
                 1.000806451612903,
-            ];
+            ]
+            .into();
             let calc = Network::new_from(
                 FrequencyBuilder::new()
                     .start_stop_step_scaled(0.5, 110.0, 0.5, Scale::Giga)
@@ -12168,7 +12135,7 @@ mod network_network_tests {
             Z0 = 50\n\
             Input Power(dBm) = -13.00\n\
             Device ID = EG0520U_1212_6x60_2SDBCB2EV\n\
-            Array1 = 29\n\
+            Points1 = 29\n\
             Column = 52\n\
             Technology = QPHT09\n\
             Lot/Wafer = 1915934D06\n\
@@ -12187,33 +12154,35 @@ mod network_network_tests {
             Vg(mA) = -0.000",
                 ),
             );
-            comp_array_f64(
-                exemplar_max_gain.view(),
-                calc.max_gain().view(),
+            comp_pts_ix1(
+                &exemplar_max_gain,
+                &Points::new(calc.max_gain()),
                 margin,
                 "max_gain(2)",
             );
-            comp_array_f64(
-                exemplar_max_stable_gain.view(),
-                calc.max_stable_gain().view(),
+            comp_pts_ix1(
+                &exemplar_max_stable_gain,
+                &Points::new(calc.max_stable_gain()),
                 margin,
                 "max_stable_gain(2)",
             );
 
-            let exemplar_max_gain: Array1<f64> = array![
+            let exemplar_max_gain: Points1<f64> = array![
                 658.6428778530811,
                 326.3623111913169,
                 217.17008433479918,
                 165.04409856522784,
-            ];
-            let exemplar_max_stable_gain: Array1<f64> = array![
+            ]
+            .into();
+            let exemplar_max_stable_gain: Points1<f64> = array![
                 658.6428778530811,
                 326.3623111913169,
                 217.17008433479918,
                 165.04409856522784,
-            ];
+            ]
+            .into();
             let calc = Network::new(
-                Frequency::new_scaled(array![0.5, 1.0, 1.5, 2.0], Scale::Giga),
+                new_frequency_scaled(array![0.5, 1.0, 1.5, 2.0], Scale::Giga),
                 array![c64::from(50.0), c64::from(50.0),],
                 RFParameter::S,
                 Points::<Complex64, Ix3>::new(array![
@@ -12273,7 +12242,7 @@ mod network_network_tests {
             Z0 = 50\n\
             Input Power(dBm) = -13.00\n\
             Device ID = EG0520F_1010_6x25_2SDBCB2EV\n\
-            Array1 = 66\n\
+            Points1 = 66\n\
             Column = 42\n\
             Technology = QPHT09BCB\n\
             Lot/Wafer = 191593406\n\
@@ -12293,20 +12262,20 @@ mod network_network_tests {
             Vd(mA) = 11.076",
                 ),
             );
-            comp_array_f64(
-                exemplar_max_gain.view(),
-                calc.max_gain().view(),
+            comp_pts_ix1(
+                &exemplar_max_gain,
+                &Points::new(calc.max_gain()),
                 margin,
                 "max_gain(3)",
             );
-            comp_array_f64(
-                exemplar_max_stable_gain.view(),
-                calc.max_stable_gain().view(),
+            comp_pts_ix1(
+                &exemplar_max_stable_gain,
+                &Points::new(calc.max_stable_gain()),
                 margin,
                 "max_stable_gain(3)",
             );
 
-            let exemplar_max_gain: Array1<f64> = array![
+            let exemplar_max_gain: Points1<f64> = array![
                 0.999769767998156,
                 1.000115135882277,
                 1.000230285020825,
@@ -12527,8 +12496,9 @@ mod network_network_tests {
                 1.002997845198331,
                 0.99930946300259,
                 0.999884877372469,
-            ];
-            let exemplar_max_stable_gain: Array1<f64> = array![
+            ]
+            .into();
+            let exemplar_max_stable_gain: Points1<f64> = array![
                 0.999769767998156,
                 1.000115135882277,
                 1.000230285020825,
@@ -12749,7 +12719,8 @@ mod network_network_tests {
                 1.002997845198331,
                 0.99930946300259,
                 0.999884877372469,
-            ];
+            ]
+            .into();
             let calc = Network::new_from(
                 FrequencyBuilder::new()
                     .start_stop_step_scaled(0.5, 110.0, 0.5, Scale::Giga)
@@ -14094,7 +14065,7 @@ mod network_network_tests {
             Z0 = 50\n\
             Input Power(dBm) = -13.00\n\
             Device ID = EG0520F_1010_6x25_2SDBCB2EV\n\
-            Array1 = 66\n\
+            Points1 = 66\n\
             Column = 42\n\
             Technology = QPHT09BCB\n\
             Lot/Wafer = 191593406\n\
@@ -14113,15 +14084,15 @@ mod network_network_tests {
             Vd(mA) = 0.002\n",
                 ),
             );
-            comp_array_f64(
-                exemplar_max_gain.view(),
-                calc.max_gain().view(),
+            comp_pts_ix1(
+                &exemplar_max_gain,
+                &Points::new(calc.max_gain()),
                 margin,
                 "max_gain(5)",
             );
-            comp_array_f64(
-                exemplar_max_stable_gain.view(),
-                calc.max_stable_gain().view(),
+            comp_pts_ix1(
+                &exemplar_max_stable_gain,
+                &Points::new(calc.max_stable_gain()),
                 margin,
                 "max_stable_gain(5)",
             );
@@ -14134,12 +14105,12 @@ mod network_network_tests {
                 ulps: 4,
             };
 
-            let exemplar_mu: Array1<f64> =
-                array![0.321707950574174, -0.002550951441449, -1.449447552621264];
-            let exemplar_mu_prime: Array1<f64> =
-                array![0.976861302098624, -0.445955657662617, 0.0408012371672];
+            let exemplar_mu: Points1<f64> =
+                array![0.321707950574174, -0.002550951441449, -1.449447552621264].into();
+            let exemplar_mu_prime: Points1<f64> =
+                array![0.976861302098624, -0.445955657662617, 0.0408012371672].into();
             let calc = Network::new(
-                Frequency::new_scaled(array![1.0, 2.0, 3.0], Scale::Giga),
+                new_frequency_scaled(array![1.0, 2.0, 3.0], Scale::Giga),
                 array![c64::from(50.0), c64::from(50.0),],
                 RFParameter::S,
                 Points::<Complex64, Ix3>::new(array![
@@ -14159,29 +14130,31 @@ mod network_network_tests {
                 String::from(""),
                 String::from(""),
             );
-            comp_array_f64(exemplar_mu.view(), calc.mu().view(), margin, "mu(1)");
-            comp_array_f64(
-                exemplar_mu_prime.view(),
-                calc.mu_prime().view(),
+            comp_pts_ix1(&exemplar_mu, &Points::new(calc.mu()), margin, "mu(1)");
+            comp_pts_ix1(
+                &exemplar_mu_prime,
+                &Points::new(calc.mu_prime()),
                 margin,
                 "mu_prime(1)",
             );
 
             // test.s2p
-            let exemplar_mu: Array1<f64> = array![
+            let exemplar_mu: Points1<f64> = array![
                 0.033183769882311,
                 0.041130227236983,
                 0.037333083239591,
                 0.054219705626116,
-            ];
-            let exemplar_mu_prime: Array1<f64> = array![
+            ]
+            .into();
+            let exemplar_mu_prime: Points1<f64> = array![
                 0.888443470698538,
                 0.796693849590944,
                 0.717478768636478,
                 0.655211604332342,
-            ];
+            ]
+            .into();
             let calc = Network::new(
-                Frequency::new_scaled(array![0.5, 1.0, 1.5, 2.0], Scale::Giga),
+                new_frequency_scaled(array![0.5, 1.0, 1.5, 2.0], Scale::Giga),
                 array![c64::from(50.0), c64::from(50.0),],
                 RFParameter::S,
                 Points::<Complex64, Ix3>::new(array![
@@ -14241,7 +14214,7 @@ mod network_network_tests {
             Z0 = 50\n\
             Input Power(dBm) = -13.00\n\
             Device ID = EG0520F_1010_6x25_2SDBCB2EV\n\
-            Array1 = 66\n\
+            Points1 = 66\n\
             Column = 42\n\
             Technology = QPHT09BCB\n\
             Lot/Wafer = 191593406\n\
@@ -14261,16 +14234,16 @@ mod network_network_tests {
             Vd(mA) = 11.076",
                 ),
             );
-            comp_array_f64(exemplar_mu.view(), calc.mu().view(), margin, "mu(2)");
-            comp_array_f64(
-                exemplar_mu_prime.view(),
-                calc.mu_prime().view(),
+            comp_pts_ix1(&exemplar_mu, &Points::new(calc.mu()), margin, "mu(2)");
+            comp_pts_ix1(
+                &exemplar_mu_prime,
+                &Points::new(calc.mu_prime()),
                 margin,
                 "mu_prime(2)",
             );
 
             // test_2.s2p
-            let exemplar_mu: Array1<f64> = array![
+            let exemplar_mu: Points1<f64> = array![
                 0.252051215740252,
                 0.639380809343797,
                 0.660662373486303,
@@ -14491,8 +14464,9 @@ mod network_network_tests {
                 0.898123536472606,
                 0.883985980701241,
                 0.863580401992552,
-            ];
-            let exemplar_mu_prime: Array1<f64> = array![
+            ]
+            .into();
+            let exemplar_mu_prime: Points1<f64> = array![
                 0.999513861245046,
                 0.967558564020585,
                 0.74956916752738,
@@ -14713,7 +14687,8 @@ mod network_network_tests {
                 -0.98646613110374,
                 -1.008738574532424,
                 -1.042603601102657,
-            ];
+            ]
+            .into();
             let calc = Network::new_from(
                 FrequencyBuilder::new()
                     .start_stop_step_scaled(0.5, 110.0, 0.5, Scale::Giga)
@@ -16063,7 +16038,7 @@ mod network_network_tests {
             Z0 = 50\n\
             Input Power(dBm) = -13.00\n\
             Device ID = EG0520U_1212_6x60_2SDBCB2EV\n\
-            Array1 = 29\n\
+            Points1 = 29\n\
             Column = 52\n\
             Technology = QPHT09\n\
             Lot/Wafer = 1915934D06\n\
@@ -16082,16 +16057,16 @@ mod network_network_tests {
             Vg(mA) = -0.000",
                 ),
             );
-            comp_array_f64(exemplar_mu.view(), calc.mu().view(), margin, "mu(3)");
-            comp_array_f64(
-                exemplar_mu_prime.view(),
-                calc.mu_prime().view(),
+            comp_pts_ix1(&exemplar_mu, &Points::new(calc.mu()), margin, "mu(3)");
+            comp_pts_ix1(
+                &exemplar_mu_prime,
+                &Points::new(calc.mu_prime()),
                 margin,
                 "mu_prime(3)",
             );
 
             // test_3.s2p
-            let exemplar_mu: Array1<f64> = array![
+            let exemplar_mu: Points1<f64> = array![
                 0.999528984364959,
                 0.999762181064495,
                 0.999145489050567,
@@ -16312,8 +16287,9 @@ mod network_network_tests {
                 0.868922150457399,
                 0.840755523293482,
                 0.771720977009805,
-            ];
-            let exemplar_mu_prime: Array1<f64> = array![
+            ]
+            .into();
+            let exemplar_mu_prime: Points1<f64> = array![
                 -0.33045894975032,
                 0.593080915967793,
                 0.438844767029363,
@@ -16534,7 +16510,8 @@ mod network_network_tests {
                 -0.638745955770156,
                 -0.639868274075586,
                 -0.640604539606232,
-            ];
+            ]
+            .into();
             let calc = Network::new_from(
                 FrequencyBuilder::new()
                     .start_stop_step_scaled(0.5, 110.0, 0.5, Scale::Giga)
@@ -17879,7 +17856,7 @@ mod network_network_tests {
             Z0 = 50\n\
             Input Power(dBm) = -13.00\n\
             Device ID = EG0520F_1010_6x25_2SDBCB2EV\n\
-            Array1 = 66\n\
+            Points1 = 66\n\
             Column = 42\n\
             Technology = QPHT09BCB\n\
             Lot/Wafer = 191593406\n\
@@ -17898,10 +17875,10 @@ mod network_network_tests {
             Vd(mA) = 0.002\n",
                 ),
             );
-            comp_array_f64(exemplar_mu.view(), calc.mu().view(), margin, "mu(4)");
-            comp_array_f64(
-                exemplar_mu_prime.view(),
-                calc.mu_prime().view(),
+            comp_pts_ix1(&exemplar_mu, &Points::new(calc.mu()), margin, "mu(4)");
+            comp_pts_ix1(
+                &exemplar_mu_prime,
+                &Points::new(calc.mu_prime()),
                 margin,
                 "mu_prime(4)",
             );
@@ -17909,13 +17886,14 @@ mod network_network_tests {
 
         #[test]
         fn network_passivity() {
-            let exemplar: Array1<f64> = array![
+            let exemplar: Points1<f64> = array![
                 -0.877751072712341,
                 -1.555130032052954e+05,
                 -1.044655264772562e+03,
-            ];
+            ]
+            .into();
             let calc = Network::new(
-                Frequency::new_scaled(array![1.0, 2.0, 3.0], Scale::Giga),
+                new_frequency_scaled(array![1.0, 2.0, 3.0], Scale::Giga),
                 array![c64::from(50.0), c64::from(50.0),],
                 RFParameter::S,
                 Points::<Complex64, Ix3>::new(array![
@@ -17935,23 +17913,24 @@ mod network_network_tests {
                 String::from(""),
                 String::from(""),
             );
-            comp_array_f64(
-                exemplar.view(),
-                calc.passivity().view(),
+            comp_pts_ix1(
+                &exemplar,
+                &Points::new(calc.passivity()),
                 F64Margin::default(),
                 "passivity1()",
             );
             assert_eq!(false, calc.is_passive());
 
             // test.s2p
-            let exemplar: Array1<f64> = array![
+            let exemplar: Points1<f64> = array![
                 -54.98063052120305,
                 -52.895212459878266,
                 -51.34990324807767,
                 -50.82789810196128,
-            ];
+            ]
+            .into();
             let calc = Network::new(
-                Frequency::new_scaled(array![0.5, 1.0, 1.5, 2.0], Scale::Giga),
+                new_frequency_scaled(array![0.5, 1.0, 1.5, 2.0], Scale::Giga),
                 array![c64::from(50.0), c64::from(50.0),],
                 RFParameter::S,
                 Points::<Complex64, Ix3>::new(array![
@@ -18011,7 +17990,7 @@ mod network_network_tests {
             Z0 = 50\n\
             Input Power(dBm) = -13.00\n\
             Device ID = EG0520F_1010_6x25_2SDBCB2EV\n\
-            Array1 = 66\n\
+            Points1 = 66\n\
             Column = 42\n\
             Technology = QPHT09BCB\n\
             Lot/Wafer = 191593406\n\
@@ -18031,16 +18010,16 @@ mod network_network_tests {
             Vd(mA) = 11.076",
                 ),
             );
-            comp_array_f64(
-                exemplar.view(),
-                calc.passivity().view(),
+            comp_pts_ix1(
+                &exemplar,
+                &Points::new(calc.passivity()),
                 F64Margin::default(),
                 "passivity2()",
             );
             assert_eq!(false, calc.is_passive());
 
             // test_2.s2p
-            let exemplar: Array1<f64> = array![
+            let exemplar: Points1<f64> = array![
                 -0.0009113505709374644,
                 -0.0013061511353752017,
                 -0.0028111846539421717,
@@ -18261,7 +18240,8 @@ mod network_network_tests {
                 -0.23485793234935984,
                 -0.27371713925331753,
                 -0.33326270086189624,
-            ];
+            ]
+            .into();
             let calc = Network::new_from(
                 FrequencyBuilder::new()
                     .start_stop_step_scaled(0.5, 110.0, 0.5, Scale::Giga)
@@ -19611,7 +19591,7 @@ mod network_network_tests {
             Z0 = 50\n\
             Input Power(dBm) = -13.00\n\
             Device ID = EG0520U_1212_6x60_2SDBCB2EV\n\
-            Array1 = 29\n\
+            Points1 = 29\n\
             Column = 52\n\
             Technology = QPHT09\n\
             Lot/Wafer = 1915934D06\n\
@@ -19630,16 +19610,16 @@ mod network_network_tests {
             Vg(mA) = -0.000",
                 ),
             );
-            comp_array_f64(
-                exemplar.view(),
-                calc.passivity().view(),
+            comp_pts_ix1(
+                &exemplar,
+                &Points::new(calc.passivity()),
                 F64Margin::default(),
                 "passivity3()",
             );
             assert_eq!(false, calc.is_passive());
 
             // test_2.s2p subset
-            let exemplar: Array1<f64> = array![
+            let exemplar: Points1<f64> = array![
                 0.005967961262325987,
                 0.006869923575824449,
                 0.00753106261158415,
@@ -19824,7 +19804,8 @@ mod network_network_tests {
                 0.008312413006756787,
                 0.007022132578955594,
                 0.004989544833378738,
-            ];
+            ]
+            .into();
             let calc = Network::new_from(
                 FrequencyBuilder::new()
                     .start_stop_step_scaled(3.0, 94.5, 0.5, Scale::Giga)
@@ -20958,7 +20939,7 @@ mod network_network_tests {
             Z0 = 50\n\
             Input Power(dBm) = -13.00\n\
             Device ID = EG0520U_1212_6x60_2SDBCB2EV\n\
-            Array1 = 29\n\
+            Points1 = 29\n\
             Column = 52\n\
             Technology = QPHT09\n\
             Lot/Wafer = 1915934D06\n\
@@ -20977,16 +20958,16 @@ mod network_network_tests {
             Vg(mA) = -0.000",
                 ),
             );
-            comp_array_f64(
-                exemplar.view(),
-                calc.passivity().view(),
+            comp_pts_ix1(
+                &exemplar,
+                &Points::new(calc.passivity()),
                 F64Margin::default(),
                 "passivity4()",
             );
             assert_eq!(true, calc.is_passive());
 
             // test_3.s2p
-            let exemplar: Array1<f64> = array![
+            let exemplar: Points1<f64> = array![
                 -0.0009358703851608015,
                 -0.0004751910352422173,
                 -0.0016388105307448282,
@@ -21207,7 +21188,8 @@ mod network_network_tests {
                 -0.2674989719098801,
                 -0.2859116231773699,
                 -0.3041241279188261,
-            ];
+            ]
+            .into();
             let calc = Network::new_from(
                 FrequencyBuilder::new()
                     .start_stop_step_scaled(0.5, 110.0, 0.5, Scale::Giga)
@@ -22552,7 +22534,7 @@ mod network_network_tests {
             Z0 = 50\n\
             Input Power(dBm) = -13.00\n\
             Device ID = EG0520F_1010_6x25_2SDBCB2EV\n\
-            Array1 = 66\n\
+            Points1 = 66\n\
             Column = 42\n\
             Technology = QPHT09BCB\n\
             Lot/Wafer = 191593406\n\
@@ -22571,9 +22553,9 @@ mod network_network_tests {
             Vd(mA) = 0.002\n",
                 ),
             );
-            comp_array_f64(
-                exemplar.view(),
-                calc.passivity().view(),
+            comp_pts_ix1(
+                &exemplar,
+                &Points::new(calc.passivity()),
                 F64Margin::default(),
                 "passivity5()",
             );
@@ -22597,7 +22579,7 @@ mod network_network_tests {
             let exemplar_ne: Array1<(usize, usize)> = array![(0, 0), (0, 1), (1, 0), (1, 1)];
 
             let mut calc = Network::new(
-                Frequency::new_scaled(array![1.0], Scale::Giga),
+                new_frequency_scaled(array![1.0], Scale::Giga),
                 array![c64::from(50.0), c64::from(50.0), c64::from(50.0),],
                 RFParameter::S,
                 Points::<Complex64, Ix3>::new(array![[
@@ -22650,7 +22632,7 @@ mod network_network_tests {
             ]);
 
             let calc = Network::new(
-                Frequency::new_scaled(array![1.0, 2.0, 3.0], Scale::Giga),
+                new_frequency_scaled(array![1.0, 2.0, 3.0], Scale::Giga),
                 array![c64::from(50.0), c64::from(50.0),],
                 param,
                 exemplar.clone(),
@@ -22692,30 +22674,20 @@ mod network_network_tests {
                 ],
             ]);
 
-            comp_points_c64(
-                exemplar_s.view(),
-                calc.net(RFParameter::S).view(),
+            comp_pts_ix3(
+                &exemplar_s,
+                calc.net(RFParameter::S),
                 F64Margin::default(),
                 "net(S)",
             );
-            comp_points_f64(
-                exemplar_s_db.view(),
-                calc.net_db(RFParameter::S).view(),
+            comp_pts_ix3(
+                &exemplar_s_db,
+                &calc.net_db(RFParameter::S),
                 F64Margin::default(),
                 "net_db(S)",
             );
-            comp_points_c64(
-                exemplar_s.view(),
-                calc.s().view(),
-                F64Margin::default(),
-                "s()",
-            );
-            comp_points_f64(
-                exemplar_s_db.view(),
-                calc.s_db().view(),
-                F64Margin::default(),
-                "s_db()",
-            );
+            comp_pts_ix3(&exemplar_s, calc.s(), F64Margin::default(), "s()");
+            comp_pts_ix3(&exemplar_s_db, &calc.s_db(), F64Margin::default(), "s_db()");
         }
 
         #[test]
@@ -22738,7 +22710,7 @@ mod network_network_tests {
             ]);
 
             let calc = Network::new(
-                Frequency::new_scaled(array![1.0, 2.0, 3.0], Scale::Giga),
+                new_frequency_scaled(array![1.0, 2.0, 3.0], Scale::Giga),
                 array![c64::from(50.0), c64::from(50.0),],
                 param,
                 exemplar.clone(),
@@ -22780,27 +22752,22 @@ mod network_network_tests {
                 ],
             ]);
 
-            comp_points_c64(
-                exemplar_s.view(),
-                calc.net(RFParameter::S).view(),
+            comp_pts_ix3(
+                &exemplar_s,
+                calc.net(RFParameter::S),
                 F64Margin::default(),
                 "net(S)",
             );
-            comp_points_f64(
-                exemplar_s_deg.view(),
-                calc.net_deg(RFParameter::S).view(),
+            comp_pts_ix3(
+                &exemplar_s_deg,
+                &calc.net_deg(RFParameter::S),
                 F64Margin::default(),
                 "net_deg(S)",
             );
-            comp_points_c64(
-                exemplar_s.view(),
-                calc.s().view(),
-                F64Margin::default(),
-                "s()",
-            );
-            comp_points_f64(
-                exemplar_s_deg.view(),
-                calc.s_deg().view(),
+            comp_pts_ix3(&exemplar_s, calc.s(), F64Margin::default(), "s()");
+            comp_pts_ix3(
+                &exemplar_s_deg,
+                &calc.s_deg(),
                 F64Margin::default(),
                 "s_deg()",
             );
@@ -22826,7 +22793,7 @@ mod network_network_tests {
             ]);
 
             let calc = Network::new(
-                Frequency::new_scaled(array![1.0, 2.0, 3.0], Scale::Giga),
+                new_frequency_scaled(array![1.0, 2.0, 3.0], Scale::Giga),
                 array![c64::from(50.0), c64::from(50.0),],
                 param,
                 exemplar.clone(),
@@ -22841,30 +22808,20 @@ mod network_network_tests {
                 [[-0.421, 24.282], [0.132, -0.324],],
             ]);
 
-            comp_points_c64(
-                exemplar_s.view(),
-                calc.net(RFParameter::S).view(),
+            comp_pts_ix3(
+                &exemplar_s,
+                calc.net(RFParameter::S),
                 F64Margin::default(),
                 "net(S)",
             );
-            comp_points_f64(
-                exemplar_s_im.view(),
-                calc.net_im(RFParameter::S).view(),
+            comp_pts_ix3(
+                &exemplar_s_im,
+                &calc.net_im(RFParameter::S),
                 F64Margin::default(),
                 "net_im(S)",
             );
-            comp_points_c64(
-                exemplar_s.view(),
-                calc.s().view(),
-                F64Margin::default(),
-                "s()",
-            );
-            comp_points_f64(
-                exemplar_s_im.view(),
-                calc.s_im().view(),
-                F64Margin::default(),
-                "s_im()",
-            );
+            comp_pts_ix3(&exemplar_s, calc.s(), F64Margin::default(), "s()");
+            comp_pts_ix3(&exemplar_s_im, &calc.s_im(), F64Margin::default(), "s_im()");
         }
 
         #[test]
@@ -22887,7 +22844,7 @@ mod network_network_tests {
             ]);
 
             let calc = Network::new(
-                Frequency::new_scaled(array![1.0, 2.0, 3.0], Scale::Giga),
+                new_frequency_scaled(array![1.0, 2.0, 3.0], Scale::Giga),
                 array![c64::from(50.0), c64::from(50.0),],
                 param,
                 exemplar.clone(),
@@ -22929,27 +22886,22 @@ mod network_network_tests {
                 ],
             ]);
 
-            comp_points_c64(
-                exemplar_s.view(),
-                calc.net(RFParameter::S).view(),
+            comp_pts_ix3(
+                &exemplar_s,
+                calc.net(RFParameter::S),
                 F64Margin::default(),
                 "net(S)",
             );
-            comp_points_f64(
-                exemplar_s_mag.view(),
-                calc.net_mag(RFParameter::S).view(),
+            comp_pts_ix3(
+                &exemplar_s_mag,
+                &calc.net_mag(RFParameter::S),
                 F64Margin::default(),
                 "net_mag(S)",
             );
-            comp_points_c64(
-                exemplar_s.view(),
-                calc.s().view(),
-                F64Margin::default(),
-                "s()",
-            );
-            comp_points_f64(
-                exemplar_s_mag.view(),
-                calc.s_mag().view(),
+            comp_pts_ix3(&exemplar_s, calc.s(), F64Margin::default(), "s()");
+            comp_pts_ix3(
+                &exemplar_s_mag,
+                &calc.s_mag(),
                 F64Margin::default(),
                 "s_mag()",
             );
@@ -22975,7 +22927,7 @@ mod network_network_tests {
             ]);
 
             let calc = Network::new(
-                Frequency::new_scaled(array![1.0, 2.0, 3.0], Scale::Giga),
+                new_frequency_scaled(array![1.0, 2.0, 3.0], Scale::Giga),
                 array![c64::from(50.0), c64::from(50.0),],
                 param,
                 exemplar.clone(),
@@ -23017,27 +22969,22 @@ mod network_network_tests {
                 ],
             ]);
 
-            comp_points_c64(
-                exemplar_s.view(),
-                calc.net(RFParameter::S).view(),
+            comp_pts_ix3(
+                &exemplar_s,
+                calc.net(RFParameter::S),
                 F64Margin::default(),
                 "net(S)",
             );
-            comp_points_f64(
-                exemplar_s_rad.view(),
-                calc.net_rad(RFParameter::S).view(),
+            comp_pts_ix3(
+                &exemplar_s_rad,
+                &calc.net_rad(RFParameter::S),
                 F64Margin::default(),
                 "net_rad(S)",
             );
-            comp_points_c64(
-                exemplar_s.view(),
-                calc.s().view(),
-                F64Margin::default(),
-                "s()",
-            );
-            comp_points_f64(
-                exemplar_s_rad.view(),
-                calc.s_rad().view(),
+            comp_pts_ix3(&exemplar_s, calc.s(), F64Margin::default(), "s()");
+            comp_pts_ix3(
+                &exemplar_s_rad,
+                &calc.s_rad(),
                 F64Margin::default(),
                 "s_rad()",
             );
@@ -23063,7 +23010,7 @@ mod network_network_tests {
             ]);
 
             let calc = Network::new(
-                Frequency::new_scaled(array![1.0, 2.0, 3.0], Scale::Giga),
+                new_frequency_scaled(array![1.0, 2.0, 3.0], Scale::Giga),
                 array![c64::from(50.0), c64::from(50.0),],
                 param,
                 exemplar.clone(),
@@ -23078,30 +23025,20 @@ mod network_network_tests {
                 [[21.329, -0.942], [0.138, 0.329],],
             ]);
 
-            comp_points_c64(
-                exemplar_s.view(),
-                calc.net(RFParameter::S).view(),
+            comp_pts_ix3(
+                &exemplar_s,
+                calc.net(RFParameter::S),
                 F64Margin::default(),
                 "net(S)",
             );
-            comp_points_f64(
-                exemplar_s_re.view(),
-                calc.net_re(RFParameter::S).view(),
+            comp_pts_ix3(
+                &exemplar_s_re,
+                &calc.net_re(RFParameter::S),
                 F64Margin::default(),
                 "net_re(S)",
             );
-            comp_points_c64(
-                exemplar_s.view(),
-                calc.s().view(),
-                F64Margin::default(),
-                "s()",
-            );
-            comp_points_f64(
-                exemplar_s_re.view(),
-                calc.s_re().view(),
-                F64Margin::default(),
-                "s_re()",
-            );
+            comp_pts_ix3(&exemplar_s, calc.s(), F64Margin::default(), "s()");
+            comp_pts_ix3(&exemplar_s_re, &calc.s_re(), F64Margin::default(), "s_re()");
         }
     }
 
@@ -23112,7 +23049,7 @@ mod network_network_tests {
         #[should_panic(expected = "ABCD parameters do not exist for network with 1 port(s)")]
         fn network_a() {
             let net = Network::new(
-                Frequency::new_scaled(array![1.0], Scale::Giga),
+                new_frequency_scaled(array![1.0], Scale::Giga),
                 array![c64::from(50.0)],
                 RFParameter::A,
                 Points::<Complex64, Ix3>::new(array![[[c64(0.958, -0.263)]]]),
@@ -23141,7 +23078,7 @@ mod network_network_tests {
             ]);
 
             let calc = Network::new(
-                Frequency::new_scaled(array![1.0, 2.0, 3.0], Scale::Giga),
+                new_frequency_scaled(array![1.0, 2.0, 3.0], Scale::Giga),
                 array![c64::from(50.0), c64::from(50.0),],
                 param,
                 exemplar.clone(),
@@ -23367,7 +23304,7 @@ mod network_network_tests {
         #[should_panic(expected = "G parameters do not exist for network with 1 port(s)")]
         fn network_g() {
             let net = Network::new(
-                Frequency::new_scaled(array![1.0], Scale::Giga),
+                new_frequency_scaled(array![1.0], Scale::Giga),
                 array![c64::from(50.0)],
                 RFParameter::G,
                 Points::<Complex64, Ix3>::new(array![[[c64(0.958, -0.263)]]]),
@@ -23396,7 +23333,7 @@ mod network_network_tests {
             ]);
 
             let calc = Network::new(
-                Frequency::new_scaled(array![1.0, 2.0, 3.0], Scale::Giga),
+                new_frequency_scaled(array![1.0, 2.0, 3.0], Scale::Giga),
                 array![c64::from(50.0), c64::from(50.0),],
                 param,
                 exemplar.clone(),
@@ -23628,7 +23565,7 @@ mod network_network_tests {
         #[should_panic(expected = "H parameters do not exist for network with 1 port(s)")]
         fn network_h() {
             let net = Network::new(
-                Frequency::new_scaled(array![1.0], Scale::Giga),
+                new_frequency_scaled(array![1.0], Scale::Giga),
                 array![c64::from(50.0)],
                 RFParameter::H,
                 Points::<Complex64, Ix3>::new(array![[[c64(0.958, -0.263)]]]),
@@ -23657,7 +23594,7 @@ mod network_network_tests {
             ]);
 
             let calc = Network::new(
-                Frequency::new_scaled(array![1.0, 2.0, 3.0], Scale::Giga),
+                new_frequency_scaled(array![1.0, 2.0, 3.0], Scale::Giga),
                 array![c64::from(50.0), c64::from(50.0),],
                 param,
                 exemplar.clone(),
@@ -23893,7 +23830,7 @@ mod network_network_tests {
             let exemplar = points![Complex64, [[c64(0.958, -0.263)]]];
 
             let calc = Network::new(
-                Frequency::new_scaled(array![1.0], Scale::Giga),
+                new_frequency_scaled(array![1.0], Scale::Giga),
                 array![c64::from(50.0)],
                 param,
                 exemplar.clone(),
@@ -23912,35 +23849,20 @@ mod network_network_tests {
             let exemplar_z = points![Complex64, [[c64(9.210804562051559, -370.77241904332254)]]];
 
             let margin = MARGIN;
-            comp_points_c64(
-                exemplar_s.view(),
-                calc.net(RFParameter::S).view(),
-                margin,
-                "net(S)",
-            );
-            comp_points_c64(exemplar_s.view(), calc.s().view(), margin, "s()");
+            comp_pts_ix3(&exemplar_s, calc.net(RFParameter::S), margin, "net(S)");
+            comp_pts_ix3(&exemplar_s, calc.s(), margin, "s()");
             new_net.set_net(calc.s(), RFParameter::S);
-            comp_points_c64(exemplar_s.view(), new_net.s().view(), margin, "s(new_net)");
+            comp_pts_ix3(&exemplar_s, new_net.s(), margin, "s(new_net)");
 
-            comp_points_c64(
-                exemplar_y.view(),
-                calc.net(RFParameter::Y).view(),
-                margin,
-                "net(Y)",
-            );
-            comp_points_c64(exemplar_y.view(), calc.y().view(), margin, "y()");
+            comp_pts_ix3(&exemplar_y, calc.net(RFParameter::Y), margin, "net(Y)");
+            comp_pts_ix3(&exemplar_y, calc.y(), margin, "y()");
             new_net.set_net(calc.y(), RFParameter::Y);
-            comp_points_c64(exemplar_y.view(), new_net.y().view(), margin, "y(new_net)");
+            comp_pts_ix3(&exemplar_y, new_net.y(), margin, "y(new_net)");
 
-            comp_points_c64(
-                exemplar_z.view(),
-                calc.net(RFParameter::Z).view(),
-                margin,
-                "net(Z)",
-            );
-            comp_points_c64(exemplar_z.view(), calc.z().view(), margin, "z()");
+            comp_pts_ix3(&exemplar_z, calc.net(RFParameter::Z), margin, "net(Z)");
+            comp_pts_ix3(&exemplar_z, calc.z(), margin, "z()");
             new_net.set_net(calc.z(), RFParameter::Z);
-            comp_points_c64(exemplar_z.view(), new_net.z().view(), margin, "z(new_net)");
+            comp_pts_ix3(&exemplar_z, new_net.z(), margin, "z(new_net)");
         }
 
         #[test]
@@ -23978,7 +23900,7 @@ mod network_network_tests {
             ]);
 
             let calc = Network::new(
-                Frequency::new_scaled(array![1.0, 2.0, 3.0], Scale::Giga),
+                new_frequency_scaled(array![1.0, 2.0, 3.0], Scale::Giga),
                 array![c64::from(50.0), c64::from(50.0),],
                 param,
                 exemplar.clone(),
@@ -24213,7 +24135,7 @@ mod network_network_tests {
             ]]);
 
             let calc = Network::new(
-                Frequency::new_scaled(array![1.0], Scale::Giga),
+                new_frequency_scaled(array![1.0], Scale::Giga),
                 array![c64::from(50.0), c64::from(50.0), c64::from(50.0),],
                 param,
                 exemplar.clone(),
@@ -24261,42 +24183,27 @@ mod network_network_tests {
             ]]);
 
             let margin = MARGIN;
-            comp_points_c64(
-                exemplar_s.view(),
-                calc.net(RFParameter::S).view(),
-                margin,
-                "net(S)",
-            );
-            comp_points_c64(exemplar_s.view(), calc.s().view(), margin, "s()");
+            comp_pts_ix3(&exemplar_s, calc.net(RFParameter::S), margin, "net(S)");
+            comp_pts_ix3(&exemplar_s, calc.s(), margin, "s()");
             new_net.set_net(calc.s(), RFParameter::S);
-            comp_points_c64(exemplar_s.view(), new_net.s().view(), margin, "s(new_net)");
+            comp_pts_ix3(&exemplar_s, new_net.s(), margin, "s(new_net)");
 
-            comp_points_c64(
-                exemplar_y.view(),
-                calc.net(RFParameter::Y).view(),
-                margin,
-                "net(Y)",
-            );
-            comp_points_c64(exemplar_y.view(), calc.y().view(), margin, "y()");
+            comp_pts_ix3(&exemplar_y, calc.net(RFParameter::Y), margin, "net(Y)");
+            comp_pts_ix3(&exemplar_y, calc.y(), margin, "y()");
             new_net.set_net(calc.y(), RFParameter::Y);
-            comp_points_c64(exemplar_y.view(), new_net.y().view(), margin, "y(new_net)");
+            comp_pts_ix3(&exemplar_y, new_net.y(), margin, "y(new_net)");
 
-            comp_points_c64(
-                exemplar_z.view(),
-                calc.net(RFParameter::Z).view(),
-                margin,
-                "net(Z)",
-            );
-            comp_points_c64(exemplar_z.view(), calc.z().view(), margin, "z()");
+            comp_pts_ix3(&exemplar_z, calc.net(RFParameter::Z), margin, "net(Z)");
+            comp_pts_ix3(&exemplar_z, calc.z(), margin, "z()");
             new_net.set_net(calc.z(), RFParameter::Z);
-            comp_points_c64(exemplar_z.view(), new_net.z().view(), margin, "z(new_net)");
+            comp_pts_ix3(&exemplar_z, new_net.z(), margin, "z(new_net)");
         }
 
         #[test]
         #[should_panic(expected = "ABCD parameters do not exist for network with 1 port(s)")]
         fn network_s_to_a() {
             let net = Network::new(
-                Frequency::new_scaled(array![1.0], Scale::Giga),
+                new_frequency_scaled(array![1.0], Scale::Giga),
                 array![c64::from(50.0)],
                 RFParameter::S,
                 Points::<Complex64, Ix3>::new(array![[[c64(0.958, -0.263)]]]),
@@ -24311,7 +24218,7 @@ mod network_network_tests {
         #[should_panic(expected = "G parameters do not exist for network with 1 port(s)")]
         fn network_s_to_g() {
             let net = Network::new(
-                Frequency::new_scaled(array![1.0], Scale::Giga),
+                new_frequency_scaled(array![1.0], Scale::Giga),
                 array![c64::from(50.0)],
                 RFParameter::S,
                 Points::<Complex64, Ix3>::new(array![[[c64(0.958, -0.263)]]]),
@@ -24326,7 +24233,7 @@ mod network_network_tests {
         #[should_panic(expected = "H parameters do not exist for network with 1 port(s)")]
         fn network_s_to_h() {
             let net = Network::new(
-                Frequency::new_scaled(array![1.0], Scale::Giga),
+                new_frequency_scaled(array![1.0], Scale::Giga),
                 array![c64::from(50.0)],
                 RFParameter::S,
                 Points::<Complex64, Ix3>::new(array![[[c64(0.958, -0.263)]]]),
@@ -24341,7 +24248,7 @@ mod network_network_tests {
         #[should_panic(expected = "T parameters do not exist for network with 1 port(s)")]
         fn network_s_to_t() {
             let net = Network::new(
-                Frequency::new_scaled(array![1.0], Scale::Giga),
+                new_frequency_scaled(array![1.0], Scale::Giga),
                 array![c64::from(50.0)],
                 RFParameter::S,
                 Points::<Complex64, Ix3>::new(array![[[c64(0.958, -0.263)]]]),
@@ -24375,7 +24282,7 @@ mod network_network_tests {
             ]);
 
             let calc = Network::new(
-                Frequency::new_scaled(array![1.0, 2.0, 3.0], Scale::Giga),
+                new_frequency_scaled(array![1.0, 2.0, 3.0], Scale::Giga),
                 array![c64::from(50.0), c64::from(50.0),],
                 param,
                 exemplar.clone(),
@@ -24604,7 +24511,7 @@ mod network_network_tests {
             let exemplar = Points::<Complex64, Ix3>::new(array![[[c64(0.958, -0.263)]]]);
 
             let calc = Network::new(
-                Frequency::new_scaled(array![1.0], Scale::Giga),
+                new_frequency_scaled(array![1.0], Scale::Giga),
                 array![c64::from(50.0)],
                 param,
                 exemplar.clone(),
@@ -24626,35 +24533,20 @@ mod network_network_tests {
             )]]]);
 
             let margin = MARGIN;
-            comp_points_c64(
-                exemplar_s.view(),
-                calc.net(RFParameter::S).view(),
-                margin,
-                "net(S)",
-            );
-            comp_points_c64(exemplar_s.view(), calc.s().view(), margin, "s()");
+            comp_pts_ix3(&exemplar_s, calc.net(RFParameter::S), margin, "net(S)");
+            comp_pts_ix3(&exemplar_s, calc.s(), margin, "s()");
             new_net.set_net(calc.s(), RFParameter::S);
-            comp_points_c64(exemplar_s.view(), new_net.s().view(), margin, "s(new_net)");
+            comp_pts_ix3(&exemplar_s, new_net.s(), margin, "s(new_net)");
 
-            comp_points_c64(
-                exemplar_y.view(),
-                calc.net(RFParameter::Y).view(),
-                margin,
-                "net(Y)",
-            );
-            comp_points_c64(exemplar_y.view(), calc.y().view(), margin, "y()");
+            comp_pts_ix3(&exemplar_y, calc.net(RFParameter::Y), margin, "net(Y)");
+            comp_pts_ix3(&exemplar_y, calc.y(), margin, "y()");
             new_net.set_net(calc.y(), RFParameter::Y);
-            comp_points_c64(exemplar_y.view(), new_net.y().view(), margin, "y(new_net)");
+            comp_pts_ix3(&exemplar_y, new_net.y(), margin, "y(new_net)");
 
-            comp_points_c64(
-                exemplar_z.view(),
-                calc.net(RFParameter::Z).view(),
-                margin,
-                "net(Z)",
-            );
-            comp_points_c64(exemplar_z.view(), calc.z().view(), margin, "z()");
+            comp_pts_ix3(&exemplar_z, calc.net(RFParameter::Z), margin, "net(Z)");
+            comp_pts_ix3(&exemplar_z, calc.z(), margin, "z()");
             new_net.set_net(calc.z(), RFParameter::Z);
-            comp_points_c64(exemplar_z.view(), new_net.z().view(), margin, "z(new_net)");
+            comp_pts_ix3(&exemplar_z, new_net.z(), margin, "z(new_net)");
         }
 
         #[test]
@@ -24677,7 +24569,7 @@ mod network_network_tests {
             ]);
 
             let calc = Network::new(
-                Frequency::new_scaled(array![1.0, 2.0, 3.0], Scale::Giga),
+                new_frequency_scaled(array![1.0, 2.0, 3.0], Scale::Giga),
                 array![c64::from(50.0), c64::from(50.0),],
                 param,
                 exemplar.clone(),
@@ -24910,7 +24802,7 @@ mod network_network_tests {
             ]]);
 
             let calc = Network::new(
-                Frequency::new_scaled(array![1.0], Scale::Giga),
+                new_frequency_scaled(array![1.0], Scale::Giga),
                 array![c64::from(50.0), c64::from(50.0), c64::from(50.0),],
                 param,
                 exemplar.clone(),
@@ -24958,42 +24850,27 @@ mod network_network_tests {
             ]]);
 
             let margin = MARGIN;
-            comp_points_c64(
-                exemplar_s.view(),
-                calc.net(RFParameter::S).view(),
-                margin,
-                "net(S)",
-            );
-            comp_points_c64(exemplar_s.view(), calc.s().view(), margin, "s()");
+            comp_pts_ix3(&exemplar_s, calc.net(RFParameter::S), margin, "net(S)");
+            comp_pts_ix3(&exemplar_s, calc.s(), margin, "s()");
             new_net.set_net(calc.s(), RFParameter::S);
-            comp_points_c64(exemplar_s.view(), new_net.s().view(), margin, "s(new_net)");
+            comp_pts_ix3(&exemplar_s, new_net.s(), margin, "s(new_net)");
 
-            comp_points_c64(
-                exemplar_y.view(),
-                calc.net(RFParameter::Y).view(),
-                margin,
-                "net(Y)",
-            );
-            comp_points_c64(exemplar_y.view(), calc.y().view(), margin, "y()");
+            comp_pts_ix3(&exemplar_y, calc.net(RFParameter::Y), margin, "net(Y)");
+            comp_pts_ix3(&exemplar_y, calc.y(), margin, "y()");
             new_net.set_net(calc.y(), RFParameter::Y);
-            comp_points_c64(exemplar_y.view(), new_net.y().view(), margin, "y(new_net)");
+            comp_pts_ix3(&exemplar_y, new_net.y(), margin, "y(new_net)");
 
-            comp_points_c64(
-                exemplar_z.view(),
-                calc.net(RFParameter::Z).view(),
-                margin,
-                "net(Z)",
-            );
-            comp_points_c64(exemplar_z.view(), calc.z().view(), margin, "z()");
+            comp_pts_ix3(&exemplar_z, calc.net(RFParameter::Z), margin, "net(Z)");
+            comp_pts_ix3(&exemplar_z, calc.z(), margin, "z()");
             new_net.set_net(calc.z(), RFParameter::Z);
-            comp_points_c64(exemplar_z.view(), new_net.z().view(), margin, "z(new_net)");
+            comp_pts_ix3(&exemplar_z, new_net.z(), margin, "z(new_net)");
         }
 
         #[test]
         #[should_panic(expected = "ABCD parameters do not exist for network with 1 port(s)")]
         fn network_y_to_a() {
             let net = Network::new(
-                Frequency::new_scaled(array![1.0], Scale::Giga),
+                new_frequency_scaled(array![1.0], Scale::Giga),
                 array![c64::from(50.0)],
                 RFParameter::Y,
                 Points::<Complex64, Ix3>::new(array![[[c64(0.958, -0.263)]]]),
@@ -25008,7 +24885,7 @@ mod network_network_tests {
         #[should_panic(expected = "G parameters do not exist for network with 1 port(s)")]
         fn network_y_to_g() {
             let net = Network::new(
-                Frequency::new_scaled(array![1.0], Scale::Giga),
+                new_frequency_scaled(array![1.0], Scale::Giga),
                 array![c64::from(50.0)],
                 RFParameter::Y,
                 Points::<Complex64, Ix3>::new(array![[[c64(0.958, -0.263)]]]),
@@ -25023,7 +24900,7 @@ mod network_network_tests {
         #[should_panic(expected = "H parameters do not exist for network with 1 port(s)")]
         fn network_y_to_h() {
             let net = Network::new(
-                Frequency::new_scaled(array![1.0], Scale::Giga),
+                new_frequency_scaled(array![1.0], Scale::Giga),
                 array![c64::from(50.0)],
                 RFParameter::Y,
                 Points::<Complex64, Ix3>::new(array![[[c64(0.958, -0.263)]]]),
@@ -25038,7 +24915,7 @@ mod network_network_tests {
         #[should_panic(expected = "T parameters do not exist for network with 1 port(s)")]
         fn network_y_to_t() {
             let net = Network::new(
-                Frequency::new_scaled(array![1.0], Scale::Giga),
+                new_frequency_scaled(array![1.0], Scale::Giga),
                 array![c64::from(50.0)],
                 RFParameter::Y,
                 Points::<Complex64, Ix3>::new(array![[[c64(0.958, -0.263)]]]),
@@ -25061,7 +24938,7 @@ mod network_network_tests {
             let exemplar = Points::<Complex64, Ix3>::new(array![[[c64(0.958, -0.263)]]]);
 
             let calc = Network::new(
-                Frequency::new_scaled(array![1.0], Scale::Giga),
+                new_frequency_scaled(array![1.0], Scale::Giga),
                 array![c64::from(50.0)],
                 param,
                 exemplar.clone(),
@@ -25083,35 +24960,20 @@ mod network_network_tests {
             let exemplar_z = exemplar;
 
             let margin = MARGIN;
-            comp_points_c64(
-                exemplar_s.view(),
-                calc.net(RFParameter::S).view(),
-                margin,
-                "net(S)",
-            );
-            comp_points_c64(exemplar_s.view(), calc.s().view(), margin, "s()");
+            comp_pts_ix3(&exemplar_s, calc.net(RFParameter::S), margin, "net(S)");
+            comp_pts_ix3(&exemplar_s, calc.s(), margin, "s()");
             new_net.set_net(calc.s(), RFParameter::S);
-            comp_points_c64(exemplar_s.view(), new_net.s().view(), margin, "s(new_net)");
+            comp_pts_ix3(&exemplar_s, new_net.s(), margin, "s(new_net)");
 
-            comp_points_c64(
-                exemplar_y.view(),
-                calc.net(RFParameter::Y).view(),
-                margin,
-                "net(Y)",
-            );
-            comp_points_c64(exemplar_y.view(), calc.y().view(), margin, "y()");
+            comp_pts_ix3(&exemplar_y, calc.net(RFParameter::Y), margin, "net(Y)");
+            comp_pts_ix3(&exemplar_y, calc.y(), margin, "y()");
             new_net.set_net(calc.y(), RFParameter::Y);
-            comp_points_c64(exemplar_y.view(), new_net.y().view(), margin, "y(new_net)");
+            comp_pts_ix3(&exemplar_y, new_net.y(), margin, "y(new_net)");
 
-            comp_points_c64(
-                exemplar_z.view(),
-                calc.net(RFParameter::Z).view(),
-                margin,
-                "net(Z)",
-            );
-            comp_points_c64(exemplar_z.view(), calc.z().view(), margin, "z()");
+            comp_pts_ix3(&exemplar_z, calc.net(RFParameter::Z), margin, "net(Z)");
+            comp_pts_ix3(&exemplar_z, calc.z(), margin, "z()");
             new_net.set_net(calc.z(), RFParameter::Z);
-            comp_points_c64(exemplar_z.view(), new_net.z().view(), margin, "z(new_net)");
+            comp_pts_ix3(&exemplar_z, new_net.z(), margin, "z(new_net)");
         }
 
         #[test]
@@ -25134,7 +24996,7 @@ mod network_network_tests {
             ]);
 
             let calc = Network::new(
-                Frequency::new_scaled(array![1.0, 2.0, 3.0], Scale::Giga),
+                new_frequency_scaled(array![1.0, 2.0, 3.0], Scale::Giga),
                 array![c64::from(50.0), c64::from(50.0),],
                 param,
                 exemplar.clone(),
@@ -25344,75 +25206,40 @@ mod network_network_tests {
             let exemplar_z = exemplar;
 
             let margin = MARGIN;
-            comp_points_c64(
-                exemplar_a.view(),
-                calc.net(RFParameter::A).view(),
-                margin,
-                "net(A)",
-            );
-            comp_points_c64(exemplar_a.view(), calc.a().view(), margin, "a()");
+            comp_pts_ix3(&exemplar_a, calc.net(RFParameter::A), margin, "net(A)");
+            comp_pts_ix3(&exemplar_a, calc.a(), margin, "a()");
             new_net.set_net(calc.a(), RFParameter::A);
-            comp_points_c64(exemplar_a.view(), new_net.a().view(), margin, "a(new_net)");
+            comp_pts_ix3(&exemplar_a, new_net.a(), margin, "a(new_net)");
 
-            comp_points_c64(
-                exemplar_g.view(),
-                calc.net(RFParameter::G).view(),
-                margin,
-                "net(G)",
-            );
-            comp_points_c64(exemplar_g.view(), calc.g().view(), margin, "g()");
+            comp_pts_ix3(&exemplar_g, calc.net(RFParameter::G), margin, "net(G)");
+            comp_pts_ix3(&exemplar_g, calc.g(), margin, "g()");
             new_net.set_net(calc.g(), RFParameter::G);
-            comp_points_c64(exemplar_g.view(), new_net.g().view(), margin, "g(new_net)");
+            comp_pts_ix3(&exemplar_g, new_net.g(), margin, "g(new_net)");
 
-            comp_points_c64(
-                exemplar_h.view(),
-                calc.net(RFParameter::H).view(),
-                margin,
-                "net(H)",
-            );
-            comp_points_c64(exemplar_h.view(), calc.h().view(), margin, "h()");
+            comp_pts_ix3(&exemplar_h, calc.net(RFParameter::H), margin, "net(H)");
+            comp_pts_ix3(&exemplar_h, calc.h(), margin, "h()");
             new_net.set_net(calc.h(), RFParameter::H);
-            comp_points_c64(exemplar_h.view(), new_net.h().view(), margin, "h(new_net)");
+            comp_pts_ix3(&exemplar_h, new_net.h(), margin, "h(new_net)");
 
-            comp_points_c64(
-                exemplar_s.view(),
-                calc.net(RFParameter::S).view(),
-                margin,
-                "net(S)",
-            );
-            comp_points_c64(exemplar_s.view(), calc.s().view(), margin, "s()");
+            comp_pts_ix3(&exemplar_s, calc.net(RFParameter::S), margin, "net(S)");
+            comp_pts_ix3(&exemplar_s, calc.s(), margin, "s()");
             new_net.set_net(calc.s(), RFParameter::S);
-            comp_points_c64(exemplar_s.view(), new_net.s().view(), margin, "s(new_net)");
+            comp_pts_ix3(&exemplar_s, new_net.s(), margin, "s(new_net)");
 
-            comp_points_c64(
-                exemplar_t.view(),
-                calc.net(RFParameter::T).view(),
-                margin,
-                "net(T)",
-            );
-            comp_points_c64(exemplar_t.view(), calc.t().view(), margin, "t()");
+            comp_pts_ix3(&exemplar_t, calc.net(RFParameter::T), margin, "net(T)");
+            comp_pts_ix3(&exemplar_t, calc.t(), margin, "t()");
             new_net.set_net(calc.t(), RFParameter::T);
-            comp_points_c64(exemplar_t.view(), new_net.t().view(), margin, "t(new_net)");
+            comp_pts_ix3(&exemplar_t, new_net.t(), margin, "t(new_net)");
 
-            comp_points_c64(
-                exemplar_y.view(),
-                calc.net(RFParameter::Y).view(),
-                margin,
-                "net(Y)",
-            );
-            comp_points_c64(exemplar_y.view(), calc.y().view(), margin, "y()");
+            comp_pts_ix3(&exemplar_y, calc.net(RFParameter::Y), margin, "net(Y)");
+            comp_pts_ix3(&exemplar_y, calc.y(), margin, "y()");
             new_net.set_net(calc.y(), RFParameter::Y);
-            comp_points_c64(exemplar_y.view(), new_net.y().view(), margin, "y(new_net)");
+            comp_pts_ix3(&exemplar_y, new_net.y(), margin, "y(new_net)");
 
-            comp_points_c64(
-                exemplar_z.view(),
-                calc.net(RFParameter::Z).view(),
-                margin,
-                "net(Z)",
-            );
-            comp_points_c64(exemplar_z.view(), calc.z().view(), margin, "z()");
+            comp_pts_ix3(&exemplar_z, calc.net(RFParameter::Z), margin, "net(Z)");
+            comp_pts_ix3(&exemplar_z, calc.z(), margin, "z()");
             new_net.set_net(calc.z(), RFParameter::Z);
-            comp_points_c64(exemplar_z.view(), new_net.z().view(), margin, "z(new_net)");
+            comp_pts_ix3(&exemplar_z, new_net.z(), margin, "z(new_net)");
         }
 
         #[test]
@@ -25427,7 +25254,7 @@ mod network_network_tests {
             ]]);
 
             let calc = Network::new(
-                Frequency::new_scaled(array![1.0], Scale::Giga),
+                new_frequency_scaled(array![1.0], Scale::Giga),
                 array![c64::from(50.0), c64::from(50.0), c64::from(50.0),],
                 param,
                 exemplar.clone(),
@@ -25475,42 +25302,27 @@ mod network_network_tests {
             let exemplar_z = exemplar;
 
             let margin = MARGIN;
-            comp_points_c64(
-                exemplar_s.view(),
-                calc.net(RFParameter::S).view(),
-                margin,
-                "net(S)",
-            );
-            comp_points_c64(exemplar_s.view(), calc.s().view(), margin, "s()");
+            comp_pts_ix3(&exemplar_s, calc.net(RFParameter::S), margin, "net(S)");
+            comp_pts_ix3(&exemplar_s, calc.s(), margin, "s()");
             new_net.set_net(calc.s(), RFParameter::S);
-            comp_points_c64(exemplar_s.view(), new_net.s().view(), margin, "s(new_net)");
+            comp_pts_ix3(&exemplar_s, new_net.s(), margin, "s(new_net)");
 
-            comp_points_c64(
-                exemplar_y.view(),
-                calc.net(RFParameter::Y).view(),
-                margin,
-                "net(Y)",
-            );
-            comp_points_c64(exemplar_y.view(), calc.y().view(), margin, "y()");
+            comp_pts_ix3(&exemplar_y, calc.net(RFParameter::Y), margin, "net(Y)");
+            comp_pts_ix3(&exemplar_y, calc.y(), margin, "y()");
             new_net.set_net(calc.y(), RFParameter::Y);
-            comp_points_c64(exemplar_y.view(), new_net.y().view(), margin, "y(new_net)");
+            comp_pts_ix3(&exemplar_y, new_net.y(), margin, "y(new_net)");
 
-            comp_points_c64(
-                exemplar_z.view(),
-                calc.net(RFParameter::Z).view(),
-                margin,
-                "net(Z)",
-            );
-            comp_points_c64(exemplar_z.view(), calc.z().view(), margin, "z()");
+            comp_pts_ix3(&exemplar_z, calc.net(RFParameter::Z), margin, "net(Z)");
+            comp_pts_ix3(&exemplar_z, calc.z(), margin, "z()");
             new_net.set_net(calc.z(), RFParameter::Z);
-            comp_points_c64(exemplar_z.view(), new_net.z().view(), margin, "z(new_net)");
+            comp_pts_ix3(&exemplar_z, new_net.z(), margin, "z(new_net)");
         }
 
         #[test]
         #[should_panic(expected = "ABCD parameters do not exist for network with 1 port(s)")]
         fn network_z_to_a() {
             let net = Network::new(
-                Frequency::new_scaled(array![1.0], Scale::Giga),
+                new_frequency_scaled(array![1.0], Scale::Giga),
                 array![c64::from(50.0)],
                 RFParameter::Z,
                 Points::<Complex64, Ix3>::new(array![[[c64(0.958, -0.263)]]]),
@@ -25525,7 +25337,7 @@ mod network_network_tests {
         #[should_panic(expected = "G parameters do not exist for network with 1 port(s)")]
         fn network_z_to_g() {
             let net = Network::new(
-                Frequency::new_scaled(array![1.0], Scale::Giga),
+                new_frequency_scaled(array![1.0], Scale::Giga),
                 array![c64::from(50.0)],
                 RFParameter::Z,
                 Points::<Complex64, Ix3>::new(array![[[c64(0.958, -0.263)]]]),
@@ -25540,7 +25352,7 @@ mod network_network_tests {
         #[should_panic(expected = "H parameters do not exist for network with 1 port(s)")]
         fn network_z_to_h() {
             let net = Network::new(
-                Frequency::new_scaled(array![1.0], Scale::Giga),
+                new_frequency_scaled(array![1.0], Scale::Giga),
                 array![c64::from(50.0)],
                 RFParameter::Z,
                 Points::<Complex64, Ix3>::new(array![[[c64(0.958, -0.263)]]]),
@@ -25555,7 +25367,7 @@ mod network_network_tests {
         #[should_panic(expected = "T parameters do not exist for network with 1 port(s)")]
         fn network_z_to_t() {
             let net = Network::new(
-                Frequency::new_scaled(array![1.0], Scale::Giga),
+                new_frequency_scaled(array![1.0], Scale::Giga),
                 array![c64::from(50.0)],
                 RFParameter::Z,
                 Points::<Complex64, Ix3>::new(array![[[c64(0.958, -0.263)]]]),

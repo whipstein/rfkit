@@ -9,8 +9,6 @@ pub mod frequency;
 pub mod impedance;
 pub mod math;
 pub mod minimize;
-pub mod mycomplex;
-pub mod myfloat;
 pub mod network;
 pub mod num;
 pub mod parameter;

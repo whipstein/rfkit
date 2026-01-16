@@ -1,4 +1,6 @@
+use crate::num::MyComplex;
 use core::f64;
+use num::complex::Complex64;
 use num_traits::{Num, One, Signed, Zero};
 use rug::{
     Float,
@@ -140,8 +142,7 @@ impl MyFloat {
 
     /// Get the square
     pub fn square(&self) -> Self {
-        let temp = self * self;
-        MyFloat(temp.0)
+        self * self
     }
 
     /// Calculate the exponential function
@@ -401,261 +402,228 @@ impl MyFloat {
 }
 
 // Implement basic arithmetic operations
-impl Add for MyFloat {
-    type Output = Self;
+macro_rules! impl_self_math_op(
+    ($trt:ident, $operator:tt, $mth:ident) => (
+        impl $trt for MyFloat {
+            type Output = Self;
 
-    fn add(self, other: Self) -> Self {
-        MyFloat(self.0 + other.0)
-    }
-}
+            fn $mth(self, other: Self) -> Self::Output {
+                MyFloat(self.0 $operator other.0)
+            }
+        }
 
-impl Add<&MyFloat> for MyFloat {
-    type Output = Self;
+        impl $trt<&MyFloat> for MyFloat {
+            type Output = MyFloat;
 
-    fn add(self, other: &Self) -> Self {
-        MyFloat(self.0 + &other.0)
-    }
-}
+            fn $mth(self, other: &MyFloat) -> Self::Output {
+                MyFloat(self.0 $operator &other.0)
+            }
+        }
 
-impl Add<MyFloat> for &MyFloat {
-    type Output = MyFloat;
+        impl $trt<MyFloat> for &MyFloat {
+            type Output = MyFloat;
 
-    fn add(self, other: MyFloat) -> MyFloat {
-        MyFloat(&self.0 + other.0)
-    }
-}
+            fn $mth(self, other: MyFloat) -> Self::Output {
+                MyFloat(&self.0 $operator other.0)
+            }
+        }
 
-impl Add<&MyFloat> for &MyFloat {
-    type Output = MyFloat;
+        impl $trt<&MyFloat> for &MyFloat {
+            type Output = MyFloat;
 
-    fn add(self, other: &MyFloat) -> MyFloat {
-        MyFloat(&self.0 + other.0.clone())
-    }
-}
+            fn $mth(self, other: &MyFloat) -> Self::Output {
+                MyFloat(&self.0 $operator other.0.clone())
+            }
+        }
+    );
+);
 
-impl Add<f64> for MyFloat {
-    type Output = Self;
+macro_rules! impl_math_op(
+    ($trt:ident, $operator:tt, $mth:ident, Complex64) => (
+        impl $trt<Complex64> for MyFloat {
+            type Output = MyComplex;
 
-    fn add(self, other: f64) -> Self::Output {
-        MyFloat(self.0 + other)
-    }
-}
+            fn $mth(self, other: Complex64) -> Self::Output {
+                self $operator MyComplex::from_c64(other)
+            }
+        }
 
-impl Add<f64> for &MyFloat {
-    type Output = MyFloat;
+        impl $trt<Complex64> for &MyFloat {
+            type Output = MyComplex;
 
-    fn add(self, other: f64) -> Self::Output {
-        MyFloat(self.0.clone() + other)
-    }
-}
+            fn $mth(self, other: Complex64) -> Self::Output {
+                self $operator MyComplex::from_c64(other)
+            }
+        }
 
-impl Add<MyFloat> for f64 {
-    type Output = MyFloat;
+        impl $trt<&Complex64> for MyFloat {
+            type Output = MyComplex;
 
-    fn add(self, other: MyFloat) -> Self::Output {
-        MyFloat(self + other.0)
-    }
-}
+            fn $mth(self, other: &Complex64) -> Self::Output {
+                self $operator MyComplex::from_c64(*other)
+            }
+        }
 
-impl Add<&MyFloat> for f64 {
-    type Output = MyFloat;
+        impl $trt<&Complex64> for &MyFloat {
+            type Output = MyComplex;
 
-    fn add(self, other: &MyFloat) -> Self::Output {
-        MyFloat(self + other.0.clone())
-    }
-}
+            fn $mth(self, other: &Complex64) -> Self::Output {
+                self $operator MyComplex::from_c64(*other)
+            }
+        }
 
-impl Sub for MyFloat {
-    type Output = Self;
+        impl $trt<MyFloat> for Complex64 {
+            type Output = MyComplex;
 
-    fn sub(self, other: Self) -> Self {
-        MyFloat(self.0 - other.0)
-    }
-}
+            fn $mth(self, other: MyFloat) -> Self::Output {
+                MyComplex::from_c64(self) $operator other
+            }
+        }
 
-impl Sub<&MyFloat> for MyFloat {
-    type Output = Self;
+        impl $trt<MyFloat> for &Complex64 {
+            type Output = MyComplex;
 
-    fn sub(self, other: &Self) -> Self {
-        MyFloat(self.0 - &other.0)
-    }
-}
+            fn $mth(self, other: MyFloat) -> Self::Output {
+                MyComplex::from_c64(*self) $operator other
+            }
+        }
 
-impl Sub<MyFloat> for &MyFloat {
-    type Output = MyFloat;
+        impl $trt<&MyFloat> for Complex64 {
+            type Output = MyComplex;
 
-    fn sub(self, other: MyFloat) -> MyFloat {
-        MyFloat(&self.0 - other.0)
-    }
-}
+            fn $mth(self, other: &MyFloat) -> Self::Output {
+                MyComplex::from_c64(self) $operator other
+            }
+        }
 
-impl Sub<&MyFloat> for &MyFloat {
-    type Output = MyFloat;
+        impl $trt<&MyFloat> for &Complex64 {
+            type Output = MyComplex;
 
-    fn sub(self, other: &MyFloat) -> MyFloat {
-        MyFloat(&self.0 - other.0.clone())
-    }
-}
+            fn $mth(self, other: &MyFloat) -> Self::Output {
+                MyComplex::from_c64(*self) $operator other
+            }
+        }
+    );
+    ($trt:ident, $operator:tt, $mth:ident, $rhs:ident) => (
+        impl $trt<$rhs> for MyFloat {
+            type Output = MyFloat;
 
-impl Sub<f64> for MyFloat {
-    type Output = Self;
+            fn $mth(self, other: $rhs) -> Self::Output {
+                MyFloat(self.0 $operator other)
+            }
+        }
 
-    fn sub(self, other: f64) -> Self::Output {
-        MyFloat(self.0 - other)
-    }
-}
+        impl $trt<$rhs> for &MyFloat {
+            type Output = MyFloat;
 
-impl Sub<f64> for &MyFloat {
-    type Output = MyFloat;
+            fn $mth(self, other: $rhs) -> Self::Output {
+                MyFloat(self.0.clone() $operator other)
+            }
+        }
 
-    fn sub(self, other: f64) -> Self::Output {
-        MyFloat(self.0.clone() - other)
-    }
-}
+        impl $trt<&$rhs> for MyFloat {
+            type Output = MyFloat;
 
-impl Sub<MyFloat> for f64 {
-    type Output = MyFloat;
+            fn $mth(self, other: &$rhs) -> Self::Output {
+                MyFloat(self.0 $operator *other)
+            }
+        }
 
-    fn sub(self, other: MyFloat) -> Self::Output {
-        MyFloat(self - other.0)
-    }
-}
+        impl $trt<&$rhs> for &MyFloat {
+            type Output = MyFloat;
 
-impl Sub<&MyFloat> for f64 {
-    type Output = MyFloat;
+            fn $mth(self, other: &$rhs) -> Self::Output {
+                MyFloat(self.0.clone() $operator *other)
+            }
+        }
 
-    fn sub(self, other: &MyFloat) -> Self::Output {
-        MyFloat(self - other.0.clone())
-    }
-}
+        impl $trt<MyFloat> for $rhs {
+            type Output = MyFloat;
 
-impl Mul for MyFloat {
-    type Output = Self;
+            fn $mth(self, other: MyFloat) -> Self::Output {
+                MyFloat(self $operator other.0)
+            }
+        }
 
-    fn mul(self, other: Self) -> Self {
-        MyFloat(self.0 * other.0)
-    }
-}
+        impl $trt<MyFloat> for &$rhs {
+            type Output = MyFloat;
 
-impl Mul<&MyFloat> for MyFloat {
-    type Output = Self;
+            fn $mth(self, other: MyFloat) -> Self::Output {
+                MyFloat(self $operator other.0.clone())
+            }
+        }
 
-    fn mul(self, other: &Self) -> Self {
-        MyFloat(self.0 * &other.0)
-    }
-}
+        impl $trt<&MyFloat> for $rhs {
+            type Output = MyFloat;
 
-impl Mul<MyFloat> for &MyFloat {
-    type Output = MyFloat;
+            fn $mth(self, other: &MyFloat) -> Self::Output {
+                MyFloat(self $operator other.0.clone())
+            }
+        }
 
-    fn mul(self, other: MyFloat) -> MyFloat {
-        MyFloat(&self.0 * other.0)
-    }
-}
+        impl $trt<&MyFloat> for &$rhs {
+            type Output = MyFloat;
 
-impl Mul<&MyFloat> for &MyFloat {
-    type Output = MyFloat;
+            fn $mth(self, other: &MyFloat) -> Self::Output {
+                MyFloat(*self $operator other.0.clone())
+            }
+        }
+    );
+);
 
-    fn mul(self, other: &MyFloat) -> MyFloat {
-        MyFloat(&self.0 * other.0.clone())
-    }
-}
+// Implement assignment operators
+macro_rules! impl_self_assign_math_op(
+    ($trt:ident, $operator:tt, $mth:ident) => (
+        impl $trt for MyFloat {
+            fn $mth(&mut self, other: Self) {
+                self.0 $operator other.0;
+            }
+        }
 
-impl Mul<f64> for MyFloat {
-    type Output = Self;
+        impl $trt<&MyFloat> for MyFloat {
+            fn $mth(&mut self, other: &MyFloat) {
+                self.0 $operator &other.0;
+            }
+        }
+    );
+);
 
-    fn mul(self, other: f64) -> Self::Output {
-        MyFloat(self.0 * other)
-    }
-}
+macro_rules! impl_assign_math_op(
+    ($trt:ident, $operator:tt, $mth:ident, $rhs:ident) => (
+        impl $trt<$rhs> for MyFloat {
+            fn $mth(&mut self, other: $rhs) {
+                self.0 $operator other;
+            }
+        }
 
-impl Mul<f64> for &MyFloat {
-    type Output = MyFloat;
+        impl $trt<&$rhs> for MyFloat {
+            fn $mth(&mut self, other: &$rhs) {
+                self.0 $operator *other;
+            }
+        }
+    );
+);
 
-    fn mul(self, other: f64) -> Self::Output {
-        MyFloat(self.0.clone() * other)
-    }
-}
-
-impl Mul<MyFloat> for f64 {
-    type Output = MyFloat;
-
-    fn mul(self, other: MyFloat) -> Self::Output {
-        MyFloat(self * other.0)
-    }
-}
-
-impl Mul<&MyFloat> for f64 {
-    type Output = MyFloat;
-
-    fn mul(self, other: &MyFloat) -> Self::Output {
-        MyFloat(self * other.0.clone())
-    }
-}
-
-impl Div for MyFloat {
-    type Output = Self;
-
-    fn div(self, other: Self) -> Self {
-        MyFloat(self.0 / other.0)
-    }
-}
-
-impl Div<&MyFloat> for MyFloat {
-    type Output = Self;
-
-    fn div(self, other: &Self) -> Self {
-        MyFloat(self.0 / &other.0)
-    }
-}
-
-impl Div<MyFloat> for &MyFloat {
-    type Output = MyFloat;
-
-    fn div(self, other: MyFloat) -> MyFloat {
-        MyFloat(&self.0 / other.0)
-    }
-}
-
-impl Div<&MyFloat> for &MyFloat {
-    type Output = MyFloat;
-
-    fn div(self, other: &MyFloat) -> MyFloat {
-        MyFloat(&self.0 / other.0.clone())
-    }
-}
-
-impl Div<f64> for MyFloat {
-    type Output = Self;
-
-    fn div(self, other: f64) -> Self::Output {
-        MyFloat(self.0 / other)
-    }
-}
-
-impl Div<f64> for &MyFloat {
-    type Output = MyFloat;
-
-    fn div(self, other: f64) -> Self::Output {
-        MyFloat(self.0.clone() / other)
-    }
-}
-
-impl Div<MyFloat> for f64 {
-    type Output = MyFloat;
-
-    fn div(self, other: MyFloat) -> Self::Output {
-        MyFloat(self / other.0)
-    }
-}
-
-impl Div<&MyFloat> for f64 {
-    type Output = MyFloat;
-
-    fn div(self, other: &MyFloat) -> Self::Output {
-        MyFloat(self / other.0.clone())
-    }
-}
+impl_self_math_op!(Add, +, add);
+impl_self_math_op!(Sub, -, sub);
+impl_self_math_op!(Mul, *, mul);
+impl_self_math_op!(Div, /, div);
+impl_math_op!(Add, +, add, f64);
+impl_math_op!(Sub, -, sub, f64);
+impl_math_op!(Mul, *, mul, f64);
+impl_math_op!(Div, /, div, f64);
+impl_math_op!(Add, +, add, Complex64);
+impl_math_op!(Sub, -, sub, Complex64);
+impl_math_op!(Mul, *, mul, Complex64);
+impl_math_op!(Div, /, div, Complex64);
+impl_self_assign_math_op!(AddAssign, +=, add_assign);
+impl_self_assign_math_op!(SubAssign, -=, sub_assign);
+impl_self_assign_math_op!(MulAssign, *=, mul_assign);
+impl_self_assign_math_op!(DivAssign, /=, div_assign);
+impl_assign_math_op!(AddAssign, +=, add_assign, f64);
+impl_assign_math_op!(SubAssign, -=, sub_assign, f64);
+impl_assign_math_op!(MulAssign, *=, mul_assign, f64);
+impl_assign_math_op!(DivAssign, /=, div_assign, f64);
 
 impl Neg for MyFloat {
     type Output = Self;
@@ -670,79 +638,6 @@ impl Neg for &MyFloat {
 
     fn neg(self) -> MyFloat {
         MyFloat(-self.0.clone())
-    }
-}
-
-// Implement assignment operators
-impl AddAssign for MyFloat {
-    fn add_assign(&mut self, other: Self) {
-        self.0 += other.0;
-    }
-}
-
-impl AddAssign<&MyFloat> for MyFloat {
-    fn add_assign(&mut self, other: &MyFloat) {
-        self.0 += &other.0;
-    }
-}
-
-impl AddAssign<f64> for MyFloat {
-    fn add_assign(&mut self, other: f64) {
-        self.0 += other;
-    }
-}
-
-impl SubAssign for MyFloat {
-    fn sub_assign(&mut self, other: Self) {
-        self.0 -= other.0;
-    }
-}
-
-impl SubAssign<&MyFloat> for MyFloat {
-    fn sub_assign(&mut self, other: &MyFloat) {
-        self.0 -= &other.0;
-    }
-}
-
-impl SubAssign<f64> for MyFloat {
-    fn sub_assign(&mut self, other: f64) {
-        self.0 -= other;
-    }
-}
-
-impl MulAssign for MyFloat {
-    fn mul_assign(&mut self, other: Self) {
-        self.0 *= other.0;
-    }
-}
-
-impl MulAssign<&MyFloat> for MyFloat {
-    fn mul_assign(&mut self, other: &MyFloat) {
-        self.0 *= &other.0;
-    }
-}
-
-impl MulAssign<f64> for MyFloat {
-    fn mul_assign(&mut self, other: f64) {
-        self.0 *= other;
-    }
-}
-
-impl DivAssign for MyFloat {
-    fn div_assign(&mut self, other: Self) {
-        self.0 /= other.0;
-    }
-}
-
-impl DivAssign<&MyFloat> for MyFloat {
-    fn div_assign(&mut self, other: &MyFloat) {
-        self.0 /= &other.0;
-    }
-}
-
-impl DivAssign<f64> for MyFloat {
-    fn div_assign(&mut self, other: f64) {
-        self.0 /= other;
     }
 }
 
@@ -976,7 +871,7 @@ impl PowAssign<i32> for MyFloat {
     }
 }
 
-// Implement Zero trait
+// Implement Num trait
 impl Zero for MyFloat {
     fn zero() -> Self {
         MyFloat::new(0.0)
@@ -987,7 +882,6 @@ impl Zero for MyFloat {
     }
 }
 
-// Implement One trait
 impl One for MyFloat {
     fn one() -> Self {
         MyFloat::new(1.0)
@@ -998,7 +892,6 @@ impl One for MyFloat {
     }
 }
 
-// Implement NegOne trait
 impl NegOne for MyFloat {
     fn neg_one() -> Self {
         MyFloat::new(-1.0)
@@ -1009,7 +902,6 @@ impl NegOne for MyFloat {
     }
 }
 
-// Implement Num trait
 impl Num for MyFloat {
     type FromStrRadixErr = rug::float::ParseFloatError;
 
@@ -1020,7 +912,6 @@ impl Num for MyFloat {
     }
 }
 
-// Implement Signed trait
 impl Signed for MyFloat {
     fn abs(&self) -> Self {
         let mut temp = self.0.clone();
@@ -1057,21 +948,19 @@ impl Signed for MyFloat {
     }
 }
 
-// Implement Clone
+// Implement Traits
 impl Clone for MyFloat {
     fn clone(&self) -> Self {
         MyFloat(self.0.clone())
     }
 }
 
-// Default implementation - creates zero float with default precision
 impl Default for MyFloat {
     fn default() -> Self {
         MyFloat(Float::new(Self::PRECISION))
     }
 }
 
-// Implement Display for pretty printing
 impl fmt::Display for MyFloat {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)
@@ -1079,7 +968,6 @@ impl fmt::Display for MyFloat {
     }
 }
 
-// Implement Debug
 impl fmt::Debug for MyFloat {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "MyFloat({})", self.0)
@@ -1113,7 +1001,7 @@ impl PartialOrd<f64> for MyFloat {
     }
 }
 
-// Conversion from f64
+// Implement Conversion
 impl From<f64> for MyFloat {
     fn from(value: f64) -> Self {
         MyFloat::new(value)
@@ -1126,59 +1014,69 @@ impl From<&f64> for MyFloat {
     }
 }
 
-// Conversion from Float
 impl From<Float> for MyFloat {
     fn from(value: Float) -> Self {
         MyFloat(value)
     }
 }
 
-// Conversion from &Float
 impl From<&Float> for MyFloat {
     fn from(value: &Float) -> Self {
         MyFloat(value.clone())
     }
 }
 
-// Conversion from i32
 impl From<i32> for MyFloat {
     fn from(value: i32) -> Self {
         MyFloat::new(value as f64)
     }
 }
 
-// Conversion from u32
 impl From<u32> for MyFloat {
     fn from(value: u32) -> Self {
         MyFloat::new(value as f64)
     }
 }
 
-// Conversion from i64
 impl From<i64> for MyFloat {
     fn from(value: i64) -> Self {
         MyFloat::new(value as f64)
     }
 }
 
-// Conversion from u64
 impl From<u64> for MyFloat {
     fn from(value: u64) -> Self {
         MyFloat::new(value as f64)
     }
 }
 
-// Conversion to f64
 impl From<MyFloat> for f64 {
     fn from(value: MyFloat) -> f64 {
         value.to_f64()
     }
 }
 
-// Conversion to Float
+impl From<&MyFloat> for f64 {
+    fn from(value: &MyFloat) -> f64 {
+        value.to_f64()
+    }
+}
+
 impl From<MyFloat> for Float {
     fn from(value: MyFloat) -> Float {
         value.to_float()
+    }
+}
+
+impl From<MyFloat> for Complex64 {
+    fn from(value: MyFloat) -> Complex64 {
+        Complex64::new(value.to_f64(), 0.0)
+    }
+}
+
+impl From<&MyFloat> for Complex64 {
+    fn from(value: &MyFloat) -> Complex64 {
+        Complex64::new(value.to_f64(), 0.0)
     }
 }
 

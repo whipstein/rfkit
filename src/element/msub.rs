@@ -1,11 +1,11 @@
 #![allow(unused)]
 use crate::{
     element::{Distributed, Elem, ElemType, Lumped},
-    frequency::Frequency,
+    frequency::{FreqArray, Frequency, new_frequency},
     point,
     pts::{Points, Pts},
     scale::Scale,
-    unit::{Unit, UnitVal, UnitValBuilder, Unitized},
+    unit::{Unit, UnitValBuilder, UnitValue, Unitized},
 };
 use float_cmp::{F64Margin, approx_eq};
 use ndarray::{IntoDimension, prelude::*};
@@ -20,9 +20,9 @@ pub struct Msub {
     id: String,
     er: f64,
     tand: f64,
-    height: UnitVal,
-    thickness: UnitVal,
-    conductivity: UnitVal,
+    height: UnitValue,
+    thickness: UnitValue,
+    conductivity: UnitValue,
     rough: f64,
 }
 
@@ -31,9 +31,9 @@ impl Msub {
         id: String,
         er: f64,
         tand: f64,
-        height: UnitVal,
-        thickness: UnitVal,
-        conductivity: UnitVal,
+        height: UnitValue,
+        thickness: UnitValue,
+        conductivity: UnitValue,
         rough: f64,
     ) -> Msub {
         Msub {
@@ -55,15 +55,15 @@ impl Msub {
         self.tand.tan()
     }
 
-    pub fn height(&self) -> UnitVal {
+    pub fn height(&self) -> UnitValue {
         self.height
     }
 
-    pub fn thickness(&self) -> UnitVal {
+    pub fn thickness(&self) -> UnitValue {
         self.thickness
     }
 
-    pub fn conductivity(&self) -> UnitVal {
+    pub fn conductivity(&self) -> UnitValue {
         self.conductivity
     }
 
@@ -163,7 +163,7 @@ impl Elem for Msub {
     }
 
     fn z_at(&self, freq: &Frequency, i: usize) -> Complex64 {
-        let freq_pt = Frequency::new(array![freq.freq(i)], freq.scale());
+        let freq_pt = new_frequency(array![freq.freq(i)], freq.scale());
         self.z(&freq_pt).into()
     }
 
@@ -177,9 +177,9 @@ pub struct MsubBuilder {
     id: String,
     er: f64,
     tand: f64,
-    height: UnitVal,
-    thickness: UnitVal,
-    conductivity: UnitVal,
+    height: UnitValue,
+    thickness: UnitValue,
+    conductivity: UnitValue,
     rough: f64,
 }
 
@@ -203,7 +203,7 @@ impl MsubBuilder {
         self
     }
 
-    pub fn height(mut self, val: UnitVal) -> Self {
+    pub fn height(mut self, val: UnitValue) -> Self {
         self.height = val;
         self
     }
@@ -219,7 +219,7 @@ impl MsubBuilder {
         self
     }
 
-    pub fn thickness(mut self, val: UnitVal) -> Self {
+    pub fn thickness(mut self, val: UnitValue) -> Self {
         self.thickness = val;
         self
     }
@@ -235,7 +235,7 @@ impl MsubBuilder {
         self
     }
 
-    pub fn conductivity(mut self, val: UnitVal) -> Self {
+    pub fn conductivity(mut self, val: UnitValue) -> Self {
         self.conductivity = val;
         self
     }
@@ -276,8 +276,8 @@ impl Default for MsubBuilder {
             id: "Msub0".to_string(),
             er: 1.0,
             tand: 0.0,
-            height: UnitVal::default(),
-            thickness: UnitVal::default(),
+            height: UnitValue::default(),
+            thickness: UnitValue::default(),
             conductivity: UnitValBuilder::new()
                 .val_scaled(1e50, Scale::Base)
                 .unit(Unit::Sieman)
@@ -290,9 +290,9 @@ impl Default for MsubBuilder {
 #[cfg(test)]
 mod element_msub_tests {
     use super::*;
-    use crate::frequency::FrequencyBuilder;
+    use crate::frequency::{FreqArray, FrequencyBuilder};
     use crate::unit::UnitValBuilder;
-    use crate::util::{comp_c64, comp_point_c64, comp_points_c64, comp_vec_c64};
+    use crate::util::{comp_num, comp_pts_ix2, comp_pts_ix3, comp_vec_c64};
     use float_cmp::*;
 
     const DEFAULT_MARGIN: F64Margin = F64Margin {
@@ -392,7 +392,7 @@ mod element_msub_tests {
 
         #[test]
         fn test_msub_skin_depth() {
-            let freq = Frequency::new(array![1e9], Scale::Base);
+            let freq = new_frequency(array![1e9], Scale::Base);
             let msub = MsubBuilder::new()
                 .conductivity_scaled(35.0, Scale::Mega)
                 .build();
@@ -404,7 +404,7 @@ mod element_msub_tests {
 
         #[test]
         fn test_msub_roughness_factor() {
-            let freq = Frequency::new(array![1e9], Scale::Base);
+            let freq = new_frequency(array![1e9], Scale::Base);
             let msub = MsubBuilder::new()
                 .conductivity_scaled(35.0, Scale::Mega)
                 .rough(1e-7)
@@ -416,7 +416,7 @@ mod element_msub_tests {
 
         #[test]
         fn test_msub_sheet_resistance() {
-            let freq = Frequency::new(array![1e9], Scale::Base);
+            let freq = new_frequency(array![1e9], Scale::Base);
             let msub = MsubBuilder::new()
                 .conductivity_scaled(35.0, Scale::Mega)
                 .thickness_scaled(0.77, Scale::Micro)
@@ -434,7 +434,7 @@ mod element_msub_tests {
 
         #[test]
         fn test_msub_zero_impedance() {
-            let freq = Frequency::new(array![1e9], Scale::Base);
+            let freq = new_frequency(array![1e9], Scale::Base);
             let msub = MsubBuilder::new().build();
             assert_eq!(msub.z(&freq), Complex64::ZERO);
         }

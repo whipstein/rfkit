@@ -1,6 +1,6 @@
 use crate::{
     element::{Elem, ElemType},
-    frequency::Frequency,
+    frequency::{FreqArray, Frequency, new_frequency},
     point,
     pts::{Points, Pts},
 };
@@ -108,7 +108,7 @@ impl Elem for Transformer {
     }
 
     fn z_at(&self, freq: &Frequency, i: usize) -> Complex64 {
-        let freq_pt = Frequency::new(array![freq.freq(i)], freq.scale());
+        let freq_pt = new_frequency(array![freq.freq(i)], freq.scale());
         self.z(&freq_pt).into()
     }
 
@@ -193,7 +193,7 @@ mod element_transformer_tests {
     use crate::{
         scale::Scale,
         unit::UnitValBuilder,
-        util::{comp_c64, comp_point_c64},
+        util::{comp_num, comp_pts_ix2},
     };
     use float_cmp::*;
 
@@ -210,7 +210,7 @@ mod element_transformer_tests {
     #[test]
     fn element_transformer() {
         let freq_unitval = UnitValBuilder::new().val_scaled(1.0, Scale::Giga).build();
-        let freq = Frequency::from_unitval(&freq_unitval);
+        let freq = new_frequency(array![freq_unitval.val()], freq_unitval.scale());
         let val = 1.0;
         let exemplar = Transformer {
             id: "T1".to_string(),
@@ -232,13 +232,8 @@ mod element_transformer_tests {
         let margin = F64Margin::default();
 
         assert_eq!(&exemplar.id(), &calc.id());
-        comp_point_c64(
-            exemplar.c(&freq).view(),
-            calc.c(&freq).view(),
-            margin,
-            "calc.c()",
-        );
-        comp_c64(&exemplar_z, &calc.z(&freq), margin, "calc.z()", "0");
+        comp_pts_ix2(&exemplar.c(&freq), &calc.c(&freq), margin, "calc.c()");
+        comp_num(&exemplar_z, &calc.z(&freq), margin, "calc.z()", "0");
     }
 
     mod transformer_tests {
@@ -267,7 +262,7 @@ mod element_transformer_tests {
 
         #[test]
         fn test_transformer_impedance_calculation() {
-            let freq = Frequency::new(array![1e9], Scale::Base);
+            let freq = new_frequency(array![1e9], Scale::Base);
             let n = TransformerBuilder::new().val(1.0).build();
 
             let z = n.z(&freq);
@@ -279,7 +274,7 @@ mod element_transformer_tests {
 
         #[test]
         fn test_transformer_c_matrix_structure() {
-            let freq = Frequency::new(array![1e9], Scale::Base);
+            let freq = new_frequency(array![1e9], Scale::Base);
             let n = TransformerBuilder::new().build();
             let c_matrix = n.c(&freq);
 
@@ -293,7 +288,7 @@ mod element_transformer_tests {
         #[test]
         fn test_transformer_multiple_frequencies() {
             let freqs = array![1e9, 2e9, 5e9, 10e9];
-            let freq = Frequency::new(freqs.clone(), Scale::Base);
+            let freq = new_frequency(freqs.clone(), Scale::Base);
             let n = TransformerBuilder::new().val(1.0).build();
 
             for i in 0..freqs.len() {
@@ -330,7 +325,7 @@ mod element_transformer_tests {
 
         #[test]
         fn test_transformer_net_matrix() {
-            let freq = Frequency::new(array![1e9, 2e9], Scale::Base);
+            let freq = new_frequency(array![1e9, 2e9], Scale::Base);
             let n = TransformerBuilder::new().build();
             let net = n.net(&freq);
 

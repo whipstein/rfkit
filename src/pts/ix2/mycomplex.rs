@@ -2,9 +2,9 @@ use crate::{
     error::InversionError,
     mycomplex::MyComplex,
     myfloat::MyFloat,
-    pts::{Points, Pts},
+    pts::{Matrix, Points, Pts},
 };
-use ndarray::{IntoDimension, prelude::*};
+use ndarray::{IntoDimension, SliceArg, linalg::Dot, prelude::*};
 use ndarray_linalg::error::LinalgError;
 use num::complex::Complex64;
 use num_traits::{One, Zero};
@@ -174,17 +174,6 @@ impl Pts<MyComplex, Ix2> for Points<MyComplex, Ix2> {
         Points(Array2::from_elem(shape, MyComplex::one()))
     }
 
-    /// Create an identity matrix of given size
-    fn eye(shape: impl IntoDimension<Dim = Dim<[usize; 2]>>) -> Self {
-        Points(Array2::from_shape_fn(shape, |(j, k)| {
-            if j == k {
-                MyComplex::one()
-            } else {
-                MyComplex::zero()
-            }
-        }))
-    }
-
     /// Create a matrix from a flat vector with specified dimensions
     fn from_flat_f64(
         data: Vec<f64>,
@@ -278,24 +267,71 @@ impl Pts<MyComplex, Ix2> for Points<MyComplex, Ix2> {
         self.0.push(axis, array)
     }
 
+    /// Get and set outer axis point
+    fn pt<I>(&self, index: usize) -> ndarray::ArrayView<'_, MyComplex, I::OutDim>
+    where
+        I: SliceArg<Ix2, OutDim = Dim<[usize; 1]>>,
+    {
+        if index >= self.nrows() {
+            panic!(
+                "Row index {} out of bounds for matrix with {} points",
+                index,
+                self.nrows()
+            );
+        }
+
+        self.slice(s![index, ..])
+    }
+
+    fn pt_mut<I>(&mut self, index: usize) -> ndarray::ArrayViewMut<'_, MyComplex, I::OutDim>
+    where
+        I: SliceArg<Ix2, OutDim = Dim<[usize; 1]>>,
+    {
+        if index >= self.nrows() {
+            panic!(
+                "Row index {} out of bounds for matrix with {} points",
+                index,
+                self.nrows()
+            );
+        }
+
+        self.slice_mut(s![index, ..])
+    }
+
+    fn set_pt(&mut self, index: usize, pt: Points<MyComplex, Ix1>) {
+        if index >= self.nrows() {
+            panic!(
+                "Row index {} out of bounds for matrix with {} points",
+                index,
+                self.nrows()
+            );
+        }
+        if pt.len() != self.ncols() {
+            panic!(
+                "Col dimensions incompatible: expected {}, got {}",
+                self.ncols(),
+                pt.len()
+            );
+        }
+
+        for k in 0..self.ncols() {
+            self[[index, k]] = pt[k].clone();
+        }
+    }
+
     /// Get the number of rows
     fn len_of(&self, axis: Axis) -> usize {
         self.0.len_of(axis)
     }
 
+    /// Get the length
+    fn len(&self) -> usize {
+        self.0.len()
+    }
+
     /// Get the number of points
     fn npts(&self) -> usize {
         1
-    }
-
-    /// Get the number of rows
-    fn nrows(&self) -> usize {
-        self.0.nrows()
-    }
-
-    /// Get the number of columns
-    fn ncols(&self) -> usize {
-        self.0.ncols()
     }
 
     /// Get the shape as (rows, cols)
@@ -314,11 +350,6 @@ impl Pts<MyComplex, Ix2> for Points<MyComplex, Ix2> {
         (shape.0, shape.1)
     }
 
-    /// Check if the matrix is square
-    fn is_square(&self) -> bool {
-        self.nrows() == self.ncols()
-    }
-
     /// Get a view of the matrix
     fn view(&self) -> ArrayView2<'_, MyComplex> {
         self.0.view()
@@ -327,6 +358,98 @@ impl Pts<MyComplex, Ix2> for Points<MyComplex, Ix2> {
     /// Get a mutable view of the matrix
     fn view_mut(&mut self) -> ArrayViewMut2<'_, MyComplex> {
         self.0.view_mut()
+    }
+
+    /// Access the inner ndarray (for advanced operations)
+    fn inner(&self) -> &Array2<MyComplex> {
+        &self.0
+    }
+
+    /// Convert to inner ndarray (consuming self)
+    fn into_inner(self) -> Array2<MyComplex> {
+        self.0
+    }
+
+    fn into_raw_vec_and_offset(self) -> (Vec<MyComplex>, Option<usize>) {
+        self.0.into_raw_vec_and_offset()
+    }
+
+    /// Create a matrix filled with the given value
+    fn fill(shape: impl IntoDimension<Dim = Dim<[usize; 2]>>, value: MyComplex) -> Self {
+        Points(Array2::from_elem(shape, value))
+    }
+
+    /// Apply a function element-wise
+    fn map<F>(&self, f: F) -> Self
+    where
+        F: Fn(&MyComplex) -> MyComplex,
+    {
+        Points(self.0.map(&f))
+    }
+
+    /// Apply a function element-wise in place
+    fn map_inplace<F>(&mut self, f: F)
+    where
+        F: Fn(&MyComplex) -> MyComplex,
+    {
+        self.0.map_inplace(|x| *x = f(x));
+    }
+
+    /// Check if a matrix is approximately equal to another matrix within a tolerance
+    ///
+    /// # Arguments
+    /// * `a` - First matrix
+    /// * `b` - Second matrix  
+    /// * `tol` - Tolerance for comparison
+    ///
+    /// # Returns
+    /// * `true` if matrices are approximately equal, `false` otherwise
+    fn approx_eq(a: &ArrayView2<MyComplex>, b: &ArrayView2<MyComplex>, tol: f64) -> bool {
+        if a.dim() != b.dim() {
+            return false;
+        }
+
+        let (rows, cols) = a.dim();
+        let tolerance = MyFloat::new(tol);
+
+        for i in 0..rows {
+            for j in 0..cols {
+                let diff = &a[[i, j]] - &b[[i, j]];
+                if diff.abs() > tolerance {
+                    return false;
+                }
+            }
+        }
+
+        true
+    }
+}
+
+impl Matrix<MyComplex, Ix2> for Points<MyComplex, Ix2> {
+    /// Create an identity matrix of given size
+    fn eye(shape: impl IntoDimension<Dim = Dim<[usize; 2]>>) -> Self {
+        Points(Array2::from_shape_fn(shape, |(j, k)| {
+            if j == k {
+                MyComplex::one()
+            } else {
+                MyComplex::zero()
+            }
+        }))
+    }
+
+    /// Get the number of rows
+    fn nrows(&self) -> usize {
+        self.0.nrows()
+    }
+
+    /// Get the number of columns
+    fn ncols(&self) -> usize {
+        self.0.ncols()
+    }
+
+    /// Check if the matrix is square
+    fn is_square(&self) -> bool {
+        self.nrows() == self.ncols()
     }
 
     /// Transpose the matrix
@@ -436,33 +559,6 @@ impl Pts<MyComplex, Ix2> for Points<MyComplex, Ix2> {
         Array0::from_elem((), sum.sqrt())
     }
 
-    /// Point multiplication
-    fn dot(&self, other: &Self) -> Self {
-        if self.ncols() != other.nrows() {
-            panic!(
-                "Point dimensions incompatible for multiplication: {}x{} * {}x{}",
-                self.nrows(),
-                self.ncols(),
-                other.nrows(),
-                other.ncols()
-            );
-        }
-
-        let mut result = Self::zeros(self.dim());
-
-        for i in 0..self.nrows() {
-            for j in 0..other.ncols() {
-                let mut sum = MyComplex::zero();
-                for k in 0..self.ncols() {
-                    sum += &self[[i, k]] * &other[[k, j]];
-                }
-                result[[i, j]] = sum;
-            }
-        }
-
-        result
-    }
-
     /// Get a row as a new matrix (1 x ncols)
     fn row(&self, index: usize) -> Self {
         if index >= self.nrows() {
@@ -541,41 +637,6 @@ impl Pts<MyComplex, Ix2> for Points<MyComplex, Ix2> {
         for i in 0..self.nrows() {
             self[[i, index]] = col[[i, 0]].clone();
         }
-    }
-
-    /// Access the inner ndarray (for advanced operations)
-    fn inner(&self) -> &Array2<MyComplex> {
-        &self.0
-    }
-
-    /// Convert to inner ndarray (consuming self)
-    fn into_inner(self) -> Array2<MyComplex> {
-        self.0
-    }
-
-    fn into_raw_vec_and_offset(self) -> (Vec<MyComplex>, Option<usize>) {
-        self.0.into_raw_vec_and_offset()
-    }
-
-    /// Create a matrix filled with the given value
-    fn fill(shape: impl IntoDimension<Dim = Dim<[usize; 2]>>, value: MyComplex) -> Self {
-        Points(Array2::from_elem(shape, value))
-    }
-
-    /// Apply a function element-wise
-    fn map<F>(&self, f: F) -> Self
-    where
-        F: Fn(&MyComplex) -> MyComplex,
-    {
-        Points(self.0.map(&f))
-    }
-
-    /// Apply a function element-wise in place
-    fn map_inplace<F>(&mut self, f: F)
-    where
-        F: Fn(&MyComplex) -> MyComplex,
-    {
-        self.0.map_inplace(|x| *x = f(x));
     }
 
     /// Compute the inverse of a square matrix using LU decomposition with partial pivoting
@@ -800,35 +861,6 @@ impl Pts<MyComplex, Ix2> for Points<MyComplex, Ix2> {
         }
 
         Ok(x)
-    }
-
-    /// Check if a matrix is approximately equal to another matrix within a tolerance
-    ///
-    /// # Arguments
-    /// * `a` - First matrix
-    /// * `b` - Second matrix  
-    /// * `tol` - Tolerance for comparison
-    ///
-    /// # Returns
-    /// * `true` if matrices are approximately equal, `false` otherwise
-    fn approx_eq(a: &ArrayView2<MyComplex>, b: &ArrayView2<MyComplex>, tol: f64) -> bool {
-        if a.dim() != b.dim() {
-            return false;
-        }
-
-        let (rows, cols) = a.dim();
-        let tolerance = MyFloat::new(tol);
-
-        for i in 0..rows {
-            for j in 0..cols {
-                let diff = &a[[i, j]] - &b[[i, j]];
-                if diff.abs() > tolerance {
-                    return false;
-                }
-            }
-        }
-
-        true
     }
 }
 
@@ -2008,13 +2040,224 @@ impl DivAssign<&f64> for Points<MyComplex, Ix2> {
     }
 }
 
-// Traits
-// impl Clone for Points<MyComplex, Ix2> {
-//     fn clone(&self) -> Self {
-//         Points(self.0.clone())
-//     }
-// }
+// Dot product implementations
+impl Dot<Points<MyComplex, Ix2>> for Points<MyComplex, Ix2> {
+    type Output = Points<MyComplex, Ix2>;
 
+    fn dot(&self, rhs: &Points<MyComplex, Ix2>) -> Self::Output {
+        if self.ncols() != rhs.nrows() {
+            panic!(
+                "Point dimensions incompatible for multiplication: {}x{} * {}x{}",
+                self.nrows(),
+                self.ncols(),
+                rhs.nrows(),
+                rhs.ncols()
+            );
+        }
+
+        let mut result = Self::zeros(self.dim());
+
+        for i in 0..self.nrows() {
+            for j in 0..rhs.ncols() {
+                let mut sum = MyComplex::zero();
+                for k in 0..self.ncols() {
+                    sum += &self[[i, k]] * &rhs[[k, j]];
+                }
+                result[[i, j]] = sum;
+            }
+        }
+
+        result
+    }
+}
+
+impl Dot<Points<MyComplex, Ix1>> for Points<MyComplex, Ix2> {
+    type Output = Points<MyComplex, Ix1>;
+
+    fn dot(&self, rhs: &Points<MyComplex, Ix1>) -> Self::Output {
+        if self.ncols() != rhs.len() {
+            panic!(
+                "Point dimensions incompatible for multiplication: {}x{} * {}",
+                self.nrows(),
+                self.ncols(),
+                rhs.len()
+            );
+        }
+
+        let mut result = Points::zeros(rhs.len());
+        for j in 0..self.ncols() {
+            for i in 0..self.nrows() {
+                result[j] += &self[[i, j]] * &rhs[j];
+            }
+        }
+
+        result
+    }
+}
+
+impl Dot<Points<Complex64, Ix2>> for Points<MyComplex, Ix2> {
+    type Output = Points<MyComplex, Ix2>;
+
+    fn dot(&self, rhs: &Points<Complex64, Ix2>) -> Self::Output {
+        if self.ncols() != rhs.nrows() {
+            panic!(
+                "Point dimensions incompatible for multiplication: {}x{} * {}x{}",
+                self.nrows(),
+                self.ncols(),
+                rhs.nrows(),
+                rhs.ncols()
+            );
+        }
+
+        let mut result = Self::zeros(self.dim());
+
+        for i in 0..self.nrows() {
+            for j in 0..rhs.ncols() {
+                let mut sum = MyComplex::zero();
+                for k in 0..self.ncols() {
+                    sum += &self[[i, k]] * &rhs[[k, j]];
+                }
+                result[[i, j]] = sum;
+            }
+        }
+
+        result
+    }
+}
+
+impl Dot<Points<Complex64, Ix1>> for Points<MyComplex, Ix2> {
+    type Output = Points<MyComplex, Ix1>;
+
+    fn dot(&self, rhs: &Points<Complex64, Ix1>) -> Self::Output {
+        if self.ncols() != rhs.len() {
+            panic!(
+                "Point dimensions incompatible for multiplication: {}x{} * {}",
+                self.nrows(),
+                self.ncols(),
+                rhs.len()
+            );
+        }
+
+        let mut result = Points::zeros(rhs.len());
+        for j in 0..self.ncols() {
+            for i in 0..self.nrows() {
+                result[j] += &self[[i, j]] * &rhs[j];
+            }
+        }
+
+        result
+    }
+}
+
+impl Dot<Points<f64, Ix2>> for Points<MyComplex, Ix2> {
+    type Output = Points<MyComplex, Ix2>;
+
+    fn dot(&self, rhs: &Points<f64, Ix2>) -> Self::Output {
+        if self.ncols() != rhs.nrows() {
+            panic!(
+                "Point dimensions incompatible for multiplication: {}x{} * {}x{}",
+                self.nrows(),
+                self.ncols(),
+                rhs.nrows(),
+                rhs.ncols()
+            );
+        }
+
+        let mut result = Self::zeros(self.dim());
+
+        for i in 0..self.nrows() {
+            for j in 0..rhs.ncols() {
+                let mut sum = MyComplex::zero();
+                for k in 0..self.ncols() {
+                    sum += &self[[i, k]] * &rhs[[k, j]];
+                }
+                result[[i, j]] = sum;
+            }
+        }
+
+        result
+    }
+}
+
+impl Dot<Points<f64, Ix1>> for Points<MyComplex, Ix2> {
+    type Output = Points<MyComplex, Ix1>;
+
+    fn dot(&self, rhs: &Points<f64, Ix1>) -> Self::Output {
+        if self.ncols() != rhs.len() {
+            panic!(
+                "Point dimensions incompatible for multiplication: {}x{} * {}",
+                self.nrows(),
+                self.ncols(),
+                rhs.len()
+            );
+        }
+
+        let mut result = Points::zeros(rhs.len());
+        for j in 0..self.ncols() {
+            for i in 0..self.nrows() {
+                result[j] += &self[[i, j]] * &rhs[j];
+            }
+        }
+
+        result
+    }
+}
+
+impl Dot<Points<MyFloat, Ix2>> for Points<MyComplex, Ix2> {
+    type Output = Points<MyComplex, Ix2>;
+
+    fn dot(&self, rhs: &Points<MyFloat, Ix2>) -> Self::Output {
+        if self.ncols() != rhs.nrows() {
+            panic!(
+                "Point dimensions incompatible for multiplication: {}x{} * {}x{}",
+                self.nrows(),
+                self.ncols(),
+                rhs.nrows(),
+                rhs.ncols()
+            );
+        }
+
+        let mut result = Self::zeros(self.dim());
+
+        for i in 0..self.nrows() {
+            for j in 0..rhs.ncols() {
+                let mut sum = MyComplex::zero();
+                for k in 0..self.ncols() {
+                    sum += &self[[i, k]] * &rhs[[k, j]];
+                }
+                result[[i, j]] = sum;
+            }
+        }
+
+        result
+    }
+}
+
+impl Dot<Points<MyFloat, Ix1>> for Points<MyComplex, Ix2> {
+    type Output = Points<MyComplex, Ix1>;
+
+    fn dot(&self, rhs: &Points<MyFloat, Ix1>) -> Self::Output {
+        if self.ncols() != rhs.len() {
+            panic!(
+                "Point dimensions incompatible for multiplication: {}x{} * {}",
+                self.nrows(),
+                self.ncols(),
+                rhs.len()
+            );
+        }
+
+        let mut result = Points::zeros(rhs.len());
+        for j in 0..self.ncols() {
+            for i in 0..self.nrows() {
+                result[j] += &self[[i, j]] * &rhs[j];
+            }
+        }
+
+        result
+    }
+}
+
+// Traits
 impl Default for Points<MyComplex, Ix2> {
     fn default() -> Self {
         Points::zeros((0, 0))
@@ -2090,9 +2333,45 @@ impl From<Array2<MyComplex>> for Points<MyComplex, Ix2> {
     }
 }
 
+impl From<Array2<Complex64>> for Points<MyComplex, Ix2> {
+    fn from(array: Array2<Complex64>) -> Self {
+        Points(array).into()
+    }
+}
+
+impl From<Array2<f64>> for Points<MyComplex, Ix2> {
+    fn from(array: Array2<f64>) -> Self {
+        Points(array).into()
+    }
+}
+
+impl From<Array2<MyFloat>> for Points<MyComplex, Ix2> {
+    fn from(array: Array2<MyFloat>) -> Self {
+        Points(array).into()
+    }
+}
+
 impl From<ArrayView2<'_, MyComplex>> for Points<MyComplex, Ix2> {
     fn from(array: ArrayView2<MyComplex>) -> Self {
         Points(array.to_owned())
+    }
+}
+
+impl From<ArrayView2<'_, Complex64>> for Points<MyComplex, Ix2> {
+    fn from(array: ArrayView2<Complex64>) -> Self {
+        Points(array.to_owned()).into()
+    }
+}
+
+impl From<ArrayView2<'_, f64>> for Points<MyComplex, Ix2> {
+    fn from(array: ArrayView2<f64>) -> Self {
+        Points(array.to_owned()).into()
+    }
+}
+
+impl From<ArrayView2<'_, MyFloat>> for Points<MyComplex, Ix2> {
+    fn from(array: ArrayView2<MyFloat>) -> Self {
+        Points(array.to_owned()).into()
     }
 }
 
@@ -2120,6 +2399,12 @@ impl From<Vec<Vec<(MyFloat, MyFloat)>>> for Points<MyComplex, Ix2> {
     }
 }
 
+impl From<&Points<MyComplex, Ix2>> for Points<MyComplex, Ix2> {
+    fn from(point: &Points<MyComplex, Ix2>) -> Self {
+        point.clone()
+    }
+}
+
 impl From<Points<Complex64, Ix2>> for Points<MyComplex, Ix2> {
     fn from(point: Points<Complex64, Ix2>) -> Self {
         Points::from_shape_fn(point.dim(), |(j, k)| point[[j, k]].into())
@@ -2132,9 +2417,27 @@ impl From<&Points<Complex64, Ix2>> for Points<MyComplex, Ix2> {
     }
 }
 
-impl From<&Points<MyComplex, Ix2>> for Points<MyComplex, Ix2> {
-    fn from(point: &Points<MyComplex, Ix2>) -> Self {
-        point.clone()
+impl From<Points<f64, Ix2>> for Points<MyComplex, Ix2> {
+    fn from(point: Points<f64, Ix2>) -> Self {
+        Points::from_shape_fn(point.dim(), |(j, k)| point[[j, k]].into())
+    }
+}
+
+impl From<&Points<f64, Ix2>> for Points<MyComplex, Ix2> {
+    fn from(point: &Points<f64, Ix2>) -> Self {
+        Points::from_shape_fn(point.dim(), |(j, k)| point[[j, k]].into())
+    }
+}
+
+impl From<Points<MyFloat, Ix2>> for Points<MyComplex, Ix2> {
+    fn from(point: Points<MyFloat, Ix2>) -> Self {
+        Points::from_shape_fn(point.dim(), |(j, k)| point[[j, k]].clone().into())
+    }
+}
+
+impl From<&Points<MyFloat, Ix2>> for Points<MyComplex, Ix2> {
+    fn from(point: &Points<MyFloat, Ix2>) -> Self {
+        Points::from_shape_fn(point.dim(), |(j, k)| point[[j, k]].clone().into())
     }
 }
 

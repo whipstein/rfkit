@@ -216,7 +216,7 @@ mod minimize_golden_tests {
     use super::*;
     use crate::{
         minimize::{F1dim, SingleDimFn},
-        myfloat::MyFloat,
+        num::MyFloat,
     };
     use float_cmp::{F64Margin, approx_eq};
     use std::f64::consts::{E, PI};

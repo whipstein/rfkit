@@ -1,10 +1,10 @@
 use crate::{
     element::{Elem, ElemType, Lumped},
-    frequency::Frequency,
+    frequency::{FreqArray, Frequency},
     point,
     pts::{Points, Pts},
     scale::Scale,
-    unit::{Unit, UnitVal, Unitized},
+    unit::{Unit, UnitValue, Unitized},
 };
 use ndarray::{IntoDimension, prelude::*};
 use num::complex::{Complex, Complex64, c64};
@@ -116,8 +116,8 @@ impl Unitized for Short {
         1e-9
     }
 
-    fn unitval(&self) -> UnitVal {
-        UnitVal::default()
+    fn unitval(&self) -> UnitValue {
+        UnitValue::default()
     }
 
     fn scale(&self) -> Scale {
@@ -132,7 +132,7 @@ impl Unitized for Short {
         ();
     }
 
-    fn set_unitval(&mut self, _val: UnitVal) {
+    fn set_unitval(&mut self, _val: UnitValue) {
         ();
     }
 

@@ -1,10 +1,10 @@
 use crate::{
     element::{Elem, ElemType, Lumped},
-    frequency::Frequency,
+    frequency::{FreqArray, Frequency, new_frequency},
     point,
     pts::{Points, Pts},
     scale::Scale,
-    unit::{Unit, UnitVal, Unitized},
+    unit::{Unit, UnitValue, Unitized},
 };
 use ndarray::{IntoDimension, prelude::*};
 use num::complex::{Complex, Complex64, c64};
@@ -12,14 +12,14 @@ use num::complex::{Complex, Complex64, c64};
 #[derive(Clone, Debug, PartialEq)]
 pub struct Resistor {
     id: String,
-    res: UnitVal,
+    res: UnitValue,
     nodes: [usize; 2],
     c: Points<Complex64, Ix2>,
     z0: Complex64,
 }
 
 impl Resistor {
-    pub fn new(id: String, res: UnitVal, nodes: [usize; 2], z0: Complex64) -> Resistor {
+    pub fn new(id: String, res: UnitValue, nodes: [usize; 2], z0: Complex64) -> Resistor {
         Resistor {
             id: id,
             res: res,
@@ -42,7 +42,7 @@ impl Default for Resistor {
     fn default() -> Self {
         Self {
             id: "R0".to_string(),
-            res: UnitVal::default(),
+            res: UnitValue::default(),
             nodes: [1, 2],
             c: point![
                 Complex64,
@@ -95,7 +95,7 @@ impl Elem for Resistor {
     }
 
     fn z_at(&self, freq: &Frequency, i: usize) -> Complex64 {
-        let freq_pt = Frequency::new(array![freq.freq(i)], freq.scale());
+        let freq_pt = new_frequency(array![freq.freq(i)], freq.scale());
         self.z(&freq_pt).into()
     }
 
@@ -119,7 +119,7 @@ impl Unitized for Resistor {
         self.res.val_scaled()
     }
 
-    fn unitval(&self) -> UnitVal {
+    fn unitval(&self) -> UnitValue {
         self.res.clone()
     }
 
@@ -135,7 +135,7 @@ impl Unitized for Resistor {
         self.res.set_val_scaled(val);
     }
 
-    fn set_unitval(&mut self, val: UnitVal) {
+    fn set_unitval(&mut self, val: UnitValue) {
         self.res = val;
     }
 
@@ -151,7 +151,7 @@ impl Unitized for Resistor {
 #[derive(Clone)]
 pub struct ResistorBuilder {
     id: String,
-    res: UnitVal,
+    res: UnitValue,
     nodes: [usize; 2],
     z0: Complex64,
 }
@@ -166,7 +166,7 @@ impl ResistorBuilder {
         self
     }
 
-    pub fn res(mut self, res: UnitVal) -> Self {
+    pub fn res(mut self, res: UnitValue) -> Self {
         self.res = res;
         self
     }
@@ -211,7 +211,7 @@ impl Default for ResistorBuilder {
     fn default() -> Self {
         Self {
             id: "R0".to_string(),
-            res: *UnitVal::default().set_unit(Unit::Ohm),
+            res: *UnitValue::default().set_unit(Unit::Ohm),
             nodes: [1, 2],
             z0: c64(50.0, 0.0),
         }
@@ -223,7 +223,7 @@ mod element_resistor_tests {
     use super::*;
     use crate::{
         unit::UnitValBuilder,
-        util::{comp_c64, comp_point_c64},
+        util::{comp_num, comp_pts_ix2},
     };
     use float_cmp::*;
 
@@ -240,7 +240,7 @@ mod element_resistor_tests {
     #[test]
     fn element_resistor() {
         let freq_unitval = UnitValBuilder::new().val_scaled(1.0, Scale::Giga).build();
-        let freq = Frequency::from_unitval(&freq_unitval);
+        let freq = new_frequency(array![freq_unitval.val()], freq_unitval.scale());
         let val_scaled = 20.0;
         let scale = Scale::Base;
         let unitval = UnitValBuilder::new().val_scaled(val_scaled, scale).build();
@@ -266,13 +266,8 @@ mod element_resistor_tests {
         assert_eq!(&exemplar.id(), &calc.id());
         assert_eq!(&exemplar.scale(), &calc.scale());
         assert_eq!(&Unit::Ohm, &calc.unit());
-        comp_point_c64(
-            exemplar.c(&freq).view(),
-            calc.c(&freq).view(),
-            margin,
-            "calc.c()",
-        );
-        comp_c64(&exemplar_z.into(), &calc.z(&freq), margin, "calc.z()", "0");
+        comp_pts_ix2(&exemplar.c(&freq), &calc.c(&freq), margin, "calc.c()");
+        comp_num(&exemplar_z.into(), &calc.z(&freq), margin, "calc.z()", "0");
     }
 
     mod resistor_tests {
@@ -289,7 +284,7 @@ mod element_resistor_tests {
         #[test]
         fn test_resistor_frequency_independent() {
             let freqs = array![1e6, 1e9, 10e9, 100e9];
-            let freq = Frequency::new(freqs.clone(), Scale::Base);
+            let freq = new_frequency(freqs.clone(), Scale::Base);
             let res = ResistorBuilder::new().val(50.0).build();
 
             // Resistor impedance should be constant across all frequencies
@@ -302,7 +297,7 @@ mod element_resistor_tests {
 
         #[test]
         fn test_resistor_impedance_real_only() {
-            let freq = Frequency::new(array![1e9], Scale::Base);
+            let freq = new_frequency(array![1e9], Scale::Base);
             let values = vec![1.0, 10.0, 50.0, 100.0, 1000.0];
 
             for val in values {
@@ -315,7 +310,7 @@ mod element_resistor_tests {
 
         #[test]
         fn test_resistor_c_matrix() {
-            let freq = Frequency::new(array![1e9], Scale::Base);
+            let freq = new_frequency(array![1e9], Scale::Base);
             let res = ResistorBuilder::new().build();
             let c_matrix = res.c(&freq);
 

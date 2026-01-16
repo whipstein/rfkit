@@ -1,11 +1,16 @@
 #![allow(dead_code)]
-use crate::{mycomplex::MyComplex, myfloat::MyFloat};
 use num::complex::{Complex, Complex64};
 use std::fmt;
+
+pub mod mycomplex;
+pub mod myfloat;
+
+pub use self::{mycomplex::MyComplex, myfloat::MyFloat};
 
 pub trait RFNum:
     Sized
     + Clone
+    + Default
     + fmt::Display
     + fmt::Debug
     + std::ops::Add<Output = Self>
@@ -13,6 +18,10 @@ pub trait RFNum:
     + std::ops::Mul<Output = Self>
     + std::ops::Div<Output = Self>
     + std::ops::Neg<Output = Self>
+    + std::ops::Add<Self::Real, Output = Self>
+    + std::ops::Sub<Self::Real, Output = Self>
+    + std::ops::Mul<Self::Real, Output = Self>
+    + std::ops::Div<Self::Real, Output = Self>
     + std::ops::Add<f64, Output = Self>
     + std::ops::Sub<f64, Output = Self>
     + std::ops::Mul<f64, Output = Self>
@@ -29,6 +38,10 @@ pub trait RFNum:
     + for<'a> std::ops::Sub<&'a Self, Output = Self>
     + for<'a> std::ops::Mul<&'a Self, Output = Self>
     + for<'a> std::ops::Div<&'a Self, Output = Self>
+    + for<'a> std::ops::Add<&'a Self::Real, Output = Self>
+    + for<'a> std::ops::Sub<&'a Self::Real, Output = Self>
+    + for<'a> std::ops::Mul<&'a Self::Real, Output = Self>
+    + for<'a> std::ops::Div<&'a Self::Real, Output = Self>
     + for<'a> std::ops::AddAssign<&'a Self>
     + for<'a> std::ops::SubAssign<&'a Self>
     + for<'a> std::ops::MulAssign<&'a Self>
@@ -38,9 +51,11 @@ pub trait RFNum:
     + std::iter::Sum
     + for<'a> std::iter::Sum<&'a Self>
     + std::convert::From<f64>
+    + std::convert::From<Self::Real>
+    + std::cmp::PartialEq<Self>
 {
     /// The underlying real type (e.g., f64 for Complex<f64>, MyFloat for MyComplex)
-    type Real;
+    type Real: Into<Self> + Clone;
 
     // ========== Special values (constants) ==========
     /// Returns the NaN value
@@ -61,11 +76,84 @@ pub trait RFNum:
 
     /// Returns true if the number is neither zero, infinite, subnormal, or NaN
     fn is_normal(&self) -> bool;
+
+    // ========== Basic operations ==========
+    /// Get the absolute value
+    fn abs(&self) -> Self;
+
+    /// Get the complex conjugate
+    fn conj(&self) -> Self;
+
+    /// Calculate the magnitude (norm)
+    fn norm(&self) -> Self::Real;
+
+    /// Calculate the square of the magnitude (norm squared)
+    fn norm_sqr(&self) -> Self::Real;
+
+    /// Convert a Real value to Self (for complex types, creates a value with zero imaginary part)
+    fn from_real(real: Self::Real) -> Self;
+
+    // ========== Exponential and power functions ==========
+    /// Returns e^(self)
+    fn exp(&self) -> Self;
+
+    /// Returns the natural logarithm
+    fn ln(&self) -> Self;
+
+    /// Raises self to a complex power
+    fn pow(&self, exp: &Self) -> Self;
+
+    /// Raises self to an integer power
+    fn powi(&self, n: i32) -> Self;
+
+    /// Returns the square root
+    fn sqrt(&self) -> Self;
+
+    /// Returns the square
+    fn square(&self) -> Self::Real;
+
+    // ========== Trigonometric functions ==========
+    /// Computes the sine
+    fn sin(&self) -> Self;
+
+    /// Computes the cosine
+    fn cos(&self) -> Self;
+
+    /// Computes the tangent
+    fn tan(&self) -> Self;
+
+    /// Computes the arcsine
+    fn asin(&self) -> Self;
+
+    /// Computes the arccosine
+    fn acos(&self) -> Self;
+
+    /// Computes the arctangent
+    fn atan(&self) -> Self;
+
+    // ========== Hyperbolic functions ==========
+    /// Hyperbolic sine function
+    fn sinh(&self) -> Self;
+
+    /// Hyperbolic cosine function
+    fn cosh(&self) -> Self;
+
+    /// Hyperbolic tangent function
+    fn tanh(&self) -> Self;
+
+    /// Inverse hyperbolic sine function
+    fn asinh(&self) -> Self;
+
+    /// Inverse hyperbolic cosine function
+    fn acosh(&self) -> Self;
+
+    /// Inverse hyperbolic tangent function
+    fn atanh(&self) -> Self;
 }
 
 impl RFNum for f64 {
     /// The underlying real type (e.g., f64 for Complex<f64>, MyFloat for MyComplex)
-    type Real = f64;
+    type Real = Self;
 
     // ========== Special values (constants) ==========
     fn nan() -> Self {
@@ -92,11 +180,128 @@ impl RFNum for f64 {
     fn is_normal(&self) -> bool {
         f64::is_normal(*self)
     }
+
+    // ========== Basic operations ==========
+    fn abs(&self) -> Self {
+        f64::abs(*self)
+    }
+
+    fn conj(&self) -> Self {
+        *self
+    }
+
+    /// Calculate the magnitude (norm)
+    fn norm(&self) -> Self::Real {
+        f64::abs(*self)
+    }
+
+    /// Calculate the square of the magnitude (norm squared)
+    fn norm_sqr(&self) -> Self::Real {
+        *self * *self
+    }
+
+    /// Convert a Real value to Self (for complex types, creates a value with zero imaginary part)
+    fn from_real(real: Self::Real) -> Self {
+        real
+    }
+
+    // ========== Exponential and power functions ==========
+    /// Returns e^(self)
+    fn exp(&self) -> Self {
+        f64::exp(*self)
+    }
+
+    /// Returns the natural logarithm
+    fn ln(&self) -> Self {
+        f64::ln(*self)
+    }
+
+    /// Raises self to a complex power
+    fn pow(&self, n: &Self) -> Self {
+        f64::powf(*self, *n)
+    }
+
+    /// Raises self to an integer power
+    fn powi(&self, n: i32) -> Self {
+        f64::powi(*self, n)
+    }
+
+    /// Returns the square root
+    fn sqrt(&self) -> Self {
+        f64::sqrt(*self)
+    }
+
+    /// Returns the square
+    fn square(&self) -> Self::Real {
+        *self * *self
+    }
+
+    // ========== Trigonometric functions ==========
+    /// Computes the sine
+    fn sin(&self) -> Self {
+        f64::sin(*self)
+    }
+
+    /// Computes the cosine
+    fn cos(&self) -> Self {
+        f64::cos(*self)
+    }
+
+    /// Computes the tangent
+    fn tan(&self) -> Self {
+        f64::tan(*self)
+    }
+
+    /// Computes the arcsine
+    fn asin(&self) -> Self {
+        f64::asin(*self)
+    }
+
+    /// Computes the arccosine
+    fn acos(&self) -> Self {
+        f64::acos(*self)
+    }
+
+    /// Computes the arctangent
+    fn atan(&self) -> Self {
+        f64::atan(*self)
+    }
+
+    // ========== Hyperbolic functions ==========
+    /// Hyperbolic sine function
+    fn sinh(&self) -> Self {
+        f64::sinh(*self)
+    }
+
+    /// Hyperbolic cosine function
+    fn cosh(&self) -> Self {
+        f64::cosh(*self)
+    }
+
+    /// Hyperbolic tangent function
+    fn tanh(&self) -> Self {
+        f64::tanh(*self)
+    }
+
+    /// Inverse hyperbolic sine function
+    fn asinh(&self) -> Self {
+        f64::asinh(*self)
+    }
+
+    /// Inverse hyperbolic cosine function
+    fn acosh(&self) -> Self {
+        f64::acosh(*self)
+    }
+
+    /// Inverse hyperbolic tangent function
+    fn atanh(&self) -> Self {
+        f64::atanh(*self)
+    }
 }
 
 impl RFNum for MyFloat {
     /// The underlying real type (e.g., f64 for Complex<f64>, MyFloat for MyComplex)
-    type Real = MyFloat;
+    type Real = Self;
 
     // ========== Special values (constants) ==========
     fn nan() -> Self {
@@ -122,6 +327,123 @@ impl RFNum for MyFloat {
 
     fn is_normal(&self) -> bool {
         MyFloat::is_normal(self)
+    }
+
+    // ========== Basic operations ==========
+    fn abs(&self) -> Self {
+        MyFloat::abs(self)
+    }
+
+    fn conj(&self) -> Self {
+        self.clone()
+    }
+
+    /// Calculate the magnitude (norm)
+    fn norm(&self) -> Self::Real {
+        self.abs()
+    }
+
+    /// Calculate the square of the magnitude (norm squared)
+    fn norm_sqr(&self) -> Self::Real {
+        self * self
+    }
+
+    /// Convert a Real value to Self (for complex types, creates a value with zero imaginary part)
+    fn from_real(real: Self::Real) -> Self {
+        real
+    }
+
+    // ========== Exponential and power functions ==========
+    /// Returns e^(self)
+    fn exp(&self) -> Self {
+        MyFloat::exp(self)
+    }
+
+    /// Returns the natural logarithm
+    fn ln(&self) -> Self {
+        MyFloat::ln(self)
+    }
+
+    /// Raises self to a complex power
+    fn pow(&self, n: &Self) -> Self {
+        MyFloat::pow(self, n)
+    }
+
+    /// Raises self to an integer power
+    fn powi(&self, n: i32) -> Self {
+        MyFloat::powi(self, n as isize)
+    }
+
+    /// Returns the square root
+    fn sqrt(&self) -> Self {
+        MyFloat::sqrt(self)
+    }
+
+    /// Returns the square
+    fn square(&self) -> Self::Real {
+        self * self
+    }
+
+    // ========== Trigonometric functions ==========
+    /// Computes the sine
+    fn sin(&self) -> Self {
+        MyFloat::sin(self)
+    }
+
+    /// Computes the cosine
+    fn cos(&self) -> Self {
+        MyFloat::cos(self)
+    }
+
+    /// Computes the tangent
+    fn tan(&self) -> Self {
+        MyFloat::tan(self)
+    }
+
+    /// Computes the arcsine
+    fn asin(&self) -> Self {
+        MyFloat::asin(self)
+    }
+
+    /// Computes the arccosine
+    fn acos(&self) -> Self {
+        MyFloat::acos(self)
+    }
+
+    /// Computes the arctangent
+    fn atan(&self) -> Self {
+        MyFloat::atan(self)
+    }
+
+    // ========== Hyperbolic functions ==========
+    /// Hyperbolic sine function
+    fn sinh(&self) -> Self {
+        MyFloat::sinh(self)
+    }
+
+    /// Hyperbolic cosine function
+    fn cosh(&self) -> Self {
+        MyFloat::cosh(self)
+    }
+
+    /// Hyperbolic tangent function
+    fn tanh(&self) -> Self {
+        MyFloat::tanh(self)
+    }
+
+    /// Inverse hyperbolic sine function
+    fn asinh(&self) -> Self {
+        MyFloat::asinh(self)
+    }
+
+    /// Inverse hyperbolic cosine function
+    fn acosh(&self) -> Self {
+        MyFloat::acosh(self)
+    }
+
+    /// Inverse hyperbolic tangent function
+    fn atanh(&self) -> Self {
+        MyFloat::atanh(self)
     }
 }
 
@@ -153,6 +475,124 @@ impl RFNum for Complex64 {
     fn is_normal(&self) -> bool {
         self.re.is_normal() && self.im.is_normal()
     }
+
+    // ========== Basic operations ==========
+    fn abs(&self) -> Self {
+        Complex64::new(Complex::norm(*self), 0.0)
+    }
+
+    /// Get the complex conjugate
+    fn conj(&self) -> Self {
+        Complex::conj(self)
+    }
+
+    /// Calculate the magnitude (norm)
+    fn norm(&self) -> Self::Real {
+        Complex::norm(*self)
+    }
+
+    /// Calculate the square of the magnitude (norm squared)
+    fn norm_sqr(&self) -> Self::Real {
+        Complex::norm_sqr(self)
+    }
+
+    /// Convert a Real value to Self (for complex types, creates a value with zero imaginary part)
+    fn from_real(real: Self::Real) -> Self {
+        Complex::new(real, 0.0)
+    }
+
+    // ========== Exponential and power functions ==========
+    /// Returns e^(self)
+    fn exp(&self) -> Self {
+        Complex::exp(*self)
+    }
+
+    /// Returns the natural logarithm
+    fn ln(&self) -> Self {
+        Complex::ln(*self)
+    }
+
+    /// Raises self to a complex power
+    fn pow(&self, exp: &Self) -> Self {
+        Complex::powc(*self, *exp)
+    }
+
+    /// Raises self to an integer power
+    fn powi(&self, n: i32) -> Self {
+        Complex::powi(self, n)
+    }
+
+    /// Returns the square root
+    fn sqrt(&self) -> Self {
+        Complex::sqrt(*self)
+    }
+
+    /// Returns the square
+    fn square(&self) -> Self::Real {
+        Complex::norm(self * self)
+    }
+
+    // ========== Trigonometric functions ==========
+    /// Computes the sine
+    fn sin(&self) -> Self {
+        Complex::sin(*self)
+    }
+
+    /// Computes the cosine
+    fn cos(&self) -> Self {
+        Complex::cos(*self)
+    }
+
+    /// Computes the tangent
+    fn tan(&self) -> Self {
+        Complex::tan(*self)
+    }
+
+    /// Computes the arcsine
+    fn asin(&self) -> Self {
+        Complex::asin(*self)
+    }
+
+    /// Computes the arccosine
+    fn acos(&self) -> Self {
+        Complex::acos(*self)
+    }
+
+    /// Computes the arctangent
+    fn atan(&self) -> Self {
+        Complex::atan(*self)
+    }
+
+    // ========== Hyperbolic functions ==========
+    /// Hyperbolic sine function
+    fn sinh(&self) -> Self {
+        Complex::sinh(*self)
+    }
+
+    /// Hyperbolic cosine function
+    fn cosh(&self) -> Self {
+        Complex::cosh(*self)
+    }
+
+    /// Hyperbolic tangent function
+    fn tanh(&self) -> Self {
+        Complex::tanh(*self)
+    }
+
+    /// Inverse hyperbolic sine function
+    fn asinh(&self) -> Self {
+        Complex::asinh(*self)
+    }
+
+    /// Inverse hyperbolic cosine function
+    fn acosh(&self) -> Self {
+        Complex::acosh(*self)
+    }
+
+    /// Inverse hyperbolic tangent function
+    fn atanh(&self) -> Self {
+        Complex::atanh(*self)
+    }
 }
 
 impl RFNum for MyComplex {
@@ -183,10 +623,176 @@ impl RFNum for MyComplex {
     fn is_normal(&self) -> bool {
         MyComplex::is_normal(self)
     }
+
+    // ========== Basic operations ==========
+    fn abs(&self) -> Self {
+        MyComplex::from_real(MyComplex::abs(self))
+    }
+
+    fn conj(&self) -> Self {
+        MyComplex::conj(self)
+    }
+
+    /// Calculate the magnitude (norm)
+    fn norm(&self) -> Self::Real {
+        MyComplex::norm(self)
+    }
+
+    /// Calculate the square of the magnitude (norm squared)
+    fn norm_sqr(&self) -> Self::Real {
+        MyComplex::norm_sqr(self)
+    }
+
+    /// Convert a Real value to Self (for complex types, creates a value with zero imaginary part)
+    fn from_real(real: Self::Real) -> Self {
+        MyComplex::from_real(real)
+    }
+
+    // ========== Exponential and power functions ==========
+    /// Returns e^(self)
+    fn exp(&self) -> Self {
+        MyComplex::exp(self)
+    }
+
+    /// Returns the natural logarithm
+    fn ln(&self) -> Self {
+        MyComplex::ln(self)
+    }
+
+    /// Raises self to a complex power
+    fn pow(&self, exp: &Self) -> Self {
+        MyComplex::pow(self, exp)
+    }
+
+    /// Raises self to an integer power
+    fn powi(&self, n: i32) -> Self {
+        // Convert to MyComplex power
+        let exp = Self::from_real(Self::Real::from_f64(n as f64));
+        self.pow(&exp)
+    }
+
+    /// Returns the square root
+    fn sqrt(&self) -> Self {
+        MyComplex::sqrt(self)
+    }
+
+    /// Returns the square
+    fn square(&self) -> Self::Real {
+        MyComplex::norm(&(self * self))
+    }
+
+    // ========== Trigonometric functions ==========
+    /// Computes the sine
+    fn sin(&self) -> Self {
+        MyComplex::sin(self)
+    }
+
+    /// Computes the cosine
+    fn cos(&self) -> Self {
+        MyComplex::cos(self)
+    }
+
+    /// Computes the tangent
+    fn tan(&self) -> Self {
+        // tan(z) = sin(z) / cos(z)
+        self.sin() / self.cos()
+    }
+
+    /// Computes the arcsine
+    fn asin(&self) -> Self {
+        // asin(z) = -i * ln(i*z + sqrt(1 - z^2))
+        let i = Self::from_imag(Self::Real::from_f64(1.0));
+        let one = Self::from_real(Self::Real::from_f64(1.0));
+        let iz = &i * self;
+        let sqrt_part = (one - self * self).sqrt();
+        -&i * (iz + sqrt_part).ln()
+    }
+
+    /// Computes the arccosine
+    fn acos(&self) -> Self {
+        // acos(z) = -i * ln(z + i * sqrt(1 - z^2))
+        let i = Self::from_imag(Self::Real::from_f64(1.0));
+        let one = Self::from_real(Self::Real::from_f64(1.0));
+        let sqrt_part = (one - self * self).sqrt();
+        -&i * (self + &i * sqrt_part).ln()
+    }
+
+    /// Computes the arctangent
+    fn atan(&self) -> Self {
+        // atan(z) = (i/2) * ln((i + z) / (i - z))
+        let i = Self::from_imag(Self::Real::from_f64(1.0));
+        let two = Self::from_real(Self::Real::from_f64(2.0));
+        let i_half = &i / two;
+        let numerator = &i + self;
+        let denominator = &i - self;
+        i_half * (numerator / denominator).ln()
+    }
+
+    // ========== Hyperbolic functions ==========
+    /// Hyperbolic sine function
+    fn sinh(&self) -> Self {
+        // sinh(z) = (e^z - e^(-z)) / 2
+        let exp_z = self.exp();
+        let exp_neg_z = (-self).exp();
+        let two = Self::from_real(Self::Real::from_f64(2.0));
+        (exp_z - exp_neg_z) / &two
+    }
+
+    /// Hyperbolic cosine function
+    fn cosh(&self) -> Self {
+        // cosh(z) = (e^z + e^(-z)) / 2
+        let exp_z = self.exp();
+        let exp_neg_z = (-self).exp();
+        let two = Self::from_real(Self::Real::from_f64(2.0));
+        (exp_z + exp_neg_z) / &two
+    }
+
+    /// Hyperbolic tangent function
+    fn tanh(&self) -> Self {
+        // tanh(z) = sinh(z) / cosh(z)
+        self.sinh() / self.cosh()
+    }
+
+    /// Inverse hyperbolic sine function
+    fn asinh(&self) -> Self {
+        // asinh(z) = ln(z + sqrt(z^2 + 1))
+        let one = Self::from_real(Self::Real::from_f64(1.0));
+        (self + (self * self + one).sqrt()).ln()
+    }
+
+    /// Inverse hyperbolic cosine function
+    fn acosh(&self) -> Self {
+        // acosh(z) = ln(z + sqrt(z^2 - 1))
+        let one = Self::from_real(Self::Real::from_f64(1.0));
+        (self + (self * self - one).sqrt()).ln()
+    }
+
+    /// Inverse hyperbolic tangent function
+    fn atanh(&self) -> Self {
+        // atanh(z) = (1/2) * ln((1 + z) / (1 - z))
+        let one = Self::from_real(Self::Real::from_f64(1.0));
+        let two = Self::from_real(Self::Real::from_f64(2.0));
+        let half = one.clone() / two;
+        let numerator = &one + self;
+        let denominator = one - self;
+        half * (numerator / denominator).ln()
+    }
 }
 
 /// Trait for numeric types that can be used in bracketing algorithms
-pub trait RFFloat: RFNum + PartialOrd + for<'a> std::cmp::PartialEq<f64> {
+pub trait RFFloat:
+    RFNum
+    + PartialOrd
+    + for<'a> std::cmp::PartialEq<f64>
+    + std::ops::Add<MyFloat, Output = MyFloat>
+    + std::ops::Sub<MyFloat, Output = MyFloat>
+    + std::ops::Mul<MyFloat, Output = MyFloat>
+    + std::ops::Div<MyFloat, Output = MyFloat>
+    + for<'a> std::ops::Add<&'a MyFloat, Output = MyFloat>
+    + for<'a> std::ops::Sub<&'a MyFloat, Output = MyFloat>
+    + for<'a> std::ops::Mul<&'a MyFloat, Output = MyFloat>
+    + for<'a> std::ops::Div<&'a MyFloat, Output = MyFloat>
+{
     // ========== Custom conversion methods ==========
     /// Create from f64
     fn from_f64(val: f64) -> Self;
@@ -246,9 +852,6 @@ pub trait RFFloat: RFNum + PartialOrd + for<'a> std::cmp::PartialEq<f64> {
     fn fract(&self) -> Self;
 
     // ========== Basic operations ==========
-    /// Computes the absolute value of self
-    fn abs(&self) -> Self;
-
     /// Returns a number that represents the sign of self
     fn signum(&self) -> Self;
 
@@ -274,17 +877,11 @@ pub trait RFFloat: RFNum + PartialOrd + for<'a> std::cmp::PartialEq<f64> {
     fn clamp(&self, min: &Self, max: &Self) -> Self;
 
     // ========== Exponential and power functions ==========
-    /// Returns e^(self)
-    fn exp(&self) -> Self;
-
     /// Returns 2^(self)
     fn exp2(&self) -> Self;
 
     /// Returns e^(self) - 1 in a way that is accurate even if the number is close to zero
     fn exp_m1(&self) -> Self;
-
-    /// Returns the natural logarithm of the number
-    fn ln(&self) -> Self;
 
     /// Returns ln(1+n) more accurately than if the operations were performed separately
     fn ln_1p(&self) -> Self;
@@ -298,37 +895,13 @@ pub trait RFFloat: RFNum + PartialOrd + for<'a> std::cmp::PartialEq<f64> {
     /// Returns the base 10 logarithm of the number
     fn log10(&self) -> Self;
 
-    /// Raises self to the power of exp, using exponentiation by squaring
-    fn powi(&self, n: i32) -> Self;
-
     /// Raises self to a floating point power
     fn powf(&self, n: &Self) -> Self;
-
-    /// Returns the square root of a number
-    fn sqrt(&self) -> Self;
 
     /// Returns the cube root of a number
     fn cbrt(&self) -> Self;
 
     // ========== Trigonometric functions ==========
-    /// Computes the sine of a number (in radians)
-    fn sin(&self) -> Self;
-
-    /// Computes the cosine of a number (in radians)
-    fn cos(&self) -> Self;
-
-    /// Computes the tangent of a number (in radians)
-    fn tan(&self) -> Self;
-
-    /// Computes the arcsine of a number
-    fn asin(&self) -> Self;
-
-    /// Computes the arccosine of a number
-    fn acos(&self) -> Self;
-
-    /// Computes the arctangent of a number
-    fn atan(&self) -> Self;
-
     /// Computes the four quadrant arctangent of self (y) and other (x)
     fn atan2(&self, other: &Self) -> Self;
 
@@ -343,25 +916,6 @@ pub trait RFFloat: RFNum + PartialOrd + for<'a> std::cmp::PartialEq<f64> {
 
     /// Computes the Euclidean distance: sqrt(self^2 + other^2)
     fn hypot(&self, other: &Self) -> Self;
-
-    // ========== Hyperbolic functions ==========
-    /// Hyperbolic sine function
-    fn sinh(&self) -> Self;
-
-    /// Hyperbolic cosine function
-    fn cosh(&self) -> Self;
-
-    /// Hyperbolic tangent function
-    fn tanh(&self) -> Self;
-
-    /// Inverse hyperbolic sine function
-    fn asinh(&self) -> Self;
-
-    /// Inverse hyperbolic cosine function
-    fn acosh(&self) -> Self;
-
-    /// Inverse hyperbolic tangent function
-    fn atanh(&self) -> Self;
 
     // ========== Other methods ==========
     /// Returns the mantissa, exponent and sign as integers
@@ -446,10 +1000,6 @@ impl RFFloat for f64 {
     }
 
     // ========== Basic operations ==========
-    fn abs(&self) -> Self {
-        f64::abs(*self)
-    }
-
     fn signum(&self) -> Self {
         f64::signum(*self)
     }
@@ -483,20 +1033,12 @@ impl RFFloat for f64 {
     }
 
     // ========== Exponential and power functions ==========
-    fn exp(&self) -> Self {
-        f64::exp(*self)
-    }
-
     fn exp2(&self) -> Self {
         f64::exp2(*self)
     }
 
     fn exp_m1(&self) -> Self {
         f64::exp_m1(*self)
-    }
-
-    fn ln(&self) -> Self {
-        f64::ln(*self)
     }
 
     fn ln_1p(&self) -> Self {
@@ -515,16 +1057,8 @@ impl RFFloat for f64 {
         f64::log10(*self)
     }
 
-    fn powi(&self, n: i32) -> Self {
-        f64::powi(*self, n)
-    }
-
     fn powf(&self, n: &Self) -> Self {
         f64::powf(*self, *n)
-    }
-
-    fn sqrt(&self) -> Self {
-        f64::sqrt(*self)
     }
 
     fn cbrt(&self) -> Self {
@@ -532,30 +1066,6 @@ impl RFFloat for f64 {
     }
 
     // ========== Trigonometric functions ==========
-    fn sin(&self) -> Self {
-        f64::sin(*self)
-    }
-
-    fn cos(&self) -> Self {
-        f64::cos(*self)
-    }
-
-    fn tan(&self) -> Self {
-        f64::tan(*self)
-    }
-
-    fn asin(&self) -> Self {
-        f64::asin(*self)
-    }
-
-    fn acos(&self) -> Self {
-        f64::acos(*self)
-    }
-
-    fn atan(&self) -> Self {
-        f64::atan(*self)
-    }
-
     fn atan2(&self, other: &Self) -> Self {
         f64::atan2(*self, *other)
     }
@@ -574,31 +1084,6 @@ impl RFFloat for f64 {
 
     fn hypot(&self, other: &Self) -> Self {
         f64::hypot(*self, *other)
-    }
-
-    // ========== Hyperbolic functions ==========
-    fn sinh(&self) -> Self {
-        f64::sinh(*self)
-    }
-
-    fn cosh(&self) -> Self {
-        f64::cosh(*self)
-    }
-
-    fn tanh(&self) -> Self {
-        f64::tanh(*self)
-    }
-
-    fn asinh(&self) -> Self {
-        f64::asinh(*self)
-    }
-
-    fn acosh(&self) -> Self {
-        f64::acosh(*self)
-    }
-
-    fn atanh(&self) -> Self {
-        f64::atanh(*self)
     }
 
     // ========== Other methods ==========
@@ -685,10 +1170,6 @@ impl RFFloat for MyFloat {
     }
 
     // ========== Basic operations ==========
-    fn abs(&self) -> Self {
-        MyFloat::abs(self)
-    }
-
     fn signum(&self) -> Self {
         MyFloat::signum(self)
     }
@@ -726,20 +1207,12 @@ impl RFFloat for MyFloat {
     }
 
     // ========== Exponential and power functions ==========
-    fn exp(&self) -> Self {
-        MyFloat::exp(self)
-    }
-
     fn exp2(&self) -> Self {
         Self::from_f64(2.0).powf(self)
     }
 
     fn exp_m1(&self) -> Self {
         self.exp() - Self::from_f64(1.0)
-    }
-
-    fn ln(&self) -> Self {
-        MyFloat::ln(self)
     }
 
     fn ln_1p(&self) -> Self {
@@ -758,16 +1231,8 @@ impl RFFloat for MyFloat {
         MyFloat::log10(self)
     }
 
-    fn powi(&self, n: i32) -> Self {
-        MyFloat::powi(self, n as isize)
-    }
-
     fn powf(&self, n: &Self) -> Self {
         MyFloat::pow(self, n)
-    }
-
-    fn sqrt(&self) -> Self {
-        MyFloat::sqrt(self)
     }
 
     fn cbrt(&self) -> Self {
@@ -775,30 +1240,6 @@ impl RFFloat for MyFloat {
     }
 
     // ========== Trigonometric functions ==========
-    fn sin(&self) -> Self {
-        MyFloat::sin(self)
-    }
-
-    fn cos(&self) -> Self {
-        MyFloat::cos(self)
-    }
-
-    fn tan(&self) -> Self {
-        MyFloat::tan(self)
-    }
-
-    fn asin(&self) -> Self {
-        MyFloat::asin(self)
-    }
-
-    fn acos(&self) -> Self {
-        MyFloat::acos(self)
-    }
-
-    fn atan(&self) -> Self {
-        MyFloat::atan(self)
-    }
-
     fn atan2(&self, other: &Self) -> Self {
         MyFloat::atan2(self, other)
     }
@@ -819,31 +1260,6 @@ impl RFFloat for MyFloat {
         (self.clone() * self.clone() + other.clone() * other.clone()).sqrt()
     }
 
-    // ========== Hyperbolic functions ==========
-    fn sinh(&self) -> Self {
-        MyFloat::sinh(self)
-    }
-
-    fn cosh(&self) -> Self {
-        MyFloat::cosh(self)
-    }
-
-    fn tanh(&self) -> Self {
-        MyFloat::tanh(self)
-    }
-
-    fn asinh(&self) -> Self {
-        MyFloat::asinh(self)
-    }
-
-    fn acosh(&self) -> Self {
-        MyFloat::acosh(self)
-    }
-
-    fn atanh(&self) -> Self {
-        MyFloat::atanh(self)
-    }
-
     // ========== Other methods ==========
     fn integer_decode(&self) -> (u64, i16, i8) {
         self.to_f64().integer_decode()
@@ -857,12 +1273,29 @@ pub trait RFComplex:
     + std::ops::Sub<Complex64, Output = Self>
     + std::ops::Mul<Complex64, Output = Self>
     + std::ops::Div<Complex64, Output = Self>
+    + std::ops::Add<MyFloat, Output = MyComplex>
+    + std::ops::Sub<MyFloat, Output = MyComplex>
+    + std::ops::Mul<MyFloat, Output = MyComplex>
+    + std::ops::Div<MyFloat, Output = MyComplex>
+    + std::ops::Add<MyComplex, Output = MyComplex>
+    + std::ops::Sub<MyComplex, Output = MyComplex>
+    + std::ops::Mul<MyComplex, Output = MyComplex>
+    + std::ops::Div<MyComplex, Output = MyComplex>
     + std::ops::AddAssign<Complex64>
     + std::ops::SubAssign<Complex64>
     + std::ops::MulAssign<Complex64>
     + std::ops::DivAssign<Complex64>
+    + for<'a> std::ops::Add<&'a MyFloat, Output = MyComplex>
+    + for<'a> std::ops::Sub<&'a MyFloat, Output = MyComplex>
+    + for<'a> std::ops::Mul<&'a MyFloat, Output = MyComplex>
+    + for<'a> std::ops::Div<&'a MyFloat, Output = MyComplex>
+    + for<'a> std::ops::Add<&'a MyComplex, Output = MyComplex>
+    + for<'a> std::ops::Sub<&'a MyComplex, Output = MyComplex>
+    + for<'a> std::ops::Mul<&'a MyComplex, Output = MyComplex>
+    + for<'a> std::ops::Div<&'a MyComplex, Output = MyComplex>
+    + std::convert::From<num::Complex<f64>>
 {
-    fn new(re: Self::Real, im: Self::Real) -> Self;
+    fn new(re: &Self::Real, im: &Self::Real) -> Self;
 
     // ========== Custom conversion methods ==========
     /// Create from real and imaginary f64 values
@@ -889,77 +1322,14 @@ pub trait RFComplex:
     fn imag(&self) -> Self::Real;
 
     // ========== Complex-specific operations ==========
-    /// Get the magnitude (absolute value) of the complex number
-    fn abs(&self) -> Self::Real;
-
     /// Get the argument (phase angle) of the complex number in radians
     fn arg(&self) -> Self::Real;
-
-    /// Get the complex conjugate
-    fn conj(&self) -> Self;
-
-    /// Calculate the square of the magnitude (norm squared)
-    fn norm_sqr(&self) -> Self::Real;
-
-    // ========== Exponential and power functions ==========
-    /// Returns e^(self)
-    fn exp(&self) -> Self;
-
-    /// Returns the natural logarithm
-    fn ln(&self) -> Self;
-
-    /// Raises self to a complex power
-    fn pow(&self, exp: &Self) -> Self;
-
-    /// Raises self to an integer power
-    fn powi(&self, n: i32) -> Self;
-
-    /// Returns the square root
-    fn sqrt(&self) -> Self;
-
-    // ========== Trigonometric functions ==========
-    /// Computes the sine
-    fn sin(&self) -> Self;
-
-    /// Computes the cosine
-    fn cos(&self) -> Self;
-
-    /// Computes the tangent
-    fn tan(&self) -> Self;
-
-    /// Computes the arcsine
-    fn asin(&self) -> Self;
-
-    /// Computes the arccosine
-    fn acos(&self) -> Self;
-
-    /// Computes the arctangent
-    fn atan(&self) -> Self;
-
-    // ========== Hyperbolic functions ==========
-    /// Hyperbolic sine function
-    fn sinh(&self) -> Self;
-
-    /// Hyperbolic cosine function
-    fn cosh(&self) -> Self;
-
-    /// Hyperbolic tangent function
-    fn tanh(&self) -> Self;
-
-    /// Inverse hyperbolic sine function
-    fn asinh(&self) -> Self;
-
-    /// Inverse hyperbolic cosine function
-    fn acosh(&self) -> Self;
-
-    /// Inverse hyperbolic tangent function
-    fn atanh(&self) -> Self;
 }
 
 // Implement RFComplex for Complex<f64>
 impl RFComplex for Complex64 {
-    fn new(re: Self::Real, im: Self::Real) -> Self {
-        Complex::<f64>::new(re, im)
+    fn new(re: &Self::Real, im: &Self::Real) -> Self {
+        Complex::<f64>::new(*re, *im)
     }
 
     // ========== Custom conversion methods ==========
@@ -1000,98 +1370,15 @@ impl RFComplex for Complex64 {
     }
 
     // ========== Complex-specific operations ==========
-    fn abs(&self) -> Self::Real {
-        Complex::norm(*self)
-    }
-
     fn arg(&self) -> Self::Real {
         Complex::arg(*self)
-    }
-
-    fn conj(&self) -> Self {
-        Complex::conj(self)
-    }
-
-    fn norm_sqr(&self) -> Self::Real {
-        Complex::norm_sqr(self)
-    }
-
-    // ========== Exponential and power functions ==========
-    fn exp(&self) -> Self {
-        Complex::exp(*self)
-    }
-
-    fn ln(&self) -> Self {
-        Complex::ln(*self)
-    }
-
-    fn pow(&self, exp: &Self) -> Self {
-        Complex::powc(*self, *exp)
-    }
-
-    fn powi(&self, n: i32) -> Self {
-        Complex::powi(self, n)
-    }
-
-    fn sqrt(&self) -> Self {
-        Complex::sqrt(*self)
-    }
-
-    // ========== Trigonometric functions ==========
-    fn sin(&self) -> Self {
-        Complex::sin(*self)
-    }
-
-    fn cos(&self) -> Self {
-        Complex::cos(*self)
-    }
-
-    fn tan(&self) -> Self {
-        Complex::tan(*self)
-    }
-
-    fn asin(&self) -> Self {
-        Complex::asin(*self)
-    }
-
-    fn acos(&self) -> Self {
-        Complex::acos(*self)
-    }
-
-    fn atan(&self) -> Self {
-        Complex::atan(*self)
-    }
-
-    // ========== Hyperbolic functions ==========
-    fn sinh(&self) -> Self {
-        Complex::sinh(*self)
-    }
-
-    fn cosh(&self) -> Self {
-        Complex::cosh(*self)
-    }
-
-    fn tanh(&self) -> Self {
-        Complex::tanh(*self)
-    }
-
-    fn asinh(&self) -> Self {
-        Complex::asinh(*self)
-    }
-
-    fn acosh(&self) -> Self {
-        Complex::acosh(*self)
-    }
-
-    fn atanh(&self) -> Self {
-        Complex::atanh(*self)
     }
 }
 
 // Implement RFComplex for MyComplex
 impl RFComplex for MyComplex {
-    fn new(re: Self::Real, im: Self::Real) -> Self {
-        MyComplex::new(re, im)
+    fn new(re: &Self::Real, im: &Self::Real) -> Self {
+        MyComplex::new(re.clone(), im.clone())
     }
 
     // ========== Custom conversion methods ==========
@@ -1132,127 +1419,7 @@ impl RFComplex for MyComplex {
     }
 
     // ========== Complex-specific operations ==========
-    fn abs(&self) -> Self::Real {
-        MyComplex::abs(self)
-    }
-
     fn arg(&self) -> Self::Real {
         MyComplex::arg(self)
-    }
-
-    fn conj(&self) -> Self {
-        MyComplex::conj(self)
-    }
-
-    fn norm_sqr(&self) -> Self::Real {
-        MyComplex::norm_sqr(self)
-    }
-
-    // ========== Exponential and power functions ==========
-    fn exp(&self) -> Self {
-        MyComplex::exp(self)
-    }
-
-    fn ln(&self) -> Self {
-        MyComplex::ln(self)
-    }
-
-    fn pow(&self, exp: &Self) -> Self {
-        MyComplex::pow(self, exp)
-    }
-
-    fn powi(&self, n: i32) -> Self {
-        // Convert to MyComplex power
-        let exp = Self::from_real(Self::Real::from_f64(n as f64));
-        self.pow(&exp)
-    }
-
-    fn sqrt(&self) -> Self {
-        MyComplex::sqrt(self)
-    }
-
-    // ========== Trigonometric functions ==========
-    fn sin(&self) -> Self {
-        MyComplex::sin(self)
-    }
-
-    fn cos(&self) -> Self {
-        MyComplex::cos(self)
-    }
-
-    fn tan(&self) -> Self {
-        // tan(z) = sin(z) / cos(z)
-        self.sin() / self.cos()
-    }
-
-    fn asin(&self) -> Self {
-        // asin(z) = -i * ln(i*z + sqrt(1 - z^2))
-        let i = Self::from_imag(Self::Real::from_f64(1.0));
-        let one = Self::from_real(Self::Real::from_f64(1.0));
-        let iz = &i * self;
-        let sqrt_part = (one - self * self).sqrt();
-        -&i * (iz + sqrt_part).ln()
-    }
-
-    fn acos(&self) -> Self {
-        // acos(z) = -i * ln(z + i * sqrt(1 - z^2))
-        let i = Self::from_imag(Self::Real::from_f64(1.0));
-        let one = Self::from_real(Self::Real::from_f64(1.0));
-        let sqrt_part = (one - self * self).sqrt();
-        -&i * (self + &i * sqrt_part).ln()
-    }
-
-    fn atan(&self) -> Self {
-        // atan(z) = (i/2) * ln((i + z) / (i - z))
-        let i = Self::from_imag(Self::Real::from_f64(1.0));
-        let two = Self::from_real(Self::Real::from_f64(2.0));
-        let i_half = &i / two;
-        let numerator = &i + self;
-        let denominator = &i - self;
-        i_half * (numerator / denominator).ln()
-    }
-
-    // ========== Hyperbolic functions ==========
-    fn sinh(&self) -> Self {
-        // sinh(z) = (e^z - e^(-z)) / 2
-        let exp_z = self.exp();
-        let exp_neg_z = (-self).exp();
-        let two = Self::from_real(Self::Real::from_f64(2.0));
-        (exp_z - exp_neg_z) / two
-    }
-
-    fn cosh(&self) -> Self {
-        // cosh(z) = (e^z + e^(-z)) / 2
-        let exp_z = self.exp();
-        let exp_neg_z = (-self).exp();
-        let two = Self::from_real(Self::Real::from_f64(2.0));
-        (exp_z + exp_neg_z) / two
-    }
-
-    fn tanh(&self) -> Self {
-        // tanh(z) = sinh(z) / cosh(z)
-        self.sinh() / self.cosh()
-    }
-
-    fn asinh(&self) -> Self {
-        // asinh(z) = ln(z + sqrt(z^2 + 1))
-        let one = Self::from_real(Self::Real::from_f64(1.0));
-        (self + (self * self + one).sqrt()).ln()
-    }
-
-    fn acosh(&self) -> Self {
-        // acosh(z) = ln(z + sqrt(z^2 - 1))
-        let one = Self::from_real(Self::Real::from_f64(1.0));
-        (self + (self * self - one).sqrt()).ln()
-    }
-
-    fn atanh(&self) -> Self {
-        // atanh(z) = (1/2) * ln((1 + z) / (1 - z))
-        let one = Self::from_real(Self::Real::from_f64(1.0));
-        let two = Self::from_real(Self::Real::from_f64(2.0));
-        let half = one.clone() / two;
-        let numerator = &one + self;
-        let denominator = one - self;
-        half * (numerator / denominator).ln()
     }
 }

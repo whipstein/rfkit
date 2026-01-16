@@ -1,11 +1,11 @@
 use crate::define_mlin_calcs;
 use crate::{
     element::{Distributed, Elem, ElemType, mlin_exp, msub::Msub},
-    frequency::Frequency,
+    frequency::{FreqArray, Frequency, new_frequency},
     point,
     pts::{Points, Pts},
     scale::Scale,
-    unit::{Unit, UnitVal, Unitized},
+    unit::{Unit, UnitValue, Unitized},
 };
 use ndarray::{IntoDimension, prelude::*};
 use num::complex::{Complex64, c64};
@@ -14,14 +14,20 @@ use std::f64::consts::PI;
 #[derive(Clone, Debug, PartialEq)]
 pub struct Mlin {
     id: String,
-    width: UnitVal,
-    length: UnitVal,
+    width: UnitValue,
+    length: UnitValue,
     sub: Msub,
     nodes: [usize; 2],
 }
 
 impl Mlin {
-    pub fn new(id: String, width: UnitVal, length: UnitVal, sub: &Msub, nodes: [usize; 2]) -> Mlin {
+    pub fn new(
+        id: String,
+        width: UnitValue,
+        length: UnitValue,
+        sub: &Msub,
+        nodes: [usize; 2],
+    ) -> Mlin {
         Mlin {
             id,
             width,
@@ -38,8 +44,8 @@ impl Default for Mlin {
     fn default() -> Self {
         Self {
             id: "ML0".to_string(),
-            width: *UnitVal::default().set_unit(Unit::Meter),
-            length: *UnitVal::default().set_unit(Unit::Meter),
+            width: *UnitValue::default().set_unit(Unit::Meter),
+            length: *UnitValue::default().set_unit(Unit::Meter),
             sub: Msub::default(),
             nodes: [1, 2],
         }
@@ -90,7 +96,7 @@ impl Elem for Mlin {
     }
 
     fn z_at(&self, freq: &Frequency, i: usize) -> Complex64 {
-        let freq_pt = Frequency::new(array![freq.freq(i)], freq.scale());
+        let freq_pt = new_frequency(array![freq.freq(i)], freq.scale());
         self.z(&freq_pt).into()
     }
 
@@ -146,7 +152,7 @@ impl Unitized for Mlin {
         self.length.val_scaled()
     }
 
-    fn unitval(&self) -> UnitVal {
+    fn unitval(&self) -> UnitValue {
         self.length.clone()
     }
 
@@ -162,7 +168,7 @@ impl Unitized for Mlin {
         self.length.set_val_scaled(val);
     }
 
-    fn set_unitval(&mut self, val: UnitVal) {
+    fn set_unitval(&mut self, val: UnitValue) {
         self.length = val;
     }
 
@@ -178,8 +184,8 @@ impl Unitized for Mlin {
 #[derive(Clone)]
 pub struct MlinBuilder {
     id: String,
-    width: UnitVal,
-    length: UnitVal,
+    width: UnitValue,
+    length: UnitValue,
     scale: Scale,
     unit: Unit,
     sub: Msub,
@@ -198,7 +204,7 @@ impl MlinBuilder {
         self
     }
 
-    pub fn width(mut self, val: UnitVal) -> Self {
+    pub fn width(mut self, val: UnitValue) -> Self {
         self.width = val;
         self
     }
@@ -224,7 +230,7 @@ impl MlinBuilder {
         self
     }
 
-    pub fn length(mut self, val: UnitVal) -> Self {
+    pub fn length(mut self, val: UnitValue) -> Self {
         self.length = val;
         self
     }
@@ -368,8 +374,8 @@ impl Default for MlinBuilder {
     fn default() -> Self {
         Self {
             id: "ML0".to_string(),
-            width: *UnitVal::default().set_unit(Unit::Meter),
-            length: *UnitVal::default().set_unit(Unit::Meter),
+            width: *UnitValue::default().set_unit(Unit::Meter),
+            length: *UnitValue::default().set_unit(Unit::Meter),
             scale: Scale::Micro,
             unit: Unit::Meter,
             sub: Msub::default(),
@@ -386,7 +392,7 @@ mod element_mlin_tests {
     use crate::{
         element::msub::MsubBuilder,
         unit::UnitValBuilder,
-        util::{comp_c64, comp_f64, comp_point_c64},
+        util::{comp_f64, comp_num, comp_pts_ix2},
     };
     use float_cmp::*;
 
@@ -406,7 +412,7 @@ mod element_mlin_tests {
             .val_scaled(1.0, Scale::Giga)
             .unit(Unit::Hz)
             .build();
-        let freq = Frequency::from_unitval(&freq_unitval);
+        let freq = new_frequency(array![freq_unitval.val()], freq_unitval.scale());
         let sub = MsubBuilder::new()
             .id("Msub0")
             .er(12.4)
@@ -461,18 +467,13 @@ mod element_mlin_tests {
         assert_eq!(&exemplar.unit(), &calc.unit());
         assert_eq!(&exemplar.gamma(&freq), &calc.gamma(&freq));
         assert_eq!(&exemplar.er(&freq), &calc.er(&freq));
-        comp_point_c64(
-            exemplar.c(&freq).view(),
-            calc.c(&freq).view(),
-            margin,
-            "calc.c()",
-        );
+        comp_pts_ix2(&exemplar.c(&freq), &calc.c(&freq), margin, "calc.c()");
 
         let margin = F64Margin {
             epsilon: 1e-4,
             ulps: 10,
         };
-        comp_c64(&exemplar_z, &calc.z(&freq), margin, "calc.z()", "0");
+        comp_num(&exemplar_z, &calc.z(&freq), margin, "calc.z()", "0");
         comp_f64(&exemplar_z.re, &calc.z0(&freq), margin, "calc.z0()", "0");
     }
 
@@ -482,7 +483,7 @@ mod element_mlin_tests {
     //         .val_scaled(1.0, Scale::Giga)
     //         .unit(Unit::Hz)
     //         .build();
-    //     let freq = Frequency::from_unitval(&freq_unitval);
+    //     let freq = new_frequency(array![freq_unitval.val()], freq_unitval.scale());
     //     let sub = MsubBuilder::new()
     //         .id("Msub0")
     //         .er(12.4)
@@ -536,13 +537,13 @@ mod element_mlin_tests {
     //     // assert_eq!(&exemplar.unit(), &calc.unit());
     //     // assert_eq!(&exemplar.gamma(&freq), &calc.gamma(&freq));
     //     // assert_eq!(&exemplar.er(&freq), &calc.er(&freq));
-    //     // comp_point_c64(&exemplar.c(&freq), &calc.c(&freq), margin, "calc2.c()");
+    //     // comp_pts_ix2(&exemplar.c(&freq), &calc.c(&freq), margin, "calc2.c()");
 
     //     let margin = F64Margin {
     //         epsilon: 1e-14,
     //         ulps: 10,
     //     };
-    //     comp_c64(&exemplar_z, &calc.z(&freq), margin, "calc2.z()", "0");
+    //     comp_num(&exemplar_z, &calc.z(&freq), margin, "calc2.z()", "0");
     //     comp_f64(&exemplar_z.re, &calc.z0(&freq), margin, "calc2.z0()", "0");
     // }
 
@@ -579,7 +580,7 @@ mod element_mlin_tests {
 
         #[test]
         fn test_mlin_c_matrix_structure() {
-            let freq = Frequency::new(array![1e9], Scale::Base);
+            let freq = new_frequency(array![1e9], Scale::Base);
             let sub = MsubBuilder::new().build();
             let mlin = MlinBuilder::new().sub(&sub).build();
 

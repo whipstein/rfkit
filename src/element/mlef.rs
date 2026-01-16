@@ -1,11 +1,11 @@
 use crate::{
     define_mlin_calcs,
     element::{Distributed, Elem, ElemType, msub::Msub},
-    frequency::Frequency,
+    frequency::{FreqArray, Frequency, new_frequency},
     point,
     pts::{Points, Pts},
     scale::Scale,
-    unit::{Unit, UnitVal, Unitized},
+    unit::{Unit, UnitValue, Unitized},
 };
 use ndarray::{IntoDimension, prelude::*};
 use num::complex::{Complex64, c64};
@@ -14,14 +14,20 @@ use std::f64::consts::PI;
 #[derive(Clone, Debug, PartialEq)]
 pub struct Mlef {
     id: String,
-    width: UnitVal,
-    length: UnitVal,
+    width: UnitValue,
+    length: UnitValue,
     sub: Msub,
     nodes: [usize; 1],
 }
 
 impl Mlef {
-    pub fn new(id: String, width: UnitVal, length: UnitVal, sub: &Msub, nodes: [usize; 1]) -> Mlef {
+    pub fn new(
+        id: String,
+        width: UnitValue,
+        length: UnitValue,
+        sub: &Msub,
+        nodes: [usize; 1],
+    ) -> Mlef {
         Mlef {
             id,
             width,
@@ -38,8 +44,8 @@ impl Default for Mlef {
     fn default() -> Self {
         Self {
             id: "ML0".to_string(),
-            width: *UnitVal::default().set_unit(Unit::Meter),
-            length: *UnitVal::default().set_unit(Unit::Meter),
+            width: *UnitValue::default().set_unit(Unit::Meter),
+            length: *UnitValue::default().set_unit(Unit::Meter),
             sub: Msub::default(),
             nodes: [1],
         }
@@ -92,7 +98,7 @@ impl Elem for Mlef {
     }
 
     fn z_at(&self, freq: &Frequency, i: usize) -> Complex64 {
-        let freq_pt = Frequency::new(array![freq.freq(i)], freq.scale());
+        let freq_pt = new_frequency(array![freq.freq(i)], freq.scale());
         self.z(&freq_pt).into()
     }
 
@@ -166,7 +172,7 @@ impl Unitized for Mlef {
         self.length.val_scaled()
     }
 
-    fn unitval(&self) -> UnitVal {
+    fn unitval(&self) -> UnitValue {
         self.length.clone()
     }
 
@@ -182,7 +188,7 @@ impl Unitized for Mlef {
         self.length.set_val_scaled(val);
     }
 
-    fn set_unitval(&mut self, val: UnitVal) {
+    fn set_unitval(&mut self, val: UnitValue) {
         self.length = val;
     }
 
@@ -198,8 +204,8 @@ impl Unitized for Mlef {
 #[derive(Clone)]
 pub struct MlefBuilder {
     id: String,
-    width: UnitVal,
-    length: UnitVal,
+    width: UnitValue,
+    length: UnitValue,
     sub: Msub,
     nodes: [usize; 1],
     z0: Option<f64>,
@@ -215,7 +221,7 @@ impl MlefBuilder {
         self
     }
 
-    pub fn width(mut self, val: UnitVal) -> Self {
+    pub fn width(mut self, val: UnitValue) -> Self {
         self.width = val;
         self
     }
@@ -241,7 +247,7 @@ impl MlefBuilder {
         self
     }
 
-    pub fn length(mut self, val: UnitVal) -> Self {
+    pub fn length(mut self, val: UnitValue) -> Self {
         self.length = val;
         self
     }
@@ -297,8 +303,8 @@ impl Default for MlefBuilder {
     fn default() -> Self {
         Self {
             id: "ML0".to_string(),
-            width: *UnitVal::default().set_unit(Unit::Meter),
-            length: *UnitVal::default().set_unit(Unit::Meter),
+            width: *UnitValue::default().set_unit(Unit::Meter),
+            length: *UnitValue::default().set_unit(Unit::Meter),
             sub: Msub::default(),
             nodes: [1],
             z0: None,
@@ -330,7 +336,7 @@ mod element_mlef_tests {
     //         .val_scaled(1.0, Scale::Giga)
     //         .unit(Unit::Hz)
     //         .build();
-    //     let freq = Frequency::from_unitval(&freq_unitval);
+    //     let freq = new_frequency(array![freq_unitval.val()], freq_unitval.scale());
     //     let sub = MsubBuilder::new()
     //         .id("Msub0")
     //         .er(12.4)
@@ -407,7 +413,7 @@ mod element_mlef_tests {
 
         #[test]
         fn test_mlef_end_effect_extends_length() {
-            let freq = Frequency::new(array![1e9], Scale::Base);
+            let freq = new_frequency(array![1e9], Scale::Base);
             let sub = MsubBuilder::new()
                 .er(12.4)
                 .height_scaled(25.0, Scale::Micro)
@@ -448,7 +454,7 @@ mod element_mlef_tests {
 
         #[test]
         fn test_mlef_c_matrix() {
-            let freq = Frequency::new(array![1e9], Scale::Base);
+            let freq = new_frequency(array![1e9], Scale::Base);
             let sub = MsubBuilder::new().build();
             let mlef = MlefBuilder::new().sub(&sub).build();
 

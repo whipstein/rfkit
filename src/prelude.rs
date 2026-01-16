@@ -12,10 +12,15 @@
 pub use crate::file::read_touchstone;
 
 #[doc(no_inline)]
-pub use crate::num::{RFComplex, RFFloat, RFNum};
+pub use crate::num::{RFComplex, RFFloat, RFNum, mycomplex::*, myfloat::*};
+#[doc(no_inline)]
+pub use num::ToPrimitive;
 
 #[doc(no_inline)]
-pub use crate::frequency::{Frequency, FrequencyBuilder};
+pub use crate::frequency::{
+    Freq, FreqArray, FreqScalar, Frequency, FrequencyBuilder, FrequencyScalar,
+    FrequencyScalarBuilder, new_frequency, new_frequency_scaled,
+};
 
 #[doc(no_inline)]
 pub use crate::circuit::Circuit;
@@ -42,19 +47,12 @@ pub use crate::impedance::{
 pub use crate::minimize::{Minimizer, ObjDerFn, ObjFn};
 
 #[doc(no_inline)]
-pub use crate::mycomplex::*;
-#[doc(no_inline)]
-pub use crate::myfloat::*;
-#[doc(no_inline)]
-pub use num::ToPrimitive;
-
-#[doc(no_inline)]
 pub use crate::network::{
     Network, NetworkBuilder, NetworkPoint, NetworkPortPoints, PortPoints, PortVal,
 };
 
 #[doc(no_inline)]
-pub use crate::pts::{Points, Pts};
+pub use crate::pts::{Matrix, Points, Points1, Points2, Points3, Pts};
 #[doc(no_inline)]
 pub use crate::{point, points};
 
@@ -65,4 +63,4 @@ pub use crate::parameter::RFParameter;
 pub use crate::scale::Scale;
 
 #[doc(no_inline)]
-pub use crate::unit::{Sweep, Unit, UnitVal, UnitValBuilder};
+pub use crate::unit::{Sweep, Unit, UnitVal, UnitValBuilder, UnitValue, Unitized};

@@ -1,10 +1,10 @@
 use crate::{
     element::{Distributed, Elem, ElemType, msub::Msub},
-    frequency::Frequency,
+    frequency::{FreqArray, Frequency, new_frequency},
     point,
     pts::{Points, Pts},
     scale::Scale,
-    unit::{Unit, UnitVal, UnitValBuilder, Unitized},
+    unit::{Unit, UnitValBuilder, UnitValue, Unitized},
 };
 use ndarray::{IntoDimension, prelude::*};
 use num::complex::Complex64;
@@ -12,7 +12,7 @@ use num::complex::Complex64;
 #[derive(Clone, Debug, PartialEq)]
 pub struct Mbend {
     id: String,
-    width: UnitVal,
+    width: UnitValue,
     miter: bool,
     sub: Msub,
     nodes: [usize; 2],
@@ -22,7 +22,7 @@ pub struct Mbend {
 impl Mbend {
     pub fn new(
         id: String,
-        width: UnitVal,
+        width: UnitValue,
         miter: bool,
         sub: &Msub,
         nodes: [usize; 2],
@@ -40,7 +40,7 @@ impl Mbend {
 
     /// Calculate L & C values for Tee network equivalent
     /// Returns (L, C)
-    fn calc_lc(&self) -> (UnitVal, UnitVal) {
+    fn calc_lc(&self) -> (UnitValue, UnitValue) {
         let w = self.width.val();
         let h = self.sub.height().val();
         let er = self.sub.er();
@@ -75,7 +75,7 @@ impl Default for Mbend {
     fn default() -> Self {
         Self {
             id: "MB0".to_string(),
-            width: *UnitVal::default().set_unit(Unit::Meter),
+            width: *UnitValue::default().set_unit(Unit::Meter),
             miter: false,
             sub: Msub::default(),
             nodes: [1, 2],
@@ -140,7 +140,7 @@ impl Elem for Mbend {
     }
 
     fn z_at(&self, freq: &Frequency, i: usize) -> Complex64 {
-        let freq_pt = Frequency::new(array![freq.freq(i)], freq.scale());
+        let freq_pt = new_frequency(array![freq.freq(i)], freq.scale());
         self.z(&freq_pt).into()
     }
 
@@ -196,8 +196,8 @@ impl Unitized for Mbend {
         0.0
     }
 
-    fn unitval(&self) -> UnitVal {
-        UnitVal::default()
+    fn unitval(&self) -> UnitValue {
+        UnitValue::default()
     }
 
     fn scale(&self) -> Scale {
@@ -212,7 +212,7 @@ impl Unitized for Mbend {
         ();
     }
 
-    fn set_unitval(&mut self, _val: UnitVal) {
+    fn set_unitval(&mut self, _val: UnitValue) {
         ();
     }
 
@@ -228,7 +228,7 @@ impl Unitized for Mbend {
 #[derive(Clone)]
 pub struct MbendBuilder {
     id: String,
-    width: UnitVal,
+    width: UnitValue,
     miter: bool,
     sub: Msub,
     nodes: [usize; 2],
@@ -245,7 +245,7 @@ impl MbendBuilder {
         self
     }
 
-    pub fn width(mut self, val: UnitVal) -> Self {
+    pub fn width(mut self, val: UnitValue) -> Self {
         self.width = val;
         self
     }
@@ -307,7 +307,7 @@ impl Default for MbendBuilder {
     fn default() -> Self {
         Self {
             id: "MB0".to_string(),
-            width: *UnitVal::default().set_unit(Unit::Meter),
+            width: *UnitValue::default().set_unit(Unit::Meter),
             miter: false,
             sub: Msub::default(),
             nodes: [1, 2],
@@ -341,7 +341,7 @@ mod element_mbend_tests {
     //         .val_scaled(1.0, Scale::Giga)
     //         .unit(Unit::Hz)
     //         .build();
-    //     let freq = Frequency::from_unitval(&freq_unitval);
+    //     let freq = new_frequency(array![freq_unitval.val()], freq_unitval.scale());
     //     let sub = MsubBuilder::new()
     //         .id("Msub0")
     //         .er(12.4)
@@ -455,7 +455,7 @@ mod element_mbend_tests {
 
         #[test]
         fn test_mbend_c_matrix_not_zero() {
-            let freq = Frequency::new(array![1e9], Scale::Base);
+            let freq = new_frequency(array![1e9], Scale::Base);
             let sub = MsubBuilder::new()
                 .er(12.4)
                 .height_scaled(25.0, Scale::Micro)
@@ -482,7 +482,7 @@ mod element_mbend_tests {
 
         #[test]
         fn test_mbend_zero_length() {
-            let freq = Frequency::new(array![1e9], Scale::Base);
+            let freq = new_frequency(array![1e9], Scale::Base);
             let sub = MsubBuilder::new().build();
             let mbend = MbendBuilder::new().sub(&sub).build();
 
