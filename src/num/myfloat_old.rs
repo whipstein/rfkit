@@ -1,17 +1,18 @@
 use crate::num::MyComplex;
 use core::f64;
-use num_complex::Complex64;
-use num_traits::{Inv, Num, One, Pow, Signed, Zero};
+use num::complex::Complex64;
+use num_traits::{Num, One, Signed, Zero};
+use rug::{
+    Float,
+    ops::{Pow, PowAssign},
+};
 use std::{
-    convert::From,
     fmt,
-    fmt::Debug,
     iter::{Product, Sum},
     ops::{
         Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Not, Rem, RemAssign, Sub, SubAssign,
     },
 };
-use twofloat::{TwoFloat, TwoFloatError, consts::PI};
 
 /// Defines a multiplicative identity element for `Self`.
 ///
@@ -52,43 +53,47 @@ pub trait NegOne: Sized + Mul<Self, Output = Self> {
 }
 
 /// A float wrapper with fixed precision of 53 bits
-#[derive(Debug)]
-pub struct MyFloat(TwoFloat);
+pub struct MyFloat(rug::Float);
 
 impl MyFloat {
+    /// Fixed precision for all operations
+    const PRECISION: u32 = 53;
+
     /// Create a new float from an f64 value
     pub fn new(value: f64) -> Self {
-        MyFloat(TwoFloat::from(value))
+        MyFloat(Float::with_val(Self::PRECISION, value))
     }
 
     /// Create a new float from an Float value
-    pub fn from_float(value: TwoFloat) -> Self {
+    pub fn from_float(value: Float) -> Self {
         MyFloat(value)
     }
 
     /// Get the value as f64
     pub fn to_f64(&self) -> f64 {
-        self.0.into()
+        self.0.to_f64()
     }
 
     /// Get the value as f64
-    pub fn to_float(&self) -> TwoFloat {
+    pub fn to_float(&self) -> Float {
         self.0.clone()
     }
 
     /// Convert the value in radians to degrees
     pub fn to_degrees(&self) -> MyFloat {
-        MyFloat(self.0 * TwoFloat::from(180.0) / PI)
+        self * 180.0 / f64::consts::PI
     }
 
     /// Convert the value in degrees to radians
     pub fn to_radians(&self) -> MyFloat {
-        MyFloat(self.0 * PI / TwoFloat::from(180.0))
+        self * f64::consts::PI / 180.0
     }
 
     /// Get the absolute value
     pub fn abs(&self) -> Self {
-        MyFloat(self.0.abs())
+        let mut temp = self.0.clone();
+        temp.abs_mut();
+        MyFloat(temp)
     }
 
     /// Get the integer power
@@ -110,27 +115,29 @@ impl MyFloat {
 
     /// Get the magnitude in dB
     pub fn db(&self) -> MyFloat {
-        MyFloat(TwoFloat::from(20.0) * self.0.abs().log10())
+        20.0 * self.abs().log10()
     }
 
     /// Get the magnitude in dB
     pub fn db10(&self) -> MyFloat {
-        MyFloat(TwoFloat::from(10.0) * self.0.abs().log10())
+        10.0 * self.abs().log10()
     }
 
     /// Get the magnitude in dB
     pub fn db2mag(&self) -> MyFloat {
-        MyFloat(TwoFloat::from(10.0).pow(self.0 / TwoFloat::from(20.0)))
+        MyFloat::new(10.0).pow(self / 20.0)
     }
 
     /// Get the magnitude in dB
     pub fn db102mag(&self) -> MyFloat {
-        MyFloat(TwoFloat::from(10.0).pow(self.0 / TwoFloat::from(10.0)))
+        MyFloat::new(10.0).pow(self / 10.0)
     }
 
     /// Get the square root
     pub fn sqrt(&self) -> Self {
-        MyFloat(self.0.sqrt())
+        let mut temp = self.0.clone();
+        temp.sqrt_mut();
+        MyFloat(temp)
     }
 
     /// Get the square
@@ -140,166 +147,208 @@ impl MyFloat {
 
     /// Calculate the exponential function
     pub fn exp(&self) -> Self {
-        MyFloat(self.0.exp())
+        let mut temp = self.0.clone();
+        temp.exp_mut();
+        MyFloat(temp)
     }
 
     /// Calculate the natural logarithm
     pub fn ln(&self) -> Self {
-        MyFloat(self.0.ln())
+        let mut temp = self.0.clone();
+        temp.ln_mut();
+        MyFloat(temp)
     }
 
     /// Calculate the base-10 logarithm
     pub fn log10(&self) -> Self {
-        MyFloat(self.0.log10())
+        let mut temp = self.0.clone();
+        temp.log10_mut();
+        MyFloat(temp)
     }
 
     /// Calculate the base-2 logarithm
     pub fn log2(&self) -> Self {
-        MyFloat(self.0.log2())
+        let mut temp = self.0.clone();
+        temp.log2_mut();
+        MyFloat(temp)
     }
 
-    /// Calculate sine from self in radians
+    /// Calculate sine
     pub fn sin(&self) -> Self {
-        MyFloat(self.0.sin())
+        let mut temp = self.0.clone();
+        temp.sin_mut();
+        MyFloat(temp)
     }
 
-    /// Calculate cosine from self in radians
+    /// Calculate cosine
     pub fn cos(&self) -> Self {
-        MyFloat(self.0.cos())
+        let mut temp = self.0.clone();
+        temp.cos_mut();
+        MyFloat(temp)
     }
 
-    /// Calculate tangent from self in radians
+    /// Calculate tangent
     pub fn tan(&self) -> Self {
-        MyFloat(self.0.tan())
+        let mut temp = self.0.clone();
+        temp.tan_mut();
+        MyFloat(temp)
     }
 
-    /// Calculate arcsine from self to radians
+    /// Calculate arcsine
     pub fn asin(&self) -> Self {
-        MyFloat(self.0.asin())
+        let mut temp = self.0.clone();
+        temp.asin_mut();
+        MyFloat(temp)
     }
 
-    /// Calculate arccosine from self to radians
+    /// Calculate arccosine
     pub fn acos(&self) -> Self {
-        MyFloat(self.0.acos())
+        let mut temp = self.0.clone();
+        temp.acos_mut();
+        MyFloat(temp)
     }
 
-    /// Calculate arctangent from self to radians
+    /// Calculate arctangent
     pub fn atan(&self) -> Self {
-        MyFloat(self.0.atan())
+        let mut temp = self.0.clone();
+        temp.atan_mut();
+        MyFloat(temp)
     }
 
-    /// Calculate arctangent of y/x in radians
+    /// Calculate arctangent of y/x
     pub fn atan2(&self, x: &MyFloat) -> Self {
-        MyFloat(self.0.atan2(x.0))
+        let mut temp = self.0.clone();
+        temp.atan2_mut(&x.0);
+        MyFloat(temp)
     }
 
-    /// Calculate hyperbolic sine from self in radians
+    /// Calculate hyperbolic sine
     pub fn sinh(&self) -> Self {
-        MyFloat(self.0.sinh())
+        let mut temp = self.0.clone();
+        temp.sinh_mut();
+        MyFloat(temp)
     }
 
-    /// Calculate hyperbolic cosine from self in radians
+    /// Calculate hyperbolic cosine
     pub fn cosh(&self) -> Self {
-        MyFloat(self.0.cosh())
+        let mut temp = self.0.clone();
+        temp.cosh_mut();
+        MyFloat(temp)
     }
 
-    /// Calculate hyperbolic tangent from self in radians
+    /// Calculate hyperbolic tangent
     pub fn tanh(&self) -> Self {
-        MyFloat(self.0.tanh())
+        let mut temp = self.0.clone();
+        temp.tanh_mut();
+        MyFloat(temp)
     }
 
-    /// Calculate inverse hyperbolic sine from self to radians
+    /// Calculate inverse hyperbolic sine
     pub fn asinh(&self) -> Self {
-        MyFloat(self.0.asinh())
+        let mut temp = self.0.clone();
+        temp.asinh_mut();
+        MyFloat(temp)
     }
 
-    /// Calculate inverse hyperbolic cosine from self to radians
+    /// Calculate inverse hyperbolic cosine
     pub fn acosh(&self) -> Self {
-        MyFloat(self.0.acosh())
+        let mut temp = self.0.clone();
+        temp.acosh_mut();
+        MyFloat(temp)
     }
 
-    /// Calculate inverse hyperbolic tangent from self to radians
+    /// Calculate inverse hyperbolic tangent
     pub fn atanh(&self) -> Self {
-        MyFloat(self.0.atanh())
+        let mut temp = self.0.clone();
+        temp.atanh_mut();
+        MyFloat(temp)
     }
 
     /// Raise to a power
     pub fn pow(&self, exp: &MyFloat) -> Self {
-        MyFloat(self.0.pow(exp.0))
+        let mut temp = self.0.clone();
+        temp.pow_assign(&exp.0);
+        MyFloat(temp)
     }
 
     /// Calculate the floor (largest integer less than or equal to self)
     pub fn floor(&self) -> Self {
-        MyFloat(self.0.floor())
+        let mut temp = self.0.clone();
+        temp.floor_mut();
+        MyFloat(temp)
     }
 
     /// Calculate the ceiling (smallest integer greater than or equal to self)
     pub fn ceil(&self) -> Self {
-        MyFloat(self.0.ceil())
+        let mut temp = self.0.clone();
+        temp.ceil_mut();
+        MyFloat(temp)
     }
 
     /// Round to the nearest integer
     pub fn round(&self) -> Self {
-        MyFloat(self.0.round())
+        let mut temp = self.0.clone();
+        temp.round_mut();
+        MyFloat(temp)
     }
 
     /// Truncate towards zero
     pub fn trunc(&self) -> Self {
-        MyFloat(self.0.trunc())
+        let mut temp = self.0.clone();
+        temp.trunc_mut();
+        MyFloat(temp)
     }
 
     /// Get the fractional part
     pub fn fract(&self) -> Self {
-        MyFloat(self.0.fract())
+        let mut temp = self.0.clone();
+        temp.fract_mut();
+        MyFloat(temp)
     }
 
     /// Access the inner rug::Float (for advanced operations)
-    pub fn inner(&self) -> &TwoFloat {
+    pub fn inner(&self) -> &rug::Float {
         &self.0
     }
 
     /// Convert to inner rug::Float (consuming self)
-    pub fn into_inner(self) -> TwoFloat {
+    pub fn into_inner(self) -> rug::Float {
         self.0
     }
 
     /// Create a NaN float
     pub fn nan() -> Self {
-        MyFloat(TwoFloat::NAN)
+        MyFloat(Float::with_val(Self::PRECISION, f64::NAN))
     }
 
     /// Check if the float is NaN
     pub fn is_nan(&self) -> bool {
-        self.0 != self.0  // NaN is the only value that doesn't equal itself
+        self.0.is_nan()
     }
 
     /// Create an infinite float
     pub fn infinity() -> Self {
-        MyFloat(TwoFloat::INFINITY)
+        MyFloat(Float::with_val(Self::PRECISION, f64::INFINITY))
     }
 
     /// Create a negative infinite float
     pub fn neg_infinity() -> Self {
-        MyFloat(TwoFloat::NEG_INFINITY)
+        MyFloat(Float::with_val(Self::PRECISION, f64::NEG_INFINITY))
     }
 
     /// Check if the float is infinite
     pub fn is_infinite(&self) -> bool {
-        if self.0 == TwoFloat::INFINITY || self.0 == TwoFloat::NEG_INFINITY {
-            true
-        } else {
-            false
-        }
+        self.0.is_infinite()
     }
 
     /// Check if the float is finite
     pub fn is_finite(&self) -> bool {
-        !self.is_nan() && !self.is_infinite()
+        self.0.is_finite()
     }
 
     /// Check if the float is normal (not zero, infinite, or NaN)
     pub fn is_normal(&self) -> bool {
-        !self.0.is_zero() && !self.is_nan() && !self.is_infinite()
+        self.0.is_normal()
     }
 
     /// Check if the float is positive
@@ -314,12 +363,16 @@ impl MyFloat {
 
     /// Get the minimum of two floats
     pub fn min(&self, other: &MyFloat) -> Self {
-        MyFloat(self.0.min(other.0))
+        let mut temp = self.0.clone();
+        temp.min_mut(&other.0);
+        MyFloat(temp)
     }
 
     /// Get the maximum of two floats
     pub fn max(&self, other: &MyFloat) -> Self {
-        MyFloat(self.0.max(other.0))
+        let mut temp = self.0.clone();
+        temp.max_mut(&other.0);
+        MyFloat(temp)
     }
 
     /// Clamp the value between min and max
@@ -329,16 +382,22 @@ impl MyFloat {
 
     /// Get the sign of the number (-1, 0, or 1)
     pub fn signum(&self) -> Self {
-        if self.0.is_zero() {
+        if self.0.is_nan() {
+            MyFloat::nan()
+        } else if self.0.is_zero() {
             MyFloat::zero()
+        } else if self.0.is_sign_positive() {
+            MyFloat::one()
         } else {
-            MyFloat(self.0.signum())
+            -MyFloat::one()
         }
     }
 
     /// Copy the sign from another float
     pub fn copysign(&self, sign: &MyFloat) -> Self {
-        MyFloat(self.0.copysign(&sign.0))
+        let mut temp = self.0.clone();
+        temp.copysign_mut(&sign.0);
+        MyFloat(temp)
     }
 }
 
@@ -385,7 +444,7 @@ macro_rules! impl_math_op(
             type Output = MyComplex;
 
             fn $mth(self, other: Complex64) -> Self::Output {
-                MyComplex::from_real(self) $operator MyComplex::from_c64(other)
+                self $operator MyComplex::from_c64(other)
             }
         }
 
@@ -393,7 +452,7 @@ macro_rules! impl_math_op(
             type Output = MyComplex;
 
             fn $mth(self, other: Complex64) -> Self::Output {
-                MyComplex::from_real(self.clone()) $operator MyComplex::from_c64(other)
+                self $operator MyComplex::from_c64(other)
             }
         }
 
@@ -401,7 +460,7 @@ macro_rules! impl_math_op(
             type Output = MyComplex;
 
             fn $mth(self, other: &Complex64) -> Self::Output {
-                MyComplex::from_real(self) $operator MyComplex::from_c64(*other)
+                self $operator MyComplex::from_c64(*other)
             }
         }
 
@@ -409,7 +468,7 @@ macro_rules! impl_math_op(
             type Output = MyComplex;
 
             fn $mth(self, other: &Complex64) -> Self::Output {
-                MyComplex::from_real(self.clone()) $operator MyComplex::from_c64(*other)
+                self $operator MyComplex::from_c64(*other)
             }
         }
 
@@ -417,7 +476,7 @@ macro_rules! impl_math_op(
             type Output = MyComplex;
 
             fn $mth(self, other: MyFloat) -> Self::Output {
-                MyComplex::from_c64(self) $operator MyComplex::from_real(other)
+                MyComplex::from_c64(self) $operator other
             }
         }
 
@@ -425,7 +484,7 @@ macro_rules! impl_math_op(
             type Output = MyComplex;
 
             fn $mth(self, other: MyFloat) -> Self::Output {
-                MyComplex::from_c64(*self) $operator MyComplex::from_real(other)
+                MyComplex::from_c64(*self) $operator other
             }
         }
 
@@ -433,7 +492,7 @@ macro_rules! impl_math_op(
             type Output = MyComplex;
 
             fn $mth(self, other: &MyFloat) -> Self::Output {
-                MyComplex::from_c64(self) $operator MyComplex::from_real(other.clone())
+                MyComplex::from_c64(self) $operator other
             }
         }
 
@@ -441,7 +500,7 @@ macro_rules! impl_math_op(
             type Output = MyComplex;
 
             fn $mth(self, other: &MyFloat) -> Self::Output {
-                MyComplex::from_c64(*self) $operator MyComplex::from_real(other.clone())
+                MyComplex::from_c64(*self) $operator other
             }
         }
     );
@@ -582,22 +641,6 @@ impl Neg for &MyFloat {
     }
 }
 
-impl Inv for MyFloat {
-    type Output = MyFloat;
-
-    fn inv(self) -> Self::Output {
-        MyFloat(self.0.inv())
-    }
-}
-
-impl Inv for &MyFloat {
-    type Output = MyFloat;
-
-    fn inv(self) -> Self::Output {
-        MyFloat(self.0.inv())
-    }
-}
-
 // Implement Rem (modulo) operations
 impl Rem for MyFloat {
     type Output = MyFloat;
@@ -607,7 +650,10 @@ impl Rem for MyFloat {
             panic!("Division by zero in float remainder operation");
         }
 
-        MyFloat(self.0 % rhs.0)
+        let precision = self.0.prec().max(rhs.0.prec());
+        let mut result = Float::with_val(precision, &self.0);
+        result %= &rhs.0;
+        MyFloat(result)
     }
 }
 
@@ -619,7 +665,10 @@ impl Rem<&MyFloat> for &MyFloat {
             panic!("Division by zero in float remainder operation");
         }
 
-        MyFloat(self.0 % rhs.0)
+        let precision = self.0.prec().max(rhs.0.prec());
+        let mut result = Float::with_val(precision, &self.0);
+        result %= &rhs.0;
+        MyFloat(result)
     }
 }
 
@@ -647,7 +696,8 @@ impl Rem<f64> for MyFloat {
             panic!("Division by zero in float remainder operation");
         }
 
-        let rhs_float = TwoFloat::from(rhs);
+        let precision = self.0.prec();
+        let rhs_float = Float::with_val(precision, rhs);
         let rhs_wrapper = MyFloat(rhs_float);
         self % rhs_wrapper
     }
@@ -661,7 +711,8 @@ impl Rem<f64> for &MyFloat {
             panic!("Division by zero in float remainder operation");
         }
 
-        let rhs_float = TwoFloat::from(rhs);
+        let precision = self.0.prec();
+        let rhs_float = Float::with_val(precision, rhs);
         let rhs_wrapper = MyFloat(rhs_float);
         self % rhs_wrapper
     }
@@ -675,7 +726,10 @@ impl Rem<MyFloat> for f64 {
             panic!("Division by zero in float remainder operation");
         }
 
-        MyFloat(self % rhs.0)
+        let precision = rhs.0.prec();
+        let mut result = Float::with_val(precision, &self);
+        result %= &rhs.0;
+        MyFloat(result)
     }
 }
 
@@ -687,7 +741,10 @@ impl Rem<&MyFloat> for f64 {
             panic!("Division by zero in float remainder operation");
         }
 
-        MyFloat(self % rhs.0)
+        let precision = rhs.0.prec();
+        let mut result = Float::with_val(precision, &self);
+        result %= &rhs.0;
+        MyFloat(result)
     }
 }
 
@@ -715,7 +772,9 @@ impl Pow<MyFloat> for MyFloat {
     type Output = MyFloat;
 
     fn pow(self, exp: MyFloat) -> MyFloat {
-        MyFloat(self.0.pow(exp.0))
+        let mut temp = self.0;
+        temp.pow_assign(&exp.0);
+        MyFloat(temp)
     }
 }
 
@@ -723,7 +782,9 @@ impl Pow<&MyFloat> for MyFloat {
     type Output = MyFloat;
 
     fn pow(self, exp: &MyFloat) -> MyFloat {
-        MyFloat(self.0.pow(&exp.0))
+        let mut temp = self.0;
+        temp.pow_assign(&exp.0);
+        MyFloat(temp)
     }
 }
 
@@ -731,7 +792,9 @@ impl Pow<MyFloat> for &MyFloat {
     type Output = MyFloat;
 
     fn pow(self, exp: MyFloat) -> MyFloat {
-        MyFloat(self.0.pow(&exp.0))
+        let mut temp = self.0.clone();
+        temp.pow_assign(&exp.0);
+        MyFloat(temp)
     }
 }
 
@@ -739,7 +802,9 @@ impl Pow<&MyFloat> for &MyFloat {
     type Output = MyFloat;
 
     fn pow(self, exp: &MyFloat) -> MyFloat {
-        MyFloat(self.0.pow(&exp.0))
+        let mut temp = self.0.clone();
+        temp.pow_assign(&exp.0);
+        MyFloat(temp)
     }
 }
 
@@ -779,6 +844,33 @@ impl Pow<i32> for &MyFloat {
     }
 }
 
+// Implement PowAssign trait
+impl PowAssign<MyFloat> for MyFloat {
+    fn pow_assign(&mut self, exp: MyFloat) {
+        self.0.pow_assign(&exp.0);
+    }
+}
+
+impl PowAssign<&MyFloat> for MyFloat {
+    fn pow_assign(&mut self, exp: &MyFloat) {
+        self.0.pow_assign(&exp.0);
+    }
+}
+
+impl PowAssign<f64> for MyFloat {
+    fn pow_assign(&mut self, exp: f64) {
+        let exp_float = Float::with_val(Self::PRECISION, exp);
+        self.0.pow_assign(&exp_float);
+    }
+}
+
+impl PowAssign<i32> for MyFloat {
+    fn pow_assign(&mut self, exp: i32) {
+        let exp_float = Float::with_val(Self::PRECISION, exp);
+        self.0.pow_assign(&exp_float);
+    }
+}
+
 // Implement Num trait
 impl Zero for MyFloat {
     fn zero() -> Self {
@@ -811,41 +903,48 @@ impl NegOne for MyFloat {
 }
 
 impl Num for MyFloat {
-    type FromStrRadixErr = TwoFloatError;
+    type FromStrRadixErr = rug::float::ParseFloatError;
 
-    fn from_str_radix(_str: &str, _radix: u32) -> Result<Self, Self::FromStrRadixErr> {
-        Err(TwoFloatError::ParseError)
+    fn from_str_radix(str: &str, radix: u32) -> Result<Self, Self::FromStrRadixErr> {
+        let parsed = Float::parse_radix(str, radix as i32)?;
+        let with_precision = Float::with_val(Self::PRECISION, parsed);
+        Ok(MyFloat(with_precision))
     }
 }
 
 impl Signed for MyFloat {
     fn abs(&self) -> Self {
-        MyFloat(self.0.abs())
+        let mut temp = self.0.clone();
+        temp.abs_mut();
+        MyFloat(temp)
     }
 
     fn abs_sub(&self, other: &Self) -> Self {
-        let diff = self.0 - other.0;
-        if diff.is_sign_positive() {
-            MyFloat(diff)
+        if self > other {
+            self - other
         } else {
             MyFloat::zero()
         }
     }
 
     fn signum(&self) -> Self {
-        if self.0.is_zero() {
+        if self.0.is_nan() {
+            MyFloat::nan()
+        } else if self.0.is_zero() {
             MyFloat::zero()
+        } else if self.0.is_sign_positive() {
+            MyFloat::one()
         } else {
-            MyFloat(self.0.signum())
+            -MyFloat::one()
         }
     }
 
     fn is_positive(&self) -> bool {
-        !self.0.is_zero() && self.0.is_sign_positive()
+        self.0.is_sign_positive() && !self.0.is_zero()
     }
 
     fn is_negative(&self) -> bool {
-        !self.0.is_zero() && self.0.is_sign_negative()
+        self.0.is_sign_negative()
     }
 }
 
@@ -858,22 +957,23 @@ impl Clone for MyFloat {
 
 impl Default for MyFloat {
     fn default() -> Self {
-        MyFloat(TwoFloat::from(0.0))
+        MyFloat(Float::new(Self::PRECISION))
     }
 }
 
 impl fmt::Display for MyFloat {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)
+        // write!(f, "{}", self.to_f64())
     }
 }
 
-// impl fmt::Debug for MyFloat {
-//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-//         write!(f, "MyFloat({})", self.0)
-//         // write!(f, "{}", self.to_f64())
-//     }
-// }
+impl fmt::Debug for MyFloat {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "MyFloat({})", self.0)
+        // write!(f, "{}", self.to_f64())
+    }
+}
 
 // Implement PartialEq for comparisons
 impl PartialEq for MyFloat {
@@ -914,14 +1014,14 @@ impl From<&f64> for MyFloat {
     }
 }
 
-impl From<TwoFloat> for MyFloat {
-    fn from(value: TwoFloat) -> Self {
+impl From<Float> for MyFloat {
+    fn from(value: Float) -> Self {
         MyFloat(value)
     }
 }
 
-impl From<&TwoFloat> for MyFloat {
-    fn from(value: &TwoFloat) -> Self {
+impl From<&Float> for MyFloat {
+    fn from(value: &Float) -> Self {
         MyFloat(value.clone())
     }
 }
@@ -962,8 +1062,8 @@ impl From<&MyFloat> for f64 {
     }
 }
 
-impl From<MyFloat> for TwoFloat {
-    fn from(value: MyFloat) -> TwoFloat {
+impl From<MyFloat> for Float {
+    fn from(value: MyFloat) -> Float {
         value.to_float()
     }
 }
@@ -1033,9 +1133,11 @@ impl Not for &MyFloat {
 
 #[cfg(test)]
 mod myfloat_tests {
-    use super::*;
     use core::f64;
+
+    use super::*;
     use num_traits::{One, Zero};
+    use rug::ops::Pow;
 
     #[test]
     fn test_creation() {
@@ -1049,10 +1151,10 @@ mod myfloat_tests {
         assert_eq!(f3.to_f64(), 1.0);
 
         let f4 = MyFloat::new(f64::consts::PI).to_degrees();
-        assert!((f4.to_f64() - 180.0).abs() < 1e-10);
+        assert_eq!(f4.to_f64(), 180.0);
 
         let f5 = MyFloat::new(180.0).to_radians();
-        assert!((f5.to_f64() - f64::consts::PI).abs() < 1e-10);
+        assert_eq!(f5.to_f64(), f64::consts::PI);
     }
 
     #[test]
@@ -1198,6 +1300,31 @@ mod myfloat_tests {
     }
 
     #[test]
+    fn test_pow_assign_trait() {
+        // Test PowAssign with MyFloat exponent
+        let mut f1 = MyFloat::new(2.0);
+        let exp1 = MyFloat::new(4.0);
+        f1.pow_assign(exp1);
+        assert!((f1.to_f64() - 16.0).abs() < 1e-10);
+
+        // Test PowAssign with borrowed MyFloat exponent
+        let mut f2 = MyFloat::new(3.0);
+        let exp2 = MyFloat::new(3.0);
+        f2.pow_assign(&exp2);
+        assert!((f2.to_f64() - 27.0).abs() < 1e-10);
+
+        // Test PowAssign with f64 exponent
+        let mut f3 = MyFloat::new(25.0);
+        f3.pow_assign(0.5);
+        assert!((f3.to_f64() - 5.0).abs() < 1e-10);
+
+        // Test PowAssign with i32 exponent
+        let mut f4 = MyFloat::new(2.0);
+        f4.pow_assign(10i32);
+        assert!((f4.to_f64() - 1024.0).abs() < 1e-10);
+    }
+
+    #[test]
     fn test_zero_one_traits() {
         // Test Zero trait
         let zero = MyFloat::zero();
@@ -1294,9 +1421,15 @@ mod myfloat_tests {
 
     #[test]
     fn test_num_trait() {
-        // Test that from_str_radix returns an error (not implemented)
-        let parsed = MyFloat::from_str_radix("42", 10);
-        assert!(parsed.is_err());
+        // Test parsing from string
+        let parsed = MyFloat::from_str_radix("42", 10).unwrap();
+        assert_eq!(parsed.to_f64(), 42.0);
+
+        let parsed_hex = MyFloat::from_str_radix("ff", 16).unwrap();
+        assert_eq!(parsed_hex.to_f64(), 255.0);
+
+        let parsed_float = MyFloat::from_str_radix("3.14159", 10).unwrap();
+        assert!((parsed_float.to_f64() - 3.14159).abs() < 1e-5);
     }
 
     #[test]
@@ -1367,11 +1500,11 @@ mod myfloat_tests {
     fn test_display_and_debug() {
         let f = MyFloat::new(3.14159);
         let display_str = format!("{}", f);
-        assert!(display_str.contains("3.14159"));
+        assert!(display_str.contains("3.1415899999999999"));
 
         let debug_str = format!("{:?}", f);
         assert!(debug_str.contains("MyFloat"));
-        assert!(debug_str.contains("3.14159"));
+        assert!(debug_str.contains("3.1415899999999999"));
     }
 
     #[test]

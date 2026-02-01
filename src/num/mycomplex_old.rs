@@ -1,45 +1,53 @@
 use crate::num::MyFloat;
-use num_complex::{Complex, Complex64};
-use num_traits::{Num, One, Pow, Zero};
+use num::complex::Complex64;
+use num_traits::{Num, One, Zero};
+use rug::{
+    Complex, Float,
+    ops::{Pow, PowAssign},
+};
 use std::{
-    convert::From,
     fmt,
-    fmt::Debug,
     ops::{
         Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Not, Rem, RemAssign, Sub, SubAssign,
     },
 };
-use twofloat::{TwoFloat, TwoFloatError};
 
 /// A complex number wrapper with fixed precision of 53 bits
-#[derive(Debug)]
-pub struct MyComplex(Complex<TwoFloat>);
+pub struct MyComplex(rug::Complex);
 
 impl MyComplex {
+    /// Fixed precision for all operations
+    const PRECISION: u32 = 53;
+
     /// Create a new complex number from real and imaginary parts
     pub fn new(real: MyFloat, imag: MyFloat) -> Self {
-        MyComplex(Complex::new(real.into_inner(), imag.into_inner()))
+        MyComplex(Complex::with_val(
+            Self::PRECISION,
+            (real.into_inner(), imag.into_inner()),
+        ))
     }
 
     /// Create a new complex number from real and imaginary parts
     pub fn from_f64(real: f64, imag: f64) -> Self {
-        MyComplex(Complex::new(real.into(), imag.into()))
+        let real_float = Float::with_val(Self::PRECISION, real);
+        let imag_float = Float::with_val(Self::PRECISION, imag);
+        MyComplex(Complex::with_val(Self::PRECISION, (real_float, imag_float)))
     }
 
     /// Create a new complex number from a num::complex
     pub fn from_c64(num: Complex64) -> Self {
-        MyComplex(Complex::new(num.re.into(), num.im.into()))
+        MyComplex(Complex::with_val(Self::PRECISION, (num.re, num.im)))
     }
 
     /// Create a new complex number from a real number (imaginary part = 0)
     pub fn from_real(real: MyFloat) -> Self {
         // let real_float = Float::with_val(Self::PRECISION, real);
-        MyComplex(Complex::new(real.into_inner(), 0.0.into()))
+        MyComplex(Complex::with_val(Self::PRECISION, real.into_inner()))
     }
 
     /// Create a new complex number from an imaginary number (real part = 0)
     pub fn from_imag(imag: MyFloat) -> Self {
-        MyComplex(Complex::new(0.0.into(), imag.into_inner()))
+        MyComplex(Complex::with_val(Self::PRECISION, (0, imag.into_inner())))
     }
 
     /// Create a new complex number from a real number (imaginary part = 0)
@@ -64,60 +72,66 @@ impl MyComplex {
 
     /// Create a new complex number from real and imaginary parts
     pub fn from_tuple(num: &(MyFloat, MyFloat)) -> Self {
-        MyComplex(Complex::new(
-            num.0.clone().into_inner(),
-            num.1.clone().into_inner(),
+        MyComplex(Complex::with_val(
+            Self::PRECISION,
+            (num.0.clone().into_inner(), num.1.clone().into_inner()),
         ))
     }
 
     /// Create a new complex number from real and imaginary parts
     pub fn from_tuple_f64(num: (f64, f64)) -> Self {
-        MyComplex(Complex::new(num.0.into(), num.1.into()))
+        MyComplex(Complex::with_val(Self::PRECISION, num))
     }
 
     /// Get the real part as MyFloat
     pub fn re(&self) -> MyFloat {
-        self.real().clone()
+        MyFloat::from_float(self.0.real().clone())
     }
 
     /// Get the real part as MyFloat
     pub fn real(&self) -> MyFloat {
-        MyFloat::from(self.0.re)
+        MyFloat::from_float(self.0.real().clone())
     }
 
     /// Get the imaginary part as MyFloat
     pub fn im(&self) -> MyFloat {
-        self.imag().clone()
+        MyFloat::from_float(self.0.imag().clone())
     }
 
     /// Get the imaginary part as MyFloat
     pub fn imag(&self) -> MyFloat {
-        MyFloat::from(self.0.im)
+        MyFloat::from_float(self.0.imag().clone())
     }
 
     /// Get the magnitude (absolute value) of the complex number
     pub fn abs(&self) -> MyFloat {
-        MyFloat::from(self.0.norm())
+        let mut temp = self.0.clone();
+        temp.abs_mut();
+        temp.real().into()
     }
 
     /// Get the argument (phase angle) of the complex number
     pub fn arg(&self) -> MyFloat {
-        MyFloat::from(self.0.arg())
+        let mut temp = self.0.clone();
+        temp.arg_mut();
+        temp.real().into()
     }
 
     /// Get the complex conjugate
     pub fn conj(&self) -> Self {
-        MyComplex(self.0.conj())
+        let mut temp = self.0.clone();
+        temp.conj_mut();
+        MyComplex(temp)
     }
 
     /// Get the magnitude in dB of the complex number
     pub fn db(&self) -> MyFloat {
-        MyFloat::from(TwoFloat::from(20.0) * self.0.norm().log10())
+        20.0 * self.abs().log10()
     }
 
     /// Get the magnitude in dB of the complex number
     pub fn db10(&self) -> MyFloat {
-        MyFloat::from(TwoFloat::from(10.0) * self.0.norm().log10())
+        10.0 * self.abs().log10()
     }
 
     /// Calculate the square of the magnitude (norm squared)
@@ -127,77 +141,99 @@ impl MyComplex {
 
     /// Calculate the square of the magnitude (norm squared)
     pub fn norm_sqr(&self) -> MyFloat {
-        self.norm().square()
+        let mut temp = self.0.clone();
+        temp.norm_mut();
+        temp.real().into()
     }
 
     /// Calculate the square root
     pub fn sqrt(&self) -> Self {
-        MyComplex(self.0.sqrt())
+        let mut temp = self.0.clone();
+        temp.sqrt_mut();
+        MyComplex(temp)
     }
 
     /// Calculate the exponential function
     pub fn exp(&self) -> Self {
-        MyComplex(self.0.exp())
+        let mut temp = self.0.clone();
+        temp.exp_mut();
+        MyComplex(temp)
     }
 
     /// Calculate the natural logarithm
     pub fn ln(&self) -> Self {
-        MyComplex(self.0.ln())
+        let mut temp = self.0.clone();
+        temp.ln_mut();
+        MyComplex(temp)
     }
 
-    /// Calculate sine from self in radians
+    /// Calculate sine
     pub fn sin(&self) -> Self {
-        MyComplex(self.0.sin())
+        let mut temp = self.0.clone();
+        temp.sin_mut();
+        MyComplex(temp)
     }
 
-    /// Calculate cosine from self in radians
+    /// Calculate cosine
     pub fn cos(&self) -> Self {
-        MyComplex(self.0.cos())
+        let mut temp = self.0.clone();
+        temp.cos_mut();
+        MyComplex(temp)
     }
 
     /// Raise to a power
     pub fn pow(&self, exp: &MyComplex) -> Self {
-        MyComplex(self.0.pow(exp.0))
+        let mut temp = self.0.clone();
+        temp.pow_assign(&exp.0);
+        MyComplex(temp)
     }
 
     /// Access the inner rug::Complex (for advanced operations)
-    pub fn inner(&self) -> &Complex<TwoFloat> {
+    pub fn inner(&self) -> &rug::Complex {
         &self.0
     }
 
     /// Convert to inner rug::Complex (consuming self)
-    pub fn into_inner(self) -> Complex<TwoFloat> {
+    pub fn into_inner(self) -> rug::Complex {
         self.0
     }
 
     /// Create a NaN complex number
     pub fn nan() -> Self {
-        MyComplex(Complex::new(TwoFloat::NAN, TwoFloat::NAN))
+        let nan_float = Float::with_val(Self::PRECISION, f64::NAN);
+        MyComplex(Complex::with_val(
+            Self::PRECISION,
+            (nan_float.clone(), nan_float),
+        ))
     }
 
     /// Check if the complex number contains NaN
     pub fn is_nan(&self) -> bool {
-        self.real().is_nan() || self.imag().is_nan()
+        self.0.real().is_nan() || self.0.imag().is_nan()
     }
 
     /// Create an infinite complex number
     pub fn infinity() -> Self {
-        MyComplex(Complex::new(TwoFloat::INFINITY, TwoFloat::INFINITY))
+        let inf_float = Float::with_val(Self::PRECISION, f64::INFINITY);
+        MyComplex(Complex::with_val(
+            Self::PRECISION,
+            (inf_float.clone(), inf_float),
+        ))
     }
 
     /// Check if the complex number is infinite
     pub fn is_infinite(&self) -> bool {
-        self.real().is_infinite() || self.imag().is_infinite()
+        self.0.real().is_infinite() || self.0.imag().is_infinite()
     }
 
     /// Check if the complex number is finite
     pub fn is_finite(&self) -> bool {
-        self.real().is_finite() && self.imag().is_finite()
+        self.0.real().is_finite() && self.0.imag().is_finite()
     }
 
     /// Check if the complex number is normal (not zero, infinite, or NaN)
     pub fn is_normal(&self) -> bool {
-        self.real().is_normal() && self.imag().is_normal()
+        self.0.real().is_normal() && self.0.imag().is_normal()
     }
 }
 
@@ -239,71 +275,6 @@ macro_rules! impl_self_math_op(
 );
 
 macro_rules! impl_math_op(
-    ($trt:ident, $operator:tt, $mth:ident, f64) => (
-        impl $trt<f64> for MyComplex {
-            type Output = MyComplex;
-
-            fn $mth(self, other: f64) -> Self::Output {
-                self $operator MyComplex::from_real_f64(other)
-            }
-        }
-
-        impl $trt<f64> for &MyComplex {
-            type Output = MyComplex;
-
-            fn $mth(self, other: f64) -> Self::Output {
-                self $operator MyComplex::from_real_f64(other)
-            }
-        }
-
-        impl $trt<&f64> for MyComplex {
-            type Output = MyComplex;
-
-            fn $mth(self, other: &f64) -> Self::Output {
-                self $operator MyComplex::from_real_f64(*other)
-            }
-        }
-
-        impl $trt<&f64> for &MyComplex {
-            type Output = MyComplex;
-
-            fn $mth(self, other: &f64) -> Self::Output {
-                self $operator MyComplex::from_real_f64(*other)
-            }
-        }
-
-        impl $trt<MyComplex> for f64 {
-            type Output = MyComplex;
-
-            fn $mth(self, other: MyComplex) -> Self::Output {
-                MyComplex::from_real_f64(self) $operator other
-            }
-        }
-
-        impl $trt<MyComplex> for &f64 {
-            type Output = MyComplex;
-
-            fn $mth(self, other: MyComplex) -> Self::Output {
-                MyComplex::from_real_f64(*self) $operator other
-            }
-        }
-
-        impl $trt<&MyComplex> for f64 {
-            type Output = MyComplex;
-
-            fn $mth(self, other: &MyComplex) -> Self::Output {
-                MyComplex::from_real_f64(self) $operator other
-            }
-        }
-
-        impl $trt<&MyComplex> for &f64 {
-            type Output = MyComplex;
-
-            fn $mth(self, other: &MyComplex) -> Self::Output {
-                MyComplex::from_real_f64(*self) $operator other
-            }
-        }
-    );
     ($trt:ident, $operator:tt, $mth:ident, Complex64) => (
         impl $trt<Complex64> for MyComplex {
             type Output = MyComplex;
@@ -374,7 +345,7 @@ macro_rules! impl_math_op(
             type Output = MyComplex;
 
             fn $mth(self, other: MyFloat) -> Self::Output {
-                MyComplex(self.0 $operator other.inner())
+                MyComplex(self.0.clone() $operator other.inner())
             }
         }
 
@@ -382,7 +353,7 @@ macro_rules! impl_math_op(
             type Output = MyComplex;
 
             fn $mth(self, other: MyFloat) -> Self::Output {
-                MyComplex(self.0 $operator other.inner())
+                MyComplex(self.0.clone() $operator other.inner())
             }
         }
 
@@ -390,7 +361,7 @@ macro_rules! impl_math_op(
             type Output = MyComplex;
 
             fn $mth(self, other: &MyFloat) -> Self::Output {
-                MyComplex(self.0 $operator other.inner())
+                MyComplex(self.0.clone() $operator other.inner())
             }
         }
 
@@ -398,7 +369,7 @@ macro_rules! impl_math_op(
             type Output = MyComplex;
 
             fn $mth(self, other: &MyFloat) -> Self::Output {
-                MyComplex(self.0 $operator other.inner())
+                MyComplex(self.0.clone() $operator other.inner())
             }
         }
 
@@ -406,7 +377,7 @@ macro_rules! impl_math_op(
             type Output = MyComplex;
 
             fn $mth(self, other: MyComplex) -> Self::Output {
-                MyComplex::from_real(self) $operator other
+                MyComplex(self.inner() $operator other.0)
             }
         }
 
@@ -414,7 +385,7 @@ macro_rules! impl_math_op(
             type Output = MyComplex;
 
             fn $mth(self, other: MyComplex) -> Self::Output {
-                MyComplex::from_real(self.clone()) $operator other
+                MyComplex(self.inner() $operator other.0.clone())
             }
         }
 
@@ -422,7 +393,7 @@ macro_rules! impl_math_op(
             type Output = MyComplex;
 
             fn $mth(self, other: &MyComplex) -> Self::Output {
-                MyComplex::from_real(self) $operator other
+                MyComplex(self.inner() $operator other.0.clone())
             }
         }
 
@@ -430,7 +401,7 @@ macro_rules! impl_math_op(
             type Output = MyComplex;
 
             fn $mth(self, other: &MyComplex) -> Self::Output {
-                MyComplex::from_real(self.clone()) $operator other
+                MyComplex(self.inner() $operator other.0.clone())
             }
         }
     );
@@ -439,7 +410,7 @@ macro_rules! impl_math_op(
             type Output = MyComplex;
 
             fn $mth(self, other: $rhs) -> Self::Output {
-                MyComplex(self.0 $operator other)
+                MyComplex(self.0.clone() $operator other)
             }
         }
 
@@ -447,7 +418,7 @@ macro_rules! impl_math_op(
             type Output = MyComplex;
 
             fn $mth(self, other: $rhs) -> Self::Output {
-                MyComplex(self.0 $operator other)
+                MyComplex(self.0.clone() $operator other)
             }
         }
 
@@ -463,7 +434,7 @@ macro_rules! impl_math_op(
             type Output = MyComplex;
 
             fn $mth(self, other: &$rhs) -> Self::Output {
-                MyComplex(self.0 $operator *other)
+                MyComplex(self.0.clone() $operator *other)
             }
         }
 
@@ -479,7 +450,7 @@ macro_rules! impl_math_op(
             type Output = MyComplex;
 
             fn $mth(self, other: MyComplex) -> Self::Output {
-                MyComplex(self $operator other.0)
+                MyComplex(self $operator other.0.clone())
             }
         }
 
@@ -487,7 +458,7 @@ macro_rules! impl_math_op(
             type Output = MyComplex;
 
             fn $mth(self, other: &MyComplex) -> Self::Output {
-                MyComplex(self $operator other.0)
+                MyComplex(self $operator other.0.clone())
             }
         }
 
@@ -495,7 +466,7 @@ macro_rules! impl_math_op(
             type Output = MyComplex;
 
             fn $mth(self, other: &MyComplex) -> Self::Output {
-                MyComplex(*self $operator other.0)
+                MyComplex(*self $operator other.0.clone())
             }
         }
     );
@@ -614,7 +585,9 @@ impl Pow<MyComplex> for MyComplex {
     type Output = MyComplex;
 
     fn pow(self, exp: MyComplex) -> MyComplex {
-        MyComplex(self.0.pow(exp.0))
+        let mut temp = self.0;
+        temp.pow_assign(&exp.0);
+        MyComplex(temp)
     }
 }
 
@@ -622,7 +595,9 @@ impl Pow<&MyComplex> for MyComplex {
     type Output = MyComplex;
 
     fn pow(self, exp: &MyComplex) -> MyComplex {
-        MyComplex(self.0.pow(exp.0))
+        let mut temp = self.0;
+        temp.pow_assign(&exp.0);
+        MyComplex(temp)
     }
 }
 
@@ -630,7 +605,9 @@ impl Pow<MyComplex> for &MyComplex {
     type Output = MyComplex;
 
     fn pow(self, exp: MyComplex) -> MyComplex {
-        MyComplex(self.0.pow(exp.0))
+        let mut temp = self.0.clone();
+        temp.pow_assign(&exp.0);
+        MyComplex(temp)
     }
 }
 
@@ -638,7 +615,9 @@ impl Pow<&MyComplex> for &MyComplex {
     type Output = MyComplex;
 
     fn pow(self, exp: &MyComplex) -> MyComplex {
-        MyComplex(self.0.pow(exp.0))
+        let mut temp = self.0.clone();
+        temp.pow_assign(&exp.0);
+        MyComplex(temp)
     }
 }
 
@@ -679,6 +658,33 @@ impl Pow<i32> for &MyComplex {
     }
 }
 
+// Implement PowAssign trait
+impl PowAssign<MyComplex> for MyComplex {
+    fn pow_assign(&mut self, exp: MyComplex) {
+        self.0.pow_assign(&exp.0);
+    }
+}
+
+impl PowAssign<&MyComplex> for MyComplex {
+    fn pow_assign(&mut self, exp: &MyComplex) {
+        self.0.pow_assign(&exp.0);
+    }
+}
+
+impl PowAssign<f64> for MyComplex {
+    fn pow_assign(&mut self, exp: f64) {
+        let exp_complex = Complex::with_val(Self::PRECISION, exp);
+        self.0.pow_assign(&exp_complex);
+    }
+}
+
+impl PowAssign<i32> for MyComplex {
+    fn pow_assign(&mut self, exp: i32) {
+        let exp_complex = Complex::with_val(Self::PRECISION, exp);
+        self.0.pow_assign(&exp_complex);
+    }
+}
+
 // Implement Zero trait
 impl Zero for MyComplex {
     fn zero() -> Self {
@@ -686,7 +692,7 @@ impl Zero for MyComplex {
     }
 
     fn is_zero(&self) -> bool {
-        self.real().is_zero() && self.imag().is_zero()
+        self.0.real().is_zero() && self.0.imag().is_zero()
     }
 }
 
@@ -713,21 +719,29 @@ impl Rem for MyComplex {
             panic!("Division by zero in complex remainder operation");
         }
 
+        // Get the precision from the operands
+        let precision = self.0.prec().max(rhs.0.prec());
+
         // Calculate a / b
-        let division = self.0 / rhs.0;
+        let mut division = Complex::with_val(precision, &self.0);
+        division /= &rhs.0;
 
         // Floor both real and imaginary parts
-        let real_floor = division.re.floor();
-        let imag_floor = division.im.floor();
+        let real_floor = division.real().to_f64().floor();
+        let imag_floor = division.imag().to_f64().floor();
 
         // Create the floored quotient
-        let floored_quotient = Complex::new(real_floor, imag_floor);
+        let floored_quotient = Complex::with_val(precision, (real_floor, imag_floor));
 
         // Calculate b * floor(a / b)
-        let product = rhs.0 * floored_quotient;
+        let mut product = Complex::with_val(precision, &rhs.0);
+        product *= &floored_quotient;
 
         // Calculate a - b * floor(a / b)
-        MyComplex(self.0 - product)
+        let mut result = Complex::with_val(precision, &self.0);
+        result -= &product;
+
+        MyComplex(result)
     }
 }
 
@@ -740,16 +754,23 @@ impl Rem<&MyComplex> for &MyComplex {
             panic!("Division by zero in complex remainder operation");
         }
 
-        let division = self.0 / rhs.0;
+        let precision = self.0.prec().max(rhs.0.prec());
 
-        let real_floor = division.re.floor();
-        let imag_floor = division.im.floor();
+        let mut division = Complex::with_val(precision, &self.0);
+        division /= &rhs.0;
 
-        let floored_quotient = Complex::new(real_floor, imag_floor);
+        let real_floor = division.real().to_f64().floor();
+        let imag_floor = division.imag().to_f64().floor();
 
-        let product = rhs.0 * floored_quotient;
+        let floored_quotient = Complex::with_val(precision, (real_floor, imag_floor));
 
-        MyComplex(self.0 - product)
+        let mut product = Complex::with_val(precision, &rhs.0);
+        product *= &floored_quotient;
+
+        let mut result = Complex::with_val(precision, &self.0);
+        result -= &product;
+
+        MyComplex(result)
     }
 }
 
@@ -793,7 +814,11 @@ impl Rem<f64> for MyComplex {
             panic!("Division by zero in complex remainder operation");
         }
 
-        MyComplex(self.0 % TwoFloat::from(rhs))
+        let precision = self.0.prec();
+        let rhs_complex = Complex::with_val(precision, rhs);
+        let rhs_wrapper = MyComplex(rhs_complex);
+
+        self % rhs_wrapper
     }
 }
 
@@ -805,10 +830,17 @@ impl RemAssign<f64> for MyComplex {
 
 // Implement Num trait (requires Zero + One + PartialEq + Clone + arithmetic ops)
 impl Num for MyComplex {
-    type FromStrRadixErr = TwoFloatError;
+    type FromStrRadixErr = rug::float::ParseFloatError;
 
-    fn from_str_radix(_str: &str, _radix: u32) -> Result<Self, Self::FromStrRadixErr> {
-        Err(TwoFloatError::ParseError)
+    fn from_str_radix(str: &str, radix: u32) -> Result<Self, Self::FromStrRadixErr> {
+        // Simple implementation - parse as real number only
+        // For full complex parsing, you'd need a more sophisticated parser
+        let real = Float::parse_radix(str, radix as i32)?;
+        let real_with_precision = Float::with_val(Self::PRECISION, real);
+        Ok(MyComplex(Complex::with_val(
+            Self::PRECISION,
+            real_with_precision,
+        )))
     }
 }
 
@@ -846,7 +878,7 @@ impl Clone for MyComplex {
 
 impl Default for MyComplex {
     fn default() -> Self {
-        MyComplex(Complex::new(0.0.into(), 0.0.into()))
+        MyComplex(Complex::new(53)) // Creates 0 + 0i with 53-bit precision (standard f64 precision)
     }
 }
 
@@ -876,6 +908,12 @@ impl fmt::Display for MyComplex {
                 write!(f, "{} - {}i", real, -imag)
             }
         }
+    }
+}
+
+impl fmt::Debug for MyComplex {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "MyComplex({} + {}i)", self.real(), self.imag())
     }
 }
 
@@ -963,6 +1001,7 @@ impl<'a> std::iter::Sum<&'a MyComplex> for MyComplex {
 
 #[cfg(test)]
 mod mycomplex_tests {
+
     use super::*;
     use core::f64;
     use float_cmp::*;
@@ -1080,6 +1119,35 @@ mod mycomplex_tests {
     }
 
     #[test]
+    fn test_pow_assign_trait() {
+        // Test PowAssign with MyComplex exponent
+        let mut z1 = MyComplex::from_f64(2.0, 0.0);
+        let exp1 = MyComplex::from_f64(3.0, 0.0);
+        z1.pow_assign(exp1);
+        assert!((z1.real() - 8.0).abs() < MyFloat::new(1e-10)); // 2^3 = 8
+        assert!(z1.imag().abs() < MyFloat::new(1e-10));
+
+        // Test PowAssign with borrowed MyComplex exponent
+        let mut z2 = MyComplex::from_f64(3.0, 0.0);
+        let exp2 = MyComplex::from_f64(2.0, 0.0);
+        z2.pow_assign(&exp2);
+        assert!((z2.real() - 9.0).abs() < MyFloat::new(1e-10)); // 3^2 = 9
+        assert!(z2.imag().abs() < MyFloat::new(1e-10));
+
+        // Test PowAssign with f64 exponent
+        let mut z3 = MyComplex::from_f64(16.0, 0.0);
+        z3.pow_assign(0.25); // Fourth root
+        assert!((z3.real() - 2.0).abs() < MyFloat::new(1e-10));
+        assert!(z3.imag().abs() < MyFloat::new(1e-10));
+
+        // Test PowAssign with i32 exponent
+        let mut z4 = MyComplex::from_f64(5.0, 0.0);
+        z4.pow_assign(2i32);
+        assert!((z4.real() - 25.0).abs() < MyFloat::new(1e-10)); // 5^2 = 25
+        assert!(z4.imag().abs() < MyFloat::new(1e-10));
+    }
+
+    #[test]
     fn test_zero_one_traits() {
         use num_traits::{One, Zero};
 
@@ -1131,9 +1199,14 @@ mod mycomplex_tests {
     fn test_num_trait() {
         use num_traits::Num;
 
-        // Test that from_str_radix returns an error (not implemented)
-        let parsed = MyComplex::from_str_radix("42", 10);
-        assert!(parsed.is_err());
+        // Test parsing from string
+        let parsed = MyComplex::from_str_radix("42", 10).unwrap();
+        assert_eq!(parsed.real(), MyFloat::new(42.0));
+        assert_eq!(parsed.imag(), MyFloat::new(0.0));
+
+        let parsed_hex = MyComplex::from_str_radix("ff", 16).unwrap();
+        assert_eq!(parsed_hex.real(), MyFloat::new(255.0));
+        assert_eq!(parsed_hex.imag(), MyFloat::new(0.0));
     }
 
     #[test]

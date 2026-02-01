@@ -1,11 +1,13 @@
 #![allow(dead_code)]
-use num::complex::{Complex, Complex64};
+use num_complex::{Complex, Complex64};
 use std::fmt;
 
+// pub mod mycomplex;
 pub mod mycomplex;
 pub mod myfloat;
 
-pub use self::{mycomplex::MyComplex, myfloat::MyFloat};
+pub use self::mycomplex::MyComplex;
+pub use self::myfloat::MyFloat;
 
 pub trait RFNum:
     Sized

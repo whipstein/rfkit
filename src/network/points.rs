@@ -1022,7 +1022,7 @@ impl NetworkPoint<MyComplex, Ix3> for Points<MyComplex, Ix3> {
             (npoints, nports, nports).into_dimension(),
             |(i, j, k)| {
                 MyComplex::from_polar(
-                    &MyFloat::new(10_f64).pow(&data[i][j * nports + k].0 / 20.0),
+                    &MyFloat::new(10_f64).pow(&(&data[i][j * nports + k].0 / 20.0)),
                     &MyFloat::to_radians(&data[i][j * nports + k].1),
                 )
             },
