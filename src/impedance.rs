@@ -506,11 +506,14 @@ impl ImpedanceBuilder {
     }
 
     pub fn freq_val_scaled(mut self, freq: f64, scale: Scale) -> Self {
-        self.freq = UnitValBuilder::new().val_scaled(freq, scale).build();
+        self.freq = UnitValBuilder::new()
+            .val_scaled(freq, scale)
+            .unit(Unit::Hz)
+            .build();
         self
     }
 
-    pub fn build(mut self) -> Impedance {
+    pub fn build(self) -> Impedance {
         match self.kind {
             ImpedanceType::Gamma => {
                 let g = match (self.category, self.mag, self.ang) {
@@ -522,7 +525,6 @@ impl ImpedanceBuilder {
                     _ => self.ri,
                 };
                 let z = gamma_to_z(g, self.z0);
-                self = self.c_scale(Scale::Femto);
                 let (rp, cp) = z_to_rpcp(z, &self.freq);
                 let (rs, cs) = z_to_rscs(z, &self.freq);
                 Impedance {
@@ -530,17 +532,32 @@ impl ImpedanceBuilder {
                     y: 1.0 / z,
                     z,
                     g,
-                    rp: UnitValBuilder::new().val(rp).scale(self.rp.scale()).build(),
-                    cp: UnitValBuilder::new().val(cp).scale(self.cp.scale()).build(),
-                    rs: UnitValBuilder::new().val(rs).scale(self.rs.scale()).build(),
-                    cs: UnitValBuilder::new().val(cs).scale(self.cs.scale()).build(),
+                    rp: UnitValBuilder::new()
+                        .val(rp)
+                        .scale(self.rp.scale())
+                        .unit(Unit::Ohm)
+                        .build(),
+                    cp: UnitValBuilder::new()
+                        .val(cp)
+                        .scale(self.cp.scale())
+                        .unit(Unit::Farad)
+                        .build(),
+                    rs: UnitValBuilder::new()
+                        .val(rs)
+                        .scale(self.rs.scale())
+                        .unit(Unit::Ohm)
+                        .build(),
+                    cs: UnitValBuilder::new()
+                        .val(cs)
+                        .scale(self.cs.scale())
+                        .unit(Unit::Farad)
+                        .build(),
                     z0: self.z0,
                     freq: self.freq,
                 }
             }
             ImpedanceType::Y => {
                 let z = 1.0 / self.ri;
-                self = self.c_scale(Scale::Femto);
                 let (rp, cp) = z_to_rpcp(z, &self.freq);
                 let (rs, cs) = z_to_rscs(z, &self.freq);
                 Impedance {
@@ -548,16 +565,31 @@ impl ImpedanceBuilder {
                     y: self.ri,
                     z,
                     g: z_to_gamma(z, self.z0),
-                    rp: UnitValBuilder::new().val(rp).scale(self.rp.scale()).build(),
-                    cp: UnitValBuilder::new().val(cp).scale(self.cp.scale()).build(),
-                    rs: UnitValBuilder::new().val(rs).scale(self.rs.scale()).build(),
-                    cs: UnitValBuilder::new().val(cs).scale(self.cs.scale()).build(),
+                    rp: UnitValBuilder::new()
+                        .val(rp)
+                        .scale(self.rp.scale())
+                        .unit(Unit::Ohm)
+                        .build(),
+                    cp: UnitValBuilder::new()
+                        .val(cp)
+                        .scale(self.cp.scale())
+                        .unit(Unit::Farad)
+                        .build(),
+                    rs: UnitValBuilder::new()
+                        .val(rs)
+                        .scale(self.rs.scale())
+                        .unit(Unit::Ohm)
+                        .build(),
+                    cs: UnitValBuilder::new()
+                        .val(cs)
+                        .scale(self.cs.scale())
+                        .unit(Unit::Farad)
+                        .build(),
                     z0: self.z0,
                     freq: self.freq,
                 }
             }
             ImpedanceType::Z => {
-                self = self.c_scale(Scale::Femto);
                 let (rp, cp) = z_to_rpcp(self.ri, &self.freq);
                 let (rs, cs) = z_to_rscs(self.ri, &self.freq);
                 Impedance {
@@ -565,10 +597,26 @@ impl ImpedanceBuilder {
                     y: 1.0 / self.ri,
                     z: self.ri,
                     g: z_to_gamma(self.ri, self.z0),
-                    rp: UnitValBuilder::new().val(rp).scale(self.rp.scale()).build(),
-                    cp: UnitValBuilder::new().val(cp).scale(self.cp.scale()).build(),
-                    rs: UnitValBuilder::new().val(rs).scale(self.rs.scale()).build(),
-                    cs: UnitValBuilder::new().val(cs).scale(self.cs.scale()).build(),
+                    rp: UnitValBuilder::new()
+                        .val(rp)
+                        .scale(self.rp.scale())
+                        .unit(Unit::Ohm)
+                        .build(),
+                    cp: UnitValBuilder::new()
+                        .val(cp)
+                        .scale(self.cp.scale())
+                        .unit(Unit::Farad)
+                        .build(),
+                    rs: UnitValBuilder::new()
+                        .val(rs)
+                        .scale(self.rs.scale())
+                        .unit(Unit::Ohm)
+                        .build(),
+                    cs: UnitValBuilder::new()
+                        .val(cs)
+                        .scale(self.cs.scale())
+                        .unit(Unit::Farad)
+                        .build(),
                     z0: self.z0,
                     freq: self.freq,
                 }
@@ -584,8 +632,16 @@ impl ImpedanceBuilder {
                     g,
                     rp: self.rp,
                     cp: self.cp,
-                    rs: UnitValBuilder::new().val(rs).scale(self.rp.scale()).build(),
-                    cs: UnitValBuilder::new().val(cs).scale(self.cp.scale()).build(),
+                    rs: UnitValBuilder::new()
+                        .val(rs)
+                        .scale(self.rp.scale())
+                        .unit(Unit::Ohm)
+                        .build(),
+                    cs: UnitValBuilder::new()
+                        .val(cs)
+                        .scale(self.cp.scale())
+                        .unit(Unit::Farad)
+                        .build(),
                     z0: self.z0,
                     freq: self.freq,
                 }
@@ -598,8 +654,16 @@ impl ImpedanceBuilder {
                     y: 1.0 / z,
                     z,
                     g: z_to_gamma(z, self.z0),
-                    rp: UnitValBuilder::new().val(rp).scale(self.rs.scale()).build(),
-                    cp: UnitValBuilder::new().val(cp).scale(self.cs.scale()).build(),
+                    rp: UnitValBuilder::new()
+                        .val(rp)
+                        .scale(self.rs.scale())
+                        .unit(Unit::Ohm)
+                        .build(),
+                    cp: UnitValBuilder::new()
+                        .val(cp)
+                        .scale(self.cs.scale())
+                        .unit(Unit::Farad)
+                        .build(),
                     rs: self.rs,
                     cs: self.cs,
                     z0: self.z0,
@@ -1208,6 +1272,7 @@ mod impedance_tests {
                     .ri(c64(-0.035651518955561144, -0.21968365553602814))
                     .z0(50.0)
                     .freq(UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz))
+                    .c_scale(Scale::Femto)
                     .build();
                 comp_impedance(
                     &Impedance {
@@ -1233,6 +1298,7 @@ mod impedance_tests {
                     .mag(0.0)
                     .z0(50.0)
                     .freq(UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz))
+                    .c_scale(Scale::Femto)
                     .build();
                 comp_impedance(
                     &Impedance {
@@ -1261,6 +1327,7 @@ mod impedance_tests {
                     .ri(c64(-0.035651518955561144, -0.21968365553602814))
                     .z0(100.0)
                     .freq(UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz))
+                    .c_scale(Scale::Femto)
                     .build();
                 comp_impedance(
                     &Impedance {
@@ -1289,6 +1356,7 @@ mod impedance_tests {
                     .y(-0.21968365553602814)
                     .z0(50.0)
                     .freq(UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz))
+                    .c_scale(Scale::Femto)
                     .build();
                 comp_impedance(
                     &Impedance {
@@ -1317,6 +1385,7 @@ mod impedance_tests {
                     .ang(-99.21792403733895)
                     .z0(50.0)
                     .freq(UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz))
+                    .c_scale(Scale::Femto)
                     .build();
                 comp_impedance(
                     &Impedance {
@@ -1343,6 +1412,7 @@ mod impedance_tests {
                     .ang(-99.21792403733895)
                     .z0(50.0)
                     .freq(UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz))
+                    .c_scale(Scale::Femto)
                     .build();
                 comp_impedance(
                     &Impedance {
@@ -1370,6 +1440,7 @@ mod impedance_tests {
                     .ri(c64(-0.035651518955561144, -0.21968365553602814))
                     .z0(50.0)
                     .freq(UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz))
+                    .c_scale(Scale::Femto)
                     .build();
                 comp_impedance(
                     &Impedance {
@@ -1396,6 +1467,7 @@ mod impedance_tests {
                     .ang(-99.21792403733895)
                     .z0(50.0)
                     .freq(UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz))
+                    .c_scale(Scale::Femto)
                     .build();
                 comp_impedance(
                     &Impedance {
@@ -1422,6 +1494,7 @@ mod impedance_tests {
                     .y(-99.21792403733895)
                     .z0(50.0)
                     .freq(UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz))
+                    .c_scale(Scale::Femto)
                     .build();
                 comp_impedance(
                     &Impedance {
@@ -1450,6 +1523,7 @@ mod impedance_tests {
                     .ang(-99.21792403733895)
                     .z0(50.0)
                     .freq(UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz))
+                    .c_scale(Scale::Femto)
                     .build();
                 comp_impedance(
                     &Impedance {
@@ -1481,6 +1555,7 @@ mod impedance_tests {
                     .ri(c64(0.01943242648676395, 0.008982914130673902))
                     .z0(50.0)
                     .freq(UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz))
+                    .c_scale(Scale::Femto)
                     .build();
                 comp_impedance(
                     &Impedance {
@@ -1509,6 +1584,7 @@ mod impedance_tests {
                     .ri(c64(0.009716213243381976, 0.004491457065336951))
                     .z0(100.0)
                     .freq(UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz))
+                    .c_scale(Scale::Femto)
                     .build();
                 comp_impedance(
                     &Impedance {
@@ -1537,6 +1613,7 @@ mod impedance_tests {
                     .y(0.008982914130673902)
                     .z0(50.0)
                     .freq(UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz))
+                    .c_scale(Scale::Femto)
                     .build();
                 comp_impedance(
                     &Impedance {
@@ -1568,6 +1645,7 @@ mod impedance_tests {
                     .ri(c64(42.4, -19.6))
                     .z0(50.0)
                     .freq(UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz))
+                    .c_scale(Scale::Femto)
                     .build();
                 comp_impedance(
                     &Impedance {
@@ -1596,6 +1674,7 @@ mod impedance_tests {
                     .ri(c64(84.8, -39.2))
                     .z0(100.0)
                     .freq(UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz))
+                    .c_scale(Scale::Femto)
                     .build();
                 comp_impedance(
                     &Impedance {
@@ -1624,6 +1703,7 @@ mod impedance_tests {
                     .y(-19.6)
                     .z0(50.0)
                     .freq(UnitValue::new_scaled(280.0, Scale::Giga, Unit::Hz))
+                    .c_scale(Scale::Femto)
                     .build();
                 comp_impedance(
                     &Impedance {

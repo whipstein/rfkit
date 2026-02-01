@@ -15,21 +15,70 @@ pub struct ConjGradResult<T>
 where
     T: RFFloat,
 {
-    pub xmin: Points1<T>,
-    pub fmin: T,
-    pub gradient_norm: T,
-    pub iters: usize,
-    pub fn_evals: usize,
-    pub g_evals: usize,
-    pub converged: bool,
-    pub convergence_history: Points1<T>,
-    pub gradient_norm_history: Points1<T>,
-    pub restart_count: usize,
-    pub method_used: String,
+    xmin: Points1<T>,
+    fmin: T,
+    gradient_norm: T,
+    iters: usize,
+    fn_evals: usize,
+    g_evals: usize,
+    converged: bool,
+    convergence_history: Points1<T>,
+    gradient_norm_history: Points1<T>,
+    restart_count: usize,
+    method_used: ConjGradMethod,
+}
+
+impl<T> ConjGradResult<T>
+where
+    T: RFFloat,
+{
+    pub fn xmin(&self) -> Points1<T> {
+        self.xmin.clone()
+    }
+
+    pub fn fmin(&self) -> T {
+        self.fmin.clone()
+    }
+
+    pub fn gradient_norm(&self) -> T {
+        self.gradient_norm.clone()
+    }
+
+    pub fn iters(&self) -> usize {
+        self.iters
+    }
+
+    pub fn fn_evals(&self) -> usize {
+        self.fn_evals
+    }
+
+    pub fn g_evals(&self) -> usize {
+        self.g_evals
+    }
+
+    pub fn converged(&self) -> bool {
+        self.converged
+    }
+
+    pub fn history(&self) -> Points1<T> {
+        self.convergence_history.clone()
+    }
+
+    pub fn grad_norm_history(&self) -> Points1<T> {
+        self.gradient_norm_history.clone()
+    }
+
+    pub fn restarts(&self) -> usize {
+        self.restart_count
+    }
+
+    pub fn method(&self) -> ConjGradMethod {
+        self.method_used
+    }
 }
 
 /// Conjugate gradient update formulas
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ConjGradMethod {
     FletcherReeves,  // β = ||g_new||² / ||g_old||²
     PolakRibiere,    // β = g_new·(g_new - g_old) / ||g_old||²
@@ -617,7 +666,7 @@ where
             convergence_history: Points1::from_vec(convergence_history),
             gradient_norm_history: Points1::from_vec(gradient_norm_history),
             restart_count,
-            method_used: format!("{}", method),
+            method_used: method,
         })
     }
 
@@ -1295,7 +1344,7 @@ mod minimize_conjgrad_tests {
                     method,
                     &result.xmin[1]
                 );
-                assert_eq!(result.method_used, format!("{}", method));
+                assert_eq!(result.method_used, method);
             }
         }
 
@@ -1317,7 +1366,7 @@ mod minimize_conjgrad_tests {
             assert!(result.converged);
             assert!((&result.xmin[0] - 1.0).abs() < 1e-6);
             assert!((&result.xmin[1] + 1.0).abs() < 1e-6);
-            assert_eq!(result.method_used, "Fletcher-Reeves");
+            assert_eq!(result.method_used, ConjGradMethod::FletcherReeves);
         }
 
         #[test]
@@ -1338,7 +1387,7 @@ mod minimize_conjgrad_tests {
             assert!(result.converged);
             assert!(result.xmin[0].abs() < 1e-6);
             assert!(result.xmin[1].abs() < 1e-6);
-            assert_eq!(result.method_used, "Polak-Ribiere");
+            assert_eq!(result.method_used, ConjGradMethod::PolakRibiere);
         }
 
         #[test]
@@ -1640,7 +1689,6 @@ mod minimize_conjgrad_tests {
             assert!(result.converged);
             assert!(!result.convergence_history.is_empty());
             assert!(!result.gradient_norm_history.is_empty());
-            assert!(!result.method_used.is_empty());
         }
 
         #[test]

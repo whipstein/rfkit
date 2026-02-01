@@ -9,11 +9,6 @@ use num::complex::Complex64;
 use num_traits::{One, Zero};
 use std::fmt;
 
-// pub mod c64;
-// pub mod f64;
-// pub mod mycomplex;
-// pub mod myfloat;
-
 /// A matrix wrapper around ndarray::Array2 with T elements
 impl<T> Points<T, Ix2>
 where
@@ -64,6 +59,15 @@ where
         }
 
         matrix
+    }
+
+    pub fn to_vec(&self) -> Vec<Vec<T>> {
+        let mut out: Vec<Vec<T>> = vec![];
+        for row in self.outer_iter() {
+            out.push(row.to_vec());
+        }
+
+        out
     }
 }
 
@@ -219,6 +223,10 @@ where
         Ok(matrix)
     }
 
+    fn from_elem(shape: impl IntoDimension<Dim = Ix2>, elem: T) -> Self {
+        Points(Array2::from_elem(shape, elem))
+    }
+
     fn from_shape_fn<F>(shape: impl IntoDimension<Dim = Dim<[usize; 2]>>, f: F) -> Self
     where
         F: Fn((usize, usize)) -> T,
@@ -306,7 +314,7 @@ where
     }
 
     /// Get and set outer axis point
-    fn pt<I>(&self, index: usize) -> ndarray::ArrayView<'_, T, I::OutDim>
+    fn pt<I>(&self, index: usize) -> Points<T, I::OutDim>
     where
         I: SliceArg<Ix2, OutDim = Dim<[usize; 1]>>,
     {
@@ -318,10 +326,10 @@ where
             );
         }
 
-        self.slice(s![index, ..])
+        Points(self.slice(s![index, ..]).to_owned())
     }
 
-    fn pt_mut<I>(&mut self, index: usize) -> ndarray::ArrayViewMut<'_, T, I::OutDim>
+    fn pt_mut<I>(&mut self, index: usize) -> Points<T, I::OutDim>
     where
         I: SliceArg<Ix2, OutDim = Dim<[usize; 1]>>,
     {
@@ -333,7 +341,7 @@ where
             );
         }
 
-        self.slice_mut(s![index, ..])
+        Points(self.slice_mut(s![index, ..]).to_owned())
     }
 
     fn set_pt(&mut self, index: usize, pt: Points<T, Ix1>) {
@@ -355,6 +363,10 @@ where
         for k in 0..self.ncols() {
             self[[index, k]] = pt[k].clone();
         }
+    }
+
+    fn insert_axis(self, axis: Axis) -> Points<T, Ix3> {
+        Points(self.inner().clone().insert_axis(axis))
     }
 
     /// Get the number of rows
@@ -994,8 +1006,8 @@ where
     T: RFNum,
     U: RFNum,
     for<'a, 'b> &'a T: std::ops::Mul<&'b T, Output = T>,
-    for<'a> Points<T, ndarray::Dim<[usize; 2]>>:
-        From<ArrayBase<ViewRepr<&'a U>, ndarray::Dim<[usize; 2]>, U>>,
+    for<'a> Points<T, ndarray::Dim<[usize; 2]>>: From<ArrayBase<ViewRepr<&'a U>, ndarray::Dim<[usize; 2]>, U>>
+        + From<Points<U, ndarray::Dim<[usize; 2]>>>,
 {
     type Output = Points<T, Ix3>;
 

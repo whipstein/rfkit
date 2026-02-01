@@ -1,6 +1,6 @@
 use crate::{
     num::{MyComplex, MyFloat, RFNum},
-    pts::{Points1, Points2, Points3},
+    pts::{Points1, Points2, Points3, Pts},
 };
 use float_cmp::{F64Margin, approx_eq};
 use ndarray::prelude::*;
@@ -121,6 +121,13 @@ pub fn comp_pts_ix1<T>(exemplar: &Points1<T>, calc: &Points1<T>, precision: F64M
 where
     T: ApproxCompare + RFNum,
 {
+    if exemplar.dim() != calc.dim() {
+        println!(
+            "number of points don't match: exemplar {:?}\tcalc {:?}",
+            exemplar.dim(),
+            calc.dim()
+        );
+    }
     azip!((index k, e in exemplar.inner(), c in calc.inner()) {
         c.approx_compare(e, precision, test, format!("{}", k).to_owned().as_str());
     });
@@ -130,6 +137,13 @@ pub fn comp_pts_ix2<T>(exemplar: &Points2<T>, calc: &Points2<T>, precision: F64M
 where
     T: ApproxCompare + RFNum,
 {
+    if exemplar.dim() != calc.dim() {
+        println!(
+            "number of points don't match: exemplar {:?}\tcalc {:?}",
+            exemplar.dim(),
+            calc.dim()
+        );
+    }
     azip!((index (j, k), e in exemplar.inner(), c in calc.inner()) {
         c.approx_compare(e, precision, test, format!("{},{}", j, k).to_owned().as_str());
     });
@@ -139,6 +153,13 @@ pub fn comp_pts_ix3<T>(exemplar: &Points3<T>, calc: &Points3<T>, precision: F64M
 where
     T: ApproxCompare + RFNum,
 {
+    if exemplar.dim() != calc.dim() {
+        println!(
+            "number of points don't match: exemplar {:?}\tcalc {:?}",
+            exemplar.dim(),
+            calc.dim()
+        );
+    }
     azip!((index (i, j, k), e in exemplar.inner(), c in calc.inner()) {
         c.approx_compare(e, precision, test, format!("{},{},{}", i, j, k).to_owned().as_str());
     });

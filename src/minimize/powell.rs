@@ -15,14 +15,51 @@ pub struct PowellResult<T>
 where
     T: RFFloat,
 {
-    pub xmin: Points1<T>,
-    pub fmin: T,
-    pub iters: usize,
-    pub fn_evals: usize,
-    pub converged: bool,
-    pub final_directions: Points2<T>,
-    pub history: Points1<T>,
-    pub improvement: Points1<T>,
+    xmin: Points1<T>,
+    fmin: T,
+    iters: usize,
+    fn_evals: usize,
+    converged: bool,
+    final_directions: Points2<T>,
+    history: Points1<T>,
+    improvement: Points1<T>,
+}
+
+impl<T> PowellResult<T>
+where
+    T: RFFloat,
+{
+    pub fn xmin(&self) -> Points1<T> {
+        self.xmin.clone()
+    }
+
+    pub fn fmin(&self) -> T {
+        self.fmin.clone()
+    }
+
+    pub fn iters(&self) -> usize {
+        self.iters
+    }
+
+    pub fn fn_evals(&self) -> usize {
+        self.fn_evals
+    }
+
+    pub fn converged(&self) -> bool {
+        self.converged
+    }
+
+    pub fn final_directions(&self) -> Points2<T> {
+        self.final_directions.clone()
+    }
+
+    pub fn history(&self) -> Points1<T> {
+        self.history.clone()
+    }
+
+    pub fn improvement(&self) -> Points1<T> {
+        self.improvement.clone()
+    }
 }
 
 pub struct Powell<T> {
@@ -126,6 +163,7 @@ where
     pub fn powell_method(
         &mut self,
         initial_point: &Points1<T>,
+        scale: Option<&Points1<T>>,
         tol: Option<T>,
         max_iters: Option<usize>,
         line_search_tolerance: Option<T>,
@@ -136,6 +174,8 @@ where
             return Err(MinimizerError::InvalidDimension);
         }
 
+        let scl = scale.unwrap_or(&Points1::ones(n)).clone();
+        let x_scaled = initial_point / &scl;
         let tol = tol.unwrap_or(1e-8.into());
         let max_iter = max_iters.unwrap_or(200);
         let line_tol = line_search_tolerance.unwrap_or(1e-12.into());
@@ -154,8 +194,8 @@ where
         //     })
         //     .collect();
 
-        let mut x = initial_point.to_owned();
-        let mut f_current = self.f.call(&x);
+        let mut x = x_scaled.to_owned();
+        let mut f_current = self.f.call(&(&x / &scl));
         if !f_current.is_finite() {
             return Err(MinimizerError::FunctionEvaluationError);
         }
@@ -179,18 +219,18 @@ where
                 let mut brent = Brent::new(F1dim::new_boxed(self.f.clone()));
                 let line_result = brent.line_search(&x, &dir, &T::one(), &line_tol, 1000)?;
 
-                if !line_result.converged {
+                if !line_result.converged() {
                     return Err(MinimizerError::LinearSearchFailed);
                 }
 
-                fn_evals += line_result.fn_evals;
+                fn_evals += line_result.fn_evals();
 
                 // Update position
                 for j in 0..n {
-                    x[j] += &line_result.xmin * &direction[j];
+                    x[j] += &line_result.xmin() * &direction[j];
                 }
 
-                let f_new = self.f.call(&x);
+                let f_new = self.f.call(&(&x / &scl));
                 if !f_new.is_finite() {
                     return Err(MinimizerError::FunctionEvaluationError);
                 }
@@ -212,7 +252,7 @@ where
             // Check for convergence
             let relative_improvement = improve / (f_old.abs() + 1e-14);
             if relative_improvement < tol {
-                self.xmin = x.to_owned();
+                self.xmin = &x / &scl;
                 self.fmin = f_current.clone();
                 self.converged = true;
                 return Ok(PowellResult {
@@ -234,7 +274,7 @@ where
             //     x_extrapolated[i] = 2.0 * x[i] - x_old[i];
             // }
 
-            let f_extrapolated = self.f.call(&x_extrapolated);
+            let f_extrapolated = self.f.call(&(&x_extrapolated / &scl));
             if !f_extrapolated.is_finite() {
                 return Err(MinimizerError::FunctionEvaluationError);
             }
@@ -274,15 +314,15 @@ where
                     1000,
                 )?;
 
-                if line_result.converged {
-                    fn_evals += line_result.fn_evals;
+                if line_result.converged() {
+                    fn_evals += line_result.fn_evals();
 
                     // Update position
                     for j in 0..n {
-                        x[j] += &line_result.xmin * &new_direction[j];
+                        x[j] += &line_result.xmin() * &new_direction[j];
                     }
 
-                    f_current = self.f.call(&x);
+                    f_current = self.f.call(&(&x / &scl));
                     if !f_current.is_finite() {
                         return Err(MinimizerError::FunctionEvaluationError);
                     }
@@ -296,7 +336,7 @@ where
             }
         }
 
-        self.xmin = x.to_owned();
+        self.xmin = &x / &scl;
         self.fmin = f_current;
         Ok(PowellResult {
             xmin: self.xmin.clone(),
@@ -317,6 +357,7 @@ where
     pub fn powell_method_with_directions(
         &mut self,
         initial_point: &Points1<T>,
+        scale: Option<&Points1<T>>,
         initial_directions: &Points2<T>,
         tol: Option<T>,
         max_iters: Option<usize>,
@@ -328,6 +369,8 @@ where
             return Err(MinimizerError::InvalidDirectionSet);
         }
 
+        let scl = scale.unwrap_or(&Points1::ones(n)).clone();
+        let x_scaled = initial_point / &scl;
         for direction in initial_directions.outer_iter() {
             if direction.len() != n {
                 return Err(MinimizerError::InvalidDirectionSet);
@@ -364,8 +407,8 @@ where
             &initial_directions[[i, j]] / norm
         });
 
-        let mut x = initial_point.to_owned();
-        let mut f_current = self.f.call(&x);
+        let mut x = x_scaled.to_owned();
+        let mut f_current = self.f.call(&(&x / &scl));
         if !f_current.is_finite() {
             return Err(MinimizerError::FunctionEvaluationError);
         }
@@ -394,18 +437,18 @@ where
                     1000,
                 )?;
 
-                if !line_result.converged {
+                if !line_result.converged() {
                     return Err(MinimizerError::LinearSearchFailed);
                 }
 
-                fn_evals += line_result.fn_evals;
+                fn_evals += line_result.fn_evals();
 
                 // Update position
                 for j in 0..n {
-                    x[j] += &line_result.xmin * &direction[j];
+                    x[j] += &line_result.xmin() * &direction[j];
                 }
 
-                let f_new = self.f.call(&x);
+                let f_new = self.f.call(&(&x / &scl));
                 if !f_new.is_finite() {
                     return Err(MinimizerError::FunctionEvaluationError);
                 }
@@ -427,7 +470,7 @@ where
             // Check for convergence
             let relative_improvement = improve / (f_old.abs() + 1e-14);
             if relative_improvement < tol {
-                self.xmin = x;
+                self.xmin = &x / &scl;
                 self.fmin = f_current.clone();
                 self.converged = true;
                 return Ok(PowellResult {
@@ -449,7 +492,7 @@ where
             // }
             let x_extrapolated = Points1::from_shape_fn(n, |i| 2.0 * &x[i] - &x_old[i]);
 
-            let f_extrapolated = self.f.call(&x_extrapolated);
+            let f_extrapolated = self.f.call(&(&x_extrapolated / &scl));
             if !f_extrapolated.is_finite() {
                 continue;
             }
@@ -479,14 +522,14 @@ where
                     let line_result =
                         brent.line_search(&x, &normalized_direction, &T::one(), &line_tol, 1000)?;
 
-                    if line_result.converged {
-                        fn_evals += line_result.fn_evals;
+                    if line_result.converged() {
+                        fn_evals += line_result.fn_evals();
 
                         for j in 0..n {
-                            x[j] += &line_result.xmin * &normalized_direction[j];
+                            x[j] += &line_result.xmin() * &normalized_direction[j];
                         }
 
-                        f_current = self.f.call(&x);
+                        f_current = self.f.call(&(&x / &scl));
                         if !f_current.is_finite() {
                             continue;
                         }
@@ -500,7 +543,7 @@ where
             }
         }
 
-        self.xmin = x;
+        self.xmin = &x / &scl;
         self.fmin = f_current;
         Ok(PowellResult {
             xmin: self.xmin.clone(),
@@ -518,11 +561,12 @@ where
     pub fn minimize(
         &mut self,
         initial_point: &Points1<T>,
+        scale: Option<&Points1<T>>,
         tol: Option<T>,
         max_iters: Option<usize>,
         line_search_tolerance: Option<T>,
     ) -> Result<PowellResult<T>, MinimizerError> {
-        self.powell_method(initial_point, tol, max_iters, line_search_tolerance)
+        self.powell_method(initial_point, scale, tol, max_iters, line_search_tolerance)
     }
 
     /// Create orthogonal initial directions for better performance
@@ -672,7 +716,7 @@ mod minimize_powell_tests {
         let mut powell = Powell::new(objective);
 
         let result = powell
-            .minimize(&array![0.0, 0.0].into(), None, None, None)
+            .minimize(&array![0.0, 0.0].into(), None, None, None, None)
             .unwrap();
 
         assert!((result.xmin[0] - 2.0).abs() < 1e-8);
@@ -693,7 +737,13 @@ mod minimize_powell_tests {
         let mut powell = Powell::new(objective);
 
         let result = powell
-            .powell_method(&array![-1.2, 1.0].into(), Some(1e-6), Some(1000), None)
+            .powell_method(
+                &array![-1.2, 1.0].into(),
+                None,
+                Some(1e-6),
+                Some(1000),
+                None,
+            )
             .unwrap();
 
         assert!((result.xmin[0] - 1.0).abs() < 1e-4);
@@ -712,7 +762,7 @@ mod minimize_powell_tests {
         let mut powell = Powell::new(objective);
 
         let result = powell
-            .minimize(&array![1.0, 2.0, -1.0].into(), None, None, None)
+            .minimize(&array![1.0, 2.0, -1.0].into(), None, None, None, None)
             .unwrap();
 
         for &coord in &result.xmin {
@@ -741,7 +791,14 @@ mod minimize_powell_tests {
         .into();
 
         let result = powell
-            .powell_method_with_directions(&array![0.0, 0.0].into(), &directions, None, None, None)
+            .powell_method_with_directions(
+                &array![0.0, 0.0].into(),
+                None,
+                &directions,
+                None,
+                None,
+                None,
+            )
             .unwrap();
 
         assert!((result.xmin[0] - 1.0).abs() < 1e-8);
@@ -814,7 +871,7 @@ mod minimize_powell_tests {
         let mut powell = Powell::new(objective);
 
         let result = powell
-            .minimize(&array![1.0, 1.0, 1.0].into(), None, None, None)
+            .minimize(&array![1.0, 1.0, 1.0].into(), None, None, None, None)
             .unwrap();
 
         // Should converge in <= 3 iterations for 3D quadratic
@@ -835,7 +892,7 @@ mod minimize_powell_tests {
 
         // Standard coordinate directions
         let std_result = powell
-            .minimize(&array![1.0, 1.0].into(), None, None, None)
+            .minimize(&array![1.0, 1.0].into(), None, None, None, None)
             .unwrap();
 
         // Custom directions aligned with ellipse
@@ -846,7 +903,14 @@ mod minimize_powell_tests {
         .into();
 
         let custom_result = powell
-            .powell_method_with_directions(&array![1.0, 1.0].into(), &custom_dirs, None, None, None)
+            .powell_method_with_directions(
+                &array![1.0, 1.0].into(),
+                None,
+                &custom_dirs,
+                None,
+                None,
+                None,
+            )
             .unwrap();
 
         // Custom directions should perform better on ill-conditioned problem
@@ -866,7 +930,7 @@ mod minimize_powell_tests {
         let mut powell = Powell::new(objective);
 
         let result = powell
-            .minimize(&array![1.0, 1.0].into(), None, None, None)
+            .minimize(&array![1.0, 1.0].into(), None, None, None, None)
             .unwrap();
 
         assert!(result.converged);
@@ -904,7 +968,7 @@ mod minimize_powell_tests {
         let objective = simple_quadratic();
         let mut powell = Powell::new(objective);
 
-        let result = powell.minimize(&array![].into(), None, None, None);
+        let result = powell.minimize(&array![].into(), None, None, None, None);
         assert!(matches!(result, Err(MinimizerError::InvalidDimension)));
     }
 
@@ -913,10 +977,10 @@ mod minimize_powell_tests {
         let objective = simple_quadratic();
         let mut powell = Powell::new(objective);
 
-        let result = powell.powell_method(&array![0.0, 0.0].into(), Some(-1e-8), None, None);
+        let result = powell.powell_method(&array![0.0, 0.0].into(), None, Some(-1e-8), None, None);
         assert!(matches!(result, Err(MinimizerError::InvalidTolerance)));
 
-        let result = powell.powell_method(&array![0.0, 0.0].into(), Some(0.0), None, None);
+        let result = powell.powell_method(&array![0.0, 0.0].into(), None, Some(0.0), None, None);
         assert!(matches!(result, Err(MinimizerError::InvalidTolerance)));
     }
 
@@ -927,7 +991,7 @@ mod minimize_powell_tests {
         let mut powell = Powell::new(objective);
 
         let result = powell
-            .minimize(&array![0.0].into(), None, None, None)
+            .minimize(&array![0.0].into(), None, None, None, None)
             .unwrap();
 
         assert!((result.xmin[0] - 3.0).abs() < 1e-8);
@@ -943,7 +1007,13 @@ mod minimize_powell_tests {
         let mut powell = Powell::new(objective);
 
         let result = powell
-            .powell_method(&array![0.0, 0.0].into(), Some(1e-15), Some(1000), None)
+            .powell_method(
+                &array![0.0, 0.0].into(),
+                None,
+                Some(1e-15),
+                Some(1000),
+                None,
+            )
             .unwrap();
 
         // With very tight tolerance, should still achieve good accuracy
@@ -958,7 +1028,7 @@ mod minimize_powell_tests {
         let mut powell = Powell::new(objective);
 
         let result = powell
-            .powell_method(&array![0.0, 0.0].into(), Some(1e-1), None, None)
+            .powell_method(&array![0.0, 0.0].into(), None, Some(1e-1), None, None)
             .unwrap();
 
         assert!((result.xmin[0] - 2.0).abs() < 0.5);
@@ -973,7 +1043,7 @@ mod minimize_powell_tests {
         let mut powell = Powell::new(objective);
 
         let result = powell
-            .powell_method(&array![-1.2, 1.0].into(), Some(1e-12), Some(5), None)
+            .powell_method(&array![-1.2, 1.0].into(), None, Some(1e-12), Some(5), None)
             .unwrap();
 
         assert!(!result.converged);
@@ -988,7 +1058,7 @@ mod minimize_powell_tests {
         let mut powell = Powell::new(objective);
 
         let result = powell
-            .minimize(&array![2.0, -1.0].into(), None, None, None)
+            .minimize(&array![2.0, -1.0].into(), None, None, None, None)
             .unwrap();
 
         assert!(result.converged);
@@ -1005,7 +1075,7 @@ mod minimize_powell_tests {
         let mut powell = Powell::new(objective);
 
         let initial = Points1::from_shape_fn(n, |i| i as f64);
-        let result = powell.minimize(&initial, None, None, None).unwrap();
+        let result = powell.minimize(&initial, None, None, None, None).unwrap();
 
         assert!(result.converged);
         for &coord in &result.xmin {
@@ -1025,6 +1095,7 @@ mod minimize_powell_tests {
         let directions = array![[1.0, 0.0]].into(); // Only 1 direction for 2D problem
         let result = powell.powell_method_with_directions(
             &array![0.0, 0.0].into(),
+            None,
             &directions,
             None,
             None,
@@ -1040,6 +1111,7 @@ mod minimize_powell_tests {
         .into();
         let result = powell.powell_method_with_directions(
             &array![0.0, 0.0].into(),
+            None,
             &directions,
             None,
             None,
@@ -1060,7 +1132,7 @@ mod minimize_powell_tests {
         let objective = MultiDimFn::new(bad_func);
         let mut powell = Powell::new(objective);
 
-        let result = powell.minimize(&array![15.0, 0.0].into(), None, None, None);
+        let result = powell.minimize(&array![15.0, 0.0].into(), None, None, None, None);
         assert!(matches!(
             result,
             Err(MinimizerError::FunctionEvaluationError)
@@ -1079,7 +1151,7 @@ mod minimize_powell_tests {
         let objective = MultiDimFn::new(bad_func);
         let mut powell = Powell::new(objective);
 
-        let result = powell.minimize(&array![-15.0, 0.0].into(), None, None, None);
+        let result = powell.minimize(&array![-15.0, 0.0].into(), None, None, None, None);
         assert!(matches!(
             result,
             Err(MinimizerError::FunctionEvaluationError)
@@ -1093,7 +1165,8 @@ mod minimize_powell_tests {
         let objective = MultiDimFn::new(linear);
         let mut powell = Powell::new(objective);
 
-        let result = powell.powell_method(&array![0.0, 0.0].into(), Some(1e-6), Some(20), None);
+        let result =
+            powell.powell_method(&array![0.0, 0.0].into(), None, Some(1e-6), Some(20), None);
         // Depending on implementation, this might not converge or might find a direction
         // where the function decreases indefinitely
         match result {
@@ -1114,7 +1187,7 @@ mod minimize_powell_tests {
         let mut powell = Powell::new(objective);
 
         let result = powell
-            .minimize(&array![1.0, 2.0].into(), None, None, None)
+            .minimize(&array![1.0, 2.0].into(), None, None, None, None)
             .unwrap();
 
         assert!(result.converged);
@@ -1134,7 +1207,7 @@ mod minimize_powell_tests {
         let mut powell = Powell::new(objective);
 
         let result = powell
-            .powell_method(&array![1.0, 1.0].into(), Some(1e-6), Some(100), None)
+            .powell_method(&array![1.0, 1.0].into(), None, Some(1e-6), Some(100), None)
             .unwrap();
 
         assert!(result.converged);
@@ -1157,7 +1230,7 @@ mod minimize_powell_tests {
         let mut powell = Powell::new(objective);
 
         let result = powell
-            .minimize(&array![-1.0, 1.0].into(), None, None, None)
+            .minimize(&array![-1.0, 1.0].into(), None, None, None, None)
             .unwrap();
 
         // Should find minimum in the negative x region
@@ -1172,7 +1245,7 @@ mod minimize_powell_tests {
         let mut powell = Powell::new(objective);
 
         let result = powell
-            .minimize(&array![0.0, 0.0].into(), None, None, None)
+            .minimize(&array![0.0, 0.0].into(), None, None, None, None)
             .unwrap();
 
         // Check all fields are properly populated
@@ -1200,7 +1273,7 @@ mod minimize_powell_tests {
         assert_eq!(powell.iters(), 0);
 
         let result = powell
-            .minimize(&array![0.0, 0.0].into(), None, None, None)
+            .minimize(&array![0.0, 0.0].into(), None, None, None, None)
             .unwrap();
 
         // State should be updated
@@ -1328,7 +1401,7 @@ mod minimize_powell_tests {
 
         let initial = Points1::ones(n);
         let result = powell
-            .powell_method(&initial, Some(1e-4), Some(500), None)
+            .powell_method(&initial, None, Some(1e-4), Some(500), None)
             .unwrap();
 
         assert!(result.converged || result.fmin < 1e-6);
@@ -1343,7 +1416,7 @@ mod minimize_powell_tests {
         let mut powell = Powell::new(objective);
 
         let result = powell
-            .minimize(&array![1.0, 1.0].into(), None, None, None)
+            .minimize(&array![1.0, 1.0].into(), None, None, None, None)
             .unwrap();
 
         assert!(result.converged);
@@ -1359,7 +1432,7 @@ mod minimize_powell_tests {
         let mut powell = Powell::new(objective);
 
         let result = powell
-            .minimize(&array![-1.2, 1.0].into(), None, None, None)
+            .minimize(&array![-1.2, 1.0].into(), None, None, None, None)
             .unwrap();
 
         // History should show monotonic decrease (mostly)
@@ -1382,6 +1455,7 @@ mod minimize_powell_tests {
         let result = powell
             .powell_method(
                 &array![1e-3, 1e-3].into(),
+                None,
                 Some(1e-10),
                 Some(100),
                 Some(1e-15),
@@ -1408,7 +1482,7 @@ mod minimize_powell_tests {
 
         // Test after optimization
         let _result = powell
-            .minimize(&array![0.0, 0.0].into(), None, None, None)
+            .minimize(&array![0.0, 0.0].into(), None, None, None, None)
             .unwrap();
         let debug_str_after = format!("{:?}", powell);
         assert!(debug_str_after.contains("Powell"));
@@ -1422,7 +1496,7 @@ mod minimize_powell_tests {
         let mut powell = Powell::new_boxed(boxed_func);
 
         let result = powell
-            .minimize(&array![0.0, 0.0].into(), None, None, None)
+            .minimize(&array![0.0, 0.0].into(), None, None, None, None)
             .unwrap();
 
         assert!(result.converged);
@@ -1441,7 +1515,9 @@ mod minimize_powell_tests {
         let start_point = array![10.0, 10.0].into();
 
         // Standard coordinate directions
-        let result1 = powell1.minimize(&start_point, None, None, None).unwrap();
+        let result1 = powell1
+            .minimize(&start_point, None, None, None, None)
+            .unwrap();
 
         // Custom directions better suited for the problem
         let custom_dirs = array![
@@ -1450,7 +1526,7 @@ mod minimize_powell_tests {
         ]
         .into();
         let result2 = powell2
-            .powell_method_with_directions(&start_point, &custom_dirs, None, None, None)
+            .powell_method_with_directions(&start_point, None, &custom_dirs, None, None, None)
             .unwrap();
 
         // Both should converge, custom might be more efficient
@@ -1474,7 +1550,13 @@ mod minimize_powell_tests {
             let mut powell = Powell::new(objective);
 
             let result = powell
-                .minimize(&array![0.0.into(), 0.0.into()].into(), None, None, None)
+                .minimize(
+                    &array![0.0.into(), 0.0.into()].into(),
+                    None,
+                    None,
+                    None,
+                    None,
+                )
                 .unwrap();
 
             assert!((&result.xmin[0] - 2.0).abs() < 1e-8);
@@ -1498,6 +1580,7 @@ mod minimize_powell_tests {
             let result = powell
                 .powell_method(
                     &array![MyFloat::new(-1.2), 1.0.into()].into(),
+                    None,
                     Some(1e-6.into()),
                     Some(1000),
                     None,
@@ -1522,6 +1605,7 @@ mod minimize_powell_tests {
             let result = powell
                 .minimize(
                     &array![1.0.into(), 2.0.into(), MyFloat::new(-1.0)].into(),
+                    None,
                     None,
                     None,
                     None,

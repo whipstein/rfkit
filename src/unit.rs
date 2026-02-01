@@ -1,4 +1,4 @@
-use crate::scale::Scale;
+use crate::{num::RFFloat, scale::Scale};
 use ndarray::Array1;
 use serde::Serialize;
 use std::{fmt, str::FromStr};
@@ -134,7 +134,10 @@ impl UnitVal for f64 {
     }
 }
 
-impl UnitVal for Array1<f64> {
+impl<T> UnitVal for Array1<T>
+where
+    T: RFFloat + Serialize,
+{
     fn zero_value() -> Self {
         Array1::zeros(0)
     }

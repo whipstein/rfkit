@@ -25,17 +25,14 @@ pub use crate::frequency::{
 #[doc(no_inline)]
 pub use crate::circuit::Circuit;
 #[doc(no_inline)]
-pub use crate::element::capacitor::{Capacitor, CapacitorBuilder};
-#[doc(no_inline)]
-pub use crate::element::inductor::{Inductor, InductorBuilder};
-#[doc(no_inline)]
-pub use crate::element::port::{Port, PortBuilder};
-#[doc(no_inline)]
-pub use crate::element::q::{Q, QBuilder, QMode};
-#[doc(no_inline)]
-pub use crate::element::resistor::{Resistor, ResistorBuilder};
-#[doc(no_inline)]
-pub use crate::element::{Elem, ElemType, Element, ElementBuilder};
+pub use crate::element::{
+    Elem, ElemType, Element, ElementBuilder,
+    capacitor::{Capacitor, CapacitorBuilder},
+    inductor::{Inductor, InductorBuilder},
+    port::{Port, PortBuilder},
+    q::{Q, QBuilder, QMode},
+    resistor::{Resistor, ResistorBuilder},
+};
 
 #[doc(no_inline)]
 pub use crate::impedance::{
@@ -44,7 +41,15 @@ pub use crate::impedance::{
 };
 
 #[doc(no_inline)]
-pub use crate::minimize::{Minimizer, ObjDerFn, ObjFn};
+pub use crate::minimize::{
+    Bracket, BracketOptions, BracketResult, Brent, BrentResult, CmaEs, CmaEsResult, ConjGrad,
+    ConjGradMethod, ConjGradResult, Constraint, DBrent, DBrentMethod, DBrentResult, F1dim, GF1dim,
+    Golden, GoldenResult, HF1dim, InteriorPoint, InteriorPointMethod, InteriorPointParams,
+    InteriorPointResult, LinearConstraint, Minimizer, MultiDimFn, MultiDimGradFn, MultiDimHessFn,
+    MultiDimNumGradFn, NelderMead, NelderMeadMethod, NelderMeadOptions, NelderMeadResult, ObjDerFn,
+    ObjFn, Powell, PowellResult, QuadraticConstraint, QuasiNewton, QuasiNewtonMethod,
+    QuasiNewtonResult, Simplex, SimplexResult, SingleDimDerFn, SingleDimFn, WolfeParams,
+};
 
 #[doc(no_inline)]
 pub use crate::network::{

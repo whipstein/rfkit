@@ -17,14 +17,51 @@ pub struct CmaEsResult<T>
 where
     T: RFFloat,
 {
-    pub xmin: Points1<T>,
-    pub fmin: T,
-    pub generations: usize,
-    pub fn_evals: usize,
-    pub converged: bool,
-    pub final_sigma: T,
-    pub condition_number: T,
-    pub history: Vec<T>,
+    xmin: Points1<T>,
+    fmin: T,
+    generations: usize,
+    fn_evals: usize,
+    converged: bool,
+    final_sigma: T,
+    condition_number: T,
+    history: Vec<T>,
+}
+
+impl<T> CmaEsResult<T>
+where
+    T: RFFloat,
+{
+    pub fn converged(&self) -> bool {
+        self.converged
+    }
+
+    pub fn fmin(&self) -> T {
+        self.fmin.clone()
+    }
+
+    pub fn sigma(&self) -> T {
+        self.final_sigma.clone()
+    }
+
+    pub fn fn_evals(&self) -> usize {
+        self.fn_evals
+    }
+
+    pub fn generations(&self) -> usize {
+        self.generations
+    }
+
+    pub fn condition_number(&self) -> T {
+        self.condition_number.clone()
+    }
+
+    pub fn history(&self) -> Vec<T> {
+        self.history.clone()
+    }
+
+    pub fn xmin(&self) -> Points1<T> {
+        self.xmin.clone()
+    }
 }
 
 pub struct CmaEs<T> {
@@ -223,6 +260,7 @@ where
     pub fn cma_es(
         &mut self,
         initial_point: &Points1<T>,
+        scale: Option<&Points1<T>>,
         initial_sigma: Option<T>,
         population_size: Option<usize>,
         tol: Option<T>,
@@ -234,6 +272,8 @@ where
             return Err(MinimizerError::InvalidDimension);
         }
 
+        let scl = scale.unwrap_or(&Points1::ones(n)).clone();
+        let x_scaled = initial_point * &scl;
         let sigma = initial_sigma.unwrap_or(0.3.into());
         let lambda = population_size.unwrap_or(4 + (3.0 * (n as f64).ln()) as usize);
         let mu = lambda / 2;
@@ -270,7 +310,7 @@ where
         let mueff = 1.0 / weights.iter().map(|w| w.powi(2)).sum::<T>();
 
         // Initialize evolution paths and covariance matrix
-        let mut xmean = initial_point.to_owned();
+        let mut xmean = x_scaled.to_owned();
         let mut sigma = sigma;
         let mut pc = Points1::<T>::zeros(n);
         let mut ps = Points1::<T>::zeros(n);
@@ -311,7 +351,7 @@ where
                 // x = xmean + sigma * y
                 let x = Points1::from_shape_fn(xmean.len(), |i| &xmean[i] + &sigma * &y[i]);
 
-                let f_val = self.f.call(&x);
+                let f_val = self.f.call(&(&x / &scl));
                 fn_evals += 1;
 
                 if !f_val.is_finite() {
@@ -331,7 +371,7 @@ where
 
             // Check for convergence
             if sigma < tol {
-                self.xmin = population[indices[0]].0.clone();
+                self.xmin = &population[indices[0]].0 / &scl;
                 self.fmin = best_fitness;
                 self.converged = true;
                 return Ok(CmaEsResult {
@@ -438,7 +478,7 @@ where
             }
 
             let x = Points1::from_shape_fn(xmean.len(), |i| &xmean[i] + &sigma * &y[i]);
-            let f_val = self.f.call(&x);
+            let f_val = self.f.call(&(&x / &scl));
             fn_evals += 1;
 
             population.push(x);
@@ -448,7 +488,7 @@ where
         let mut indices: Vec<usize> = (0..lambda).collect();
         indices.sort_by(|&i, &j| fitness[i].partial_cmp(&fitness[j]).unwrap());
 
-        self.xmin = population[indices[0]].clone();
+        self.xmin = &population[indices[0]] / &scl;
         self.fmin = fitness[indices[0]].clone();
         self.converged = false;
 
@@ -468,14 +508,16 @@ where
     pub fn minimize(
         &mut self,
         initial_point: &Points1<T>,
+        scale: Option<&Points1<T>>,
     ) -> Result<CmaEsResult<T>, MinimizerError> {
-        self.cma_es(initial_point, None, None, None, None)
+        self.cma_es(initial_point, scale, None, None, None, None)
     }
 
     /// CMA-ES with restart strategy for better global optimization
     pub fn cma_es_with_restart(
         &mut self,
         initial_point: &Points1<T>,
+        scale: Option<&Points1<T>>,
         initial_sigma: Option<T>,
         max_restarts: Option<usize>,
         tol: Option<T>,
@@ -504,6 +546,7 @@ where
 
             let result = self.cma_es(
                 &start_point,
+                scale,
                 Some(initial_sigma.clone()),
                 None,
                 Some(tol.clone()),
@@ -645,7 +688,7 @@ mod minimize_cmaes_tests {
             let mut cmaes = CmaEs::with_seed(objective, 42);
 
             let result = cmaes
-                .minimize(&array![0.0.into(), 0.0.into()].into())
+                .minimize(&array![0.0.into(), 0.0.into()].into(), None)
                 .unwrap();
 
             assert!((&result.xmin[0] - 1.0).abs() < 1e-3);
@@ -664,7 +707,7 @@ mod minimize_cmaes_tests {
             let objective = MultiDimFn::new(func);
             let mut cmaes = CmaEs::with_seed(objective, 42);
 
-            let result = cmaes.minimize(&array![0.0.into()].into()).unwrap();
+            let result = cmaes.minimize(&array![0.0.into()].into(), None).unwrap();
 
             assert!((&result.xmin[0] - 5.0).abs() < 1e-3);
             assert!(result.fmin < 1e-5);
@@ -683,6 +726,7 @@ mod minimize_cmaes_tests {
             let result = cmaes
                 .cma_es(
                     &array![MyFloat::new(-1.2), 1.0.into()].into(),
+                    None,
                     Some(0.5.into()),
                     Some(50),
                     Some(1e-8.into()),
@@ -708,7 +752,7 @@ mod minimize_cmaes_tests {
             let mut cmaes = CmaEs::with_seed(objective, 42);
 
             let result = cmaes
-                .minimize(&array![1.0.into(), 1.0.into(), 1.0.into()].into())
+                .minimize(&array![1.0.into(), 1.0.into(), 1.0.into()].into(), None)
                 .unwrap();
 
             for coord in result.xmin {
@@ -737,6 +781,7 @@ mod minimize_cmaes_tests {
             let result = cmaes
                 .cma_es(
                     &array![1.0.into(), 2.0.into(), 3.0.into()].into(),
+                    None,
                     Some(1.0.into()),
                     None,
                     Some(1e-8.into()),
@@ -764,6 +809,7 @@ mod minimize_cmaes_tests {
             let result1 = cmaes
                 .cma_es(
                     &array![1.0.into(), 1.0.into()].into(),
+                    None,
                     Some(0.5.into()),
                     Some(6), // Small population
                     Some(1e-6.into()),
@@ -775,6 +821,7 @@ mod minimize_cmaes_tests {
             let result2 = cmaes
                 .cma_es(
                     &array![1.0.into(), 1.0.into()].into(),
+                    None,
                     Some(0.5.into()),
                     Some(50), // Large population
                     Some(1e-6.into()),
@@ -801,6 +848,7 @@ mod minimize_cmaes_tests {
             let result1 = cmaes1
                 .cma_es(
                     &array![0.0.into(), 0.0.into()].into(),
+                    None,
                     Some(0.1.into()), // Small sigma
                     None,
                     Some(1e-6.into()),
@@ -813,6 +861,7 @@ mod minimize_cmaes_tests {
             let result2 = cmaes2
                 .cma_es(
                     &array![0.0.into(), 0.0.into()].into(),
+                    None,
                     Some(2.0.into()), // Large sigma
                     None,
                     Some(1e-6.into()),
@@ -837,6 +886,7 @@ mod minimize_cmaes_tests {
             let result = cmaes
                 .cma_es(
                     &array![1.0.into(), 1.0.into()].into(),
+                    None,
                     Some(0.5.into()),
                     None,
                     Some(1e-3.into()), // Loose tolerance
@@ -866,6 +916,7 @@ mod minimize_cmaes_tests {
             let result = cmaes
                 .cma_es_with_restart(
                     &array![0.0.into(), 0.0.into()].into(),
+                    None,
                     Some(1.0.into()),
                     Some(2),
                     Some(1e-8.into()),
@@ -902,6 +953,7 @@ mod minimize_cmaes_tests {
             let result1 = cmaes1
                 .cma_es(
                     &array![0.0.into(), 0.0.into()].into(),
+                    None,
                     Some(1.0.into()),
                     None,
                     Some(1e-6.into()),
@@ -914,6 +966,7 @@ mod minimize_cmaes_tests {
             let result2 = cmaes2
                 .cma_es_with_restart(
                     &array![0.0.into(), 0.0.into()].into(),
+                    None,
                     Some(1.0.into()),
                     Some(3),
                     Some(1e-6.into()),
@@ -937,7 +990,7 @@ mod minimize_cmaes_tests {
             let objective = MultiDimFn::new(func);
             let mut cmaes = CmaEs::new(objective);
 
-            let result = cmaes.minimize(&array![].into());
+            let result = cmaes.minimize(&array![].into(), None);
             assert!(result.is_err());
             assert!(matches!(result, Err(MinimizerError::InvalidDimension)));
         }
@@ -951,6 +1004,7 @@ mod minimize_cmaes_tests {
             // Test zero sigma
             let result = cmaes.cma_es(
                 &array![1.0.into()].into(),
+                None,
                 Some(0.0.into()),
                 None,
                 None,
@@ -962,6 +1016,7 @@ mod minimize_cmaes_tests {
             // Test negative sigma
             let result = cmaes.cma_es(
                 &array![1.0.into()].into(),
+                None,
                 Some(MyFloat::new(-0.1)),
                 None,
                 None,
@@ -985,6 +1040,7 @@ mod minimize_cmaes_tests {
 
             let result = cmaes.cma_es(
                 &array![10.0.into()].into(), // Start in bad region
+                None,
                 Some(1.0.into()),
                 Some(10),
                 Some(1e-6.into()),
@@ -1013,6 +1069,7 @@ mod minimize_cmaes_tests {
 
             let result = cmaes.cma_es(
                 &array![0.0.into()].into(),
+                None,
                 Some(2.0.into()), // Large enough to potentially hit boundaries
                 Some(20),
                 Some(1e-6.into()),
@@ -1041,7 +1098,7 @@ mod minimize_cmaes_tests {
             let mut cmaes = CmaEs::with_seed(objective, 42);
 
             let result = cmaes
-                .minimize(&array![2.0.into(), 2.0.into()].into())
+                .minimize(&array![2.0.into(), 2.0.into()].into(), None)
                 .unwrap();
 
             assert!(!result.history.is_empty());
@@ -1061,7 +1118,7 @@ mod minimize_cmaes_tests {
             let mut cmaes = CmaEs::with_seed(objective, 42);
 
             let result = cmaes
-                .minimize(&array![1.0.into(), 1.0.into()].into())
+                .minimize(&array![1.0.into(), 1.0.into()].into(), None)
                 .unwrap();
 
             assert!(result.condition_number >= 1.0);
@@ -1079,6 +1136,7 @@ mod minimize_cmaes_tests {
             let result = cmaes
                 .cma_es(
                     &array![1.0.into(), 1.0.into()].into(),
+                    None,
                     Some(0.5.into()),
                     Some(10), // Small population for predictable count
                     Some(1e-8.into()),
@@ -1108,6 +1166,7 @@ mod minimize_cmaes_tests {
             let result = cmaes
                 .cma_es(
                     &Points1::ones(5),
+                    None,
                     Some(0.5.into()),
                     None,
                     Some(1e-6.into()),
@@ -1131,6 +1190,7 @@ mod minimize_cmaes_tests {
             let result = cmaes
                 .cma_es(
                     &(Array1::ones(10) * 0.5).into(),
+                    None,
                     Some(1.0.into()),
                     Some(50),          // Larger population for higher dimensions
                     Some(1e-4.into()), // Relaxed tolerance
@@ -1155,6 +1215,7 @@ mod minimize_cmaes_tests {
                 let result = cmaes
                     .cma_es(
                         &Points1::ones(dim),
+                        None,
                         Some(0.5.into()),
                         None,
                         Some(1e-4.into()),
@@ -1312,6 +1373,7 @@ mod minimize_cmaes_tests {
             let result = cmaes
                 .cma_es(
                     &x,
+                    None,
                     Some(0.3.into()),
                     Some(4 + (3.0 * (n as f64).ln()).floor() as usize),
                     Some(1e-10.into()),
@@ -1343,6 +1405,7 @@ mod minimize_cmaes_tests {
                 let result = cmaes
                     .cma_es(
                         &x,
+                        None,
                         Some(0.3.into()),
                         Some(4 + (3.0 * (n as f64).ln()).floor() as usize),
                         Some(1e-10.into()),
@@ -1375,6 +1438,7 @@ mod minimize_cmaes_tests {
                 let result = cmaes
                     .cma_es(
                         &x,
+                        None,
                         Some(0.3.into()),
                         Some(4 + (3.0 * (n as f64).ln()).floor() as usize),
                         Some(1e-10.into()),
@@ -1519,6 +1583,7 @@ mod minimize_cmaes_tests {
             let result = cmaes
                 .cma_es(
                     &x,
+                    None,
                     Some(0.3.into()),
                     Some(4 + (3.0 * (n as f64).ln()).floor() as usize),
                     Some(1e-10.into()),
@@ -1556,6 +1621,7 @@ mod minimize_cmaes_tests {
                 let result = cmaes
                     .cma_es(
                         &x,
+                        None,
                         Some(0.3.into()),
                         Some(4 + (3.0 * (n as f64).ln()).floor() as usize),
                         Some(1e-10.into()),
@@ -1594,6 +1660,7 @@ mod minimize_cmaes_tests {
                 let result = cmaes
                     .cma_es(
                         &x,
+                        None,
                         Some(0.3.into()),
                         Some(4 + (3.0 * (n as f64).ln()).floor() as usize),
                         Some(1e-10.into()),
@@ -1759,6 +1826,7 @@ mod minimize_cmaes_tests {
             let result = cmaes
                 .cma_es(
                     &x,
+                    None,
                     Some(0.3.into()),
                     Some(4 + (3.0 * (n as f64).ln()).floor() as usize),
                     Some(1e-10.into()),
@@ -1908,6 +1976,7 @@ mod minimize_cmaes_tests {
             let result = cmaes
                 .cma_es(
                     &x,
+                    None,
                     Some(0.3.into()),
                     Some(4 + (3.0 * (n as f64).ln()).floor() as usize),
                     Some(1e-10.into()),
@@ -2413,6 +2482,7 @@ mod minimize_cmaes_tests {
             let result = cmaes
                 .cma_es_with_restart(
                     &array![1.0.into(), 1.0.into()].into(),
+                    None,
                     Some(2.0.into()),
                     Some(5),
                     Some(1e-6.into()),
@@ -2454,6 +2524,7 @@ mod minimize_cmaes_tests {
             let result = cmaes
                 .cma_es(
                     &array![0.0.into(), 0.0.into()].into(),
+                    None,
                     Some(1.0.into()),
                     Some(30),
                     Some(1e-8.into()),
@@ -2492,6 +2563,7 @@ mod minimize_cmaes_tests {
             let result = cmaes
                 .cma_es_with_restart(
                     &array![1.0.into(), 1.0.into()].into(),
+                    None,
                     Some(1.0.into()),
                     Some(3),
                     Some(1e-6.into()),
@@ -2516,7 +2588,7 @@ mod minimize_cmaes_tests {
             let mut cmaes = CmaEs::with_seed(objective, 42);
 
             let result = cmaes
-                .minimize(&array![0.0.into(), 0.0.into()].into())
+                .minimize(&array![0.0.into(), 0.0.into()].into(), None)
                 .unwrap();
 
             assert!((&result.xmin[0] - 1.0).abs() < 1e-3);
@@ -2545,6 +2617,7 @@ mod minimize_cmaes_tests {
             let result = cmaes
                 .cma_es(
                     &array![1.0.into(), 1.0.into()].into(),
+                    None,
                     Some(0.5.into()),
                     Some(50),          // Larger population for noisy functions
                     Some(1e-4.into()), // Relaxed tolerance for noise
@@ -2576,6 +2649,7 @@ mod minimize_cmaes_tests {
             let result = cmaes
                 .cma_es(
                     &array![0.1.into(), 0.1.into()].into(),
+                    None,
                     Some(0.1.into()),
                     None,
                     Some(1e-8.into()),
@@ -2602,6 +2676,7 @@ mod minimize_cmaes_tests {
             let result = cmaes
                 .cma_es(
                     &array![0.5.into(), 0.5.into()].into(),
+                    None,
                     Some(0.2.into()),
                     None,
                     Some(1e-6.into()),
@@ -2627,6 +2702,7 @@ mod minimize_cmaes_tests {
             let result = cmaes
                 .cma_es(
                     &array![1.0.into(), 1.0.into()].into(),
+                    None,
                     Some(1.0.into()),
                     None,
                     Some(1e-6.into()),
@@ -2661,7 +2737,7 @@ mod minimize_cmaes_tests {
 
             // After optimization
             let result = cmaes
-                .minimize(&array![0.0.into(), 0.0.into()].into())
+                .minimize(&array![0.0.into(), 0.0.into()].into(), None)
                 .unwrap();
             let (best_x, best_f) = cmaes.get_best();
 
@@ -2684,7 +2760,7 @@ mod minimize_cmaes_tests {
             assert!(debug_str.contains("converged: false"));
 
             // Test debug format after optimization
-            let _result = cmaes.minimize(&array![1.0.into()].into()).unwrap();
+            let _result = cmaes.minimize(&array![1.0.into()].into(), None).unwrap();
             let debug_str_after = format!("{:?}", cmaes);
             assert!(debug_str_after.contains("CmaEs"));
             assert!(debug_str_after.contains("generations:"));
@@ -2700,6 +2776,7 @@ mod minimize_cmaes_tests {
             let result1 = cmaes1
                 .cma_es(
                     &array![1.0.into(), 1.0.into()].into(),
+                    None,
                     Some(0.5.into()),
                     Some(20),
                     Some(1e-8.into()),
@@ -2712,6 +2789,7 @@ mod minimize_cmaes_tests {
             let result2 = cmaes2
                 .cma_es(
                     &array![1.0.into(), 1.0.into()].into(),
+                    None,
                     Some(0.5.into()),
                     Some(20),
                     Some(1e-8.into()),
@@ -2736,18 +2814,18 @@ mod minimize_cmaes_tests {
 
             // Test new()
             let mut cmaes1 = CmaEs::new(objective.clone());
-            let result1 = cmaes1.minimize(&array![1.0.into()].into()).unwrap();
+            let result1 = cmaes1.minimize(&array![1.0.into()].into(), None).unwrap();
             assert!(result1.fmin < 1e-5);
 
             // Test new_boxed()
             let boxed_objective = Box::new(objective.clone());
             let mut cmaes2 = CmaEs::new_boxed(boxed_objective);
-            let result2 = cmaes2.minimize(&array![1.0.into()].into()).unwrap();
+            let result2 = cmaes2.minimize(&array![1.0.into()].into(), None).unwrap();
             assert!(result2.fmin < 1e-5);
 
             // Test with_seed()
             let mut cmaes3 = CmaEs::with_seed(objective, 999);
-            let result3 = cmaes3.minimize(&array![1.0.into()].into()).unwrap();
+            let result3 = cmaes3.minimize(&array![1.0.into()].into(), None).unwrap();
             assert!(result3.fmin < 1e-5);
         }
     }
@@ -2765,6 +2843,7 @@ mod minimize_cmaes_tests {
             let result = cmaes
                 .cma_es(
                     &array![1.0.into(), 1.0.into()].into(),
+                    None,
                     Some(0.5.into()),
                     None,
                     Some(1e-12.into()), // Very tight tolerance
@@ -2792,8 +2871,9 @@ mod minimize_cmaes_tests {
 
             let result = cmaes
                 .cma_es(
-                    &array![1e-15.into()].into(), // Very small starting point
-                    Some(1e-15.into()),           // Very small sigma
+                    &array![1e-15.into()].into(),
+                    None,               // Very small starting point
+                    Some(1e-15.into()), // Very small sigma
                     None,
                     Some(1e-20.into()), // Extremely tight tolerance
                     Some(500),
@@ -2814,6 +2894,7 @@ mod minimize_cmaes_tests {
             let result = cmaes
                 .cma_es(
                     &array![1.0.into(), 1.0.into()].into(),
+                    None,
                     Some(0.5.into()),
                     Some(100), // Large but reasonable population
                     Some(1e-6.into()),
@@ -2847,6 +2928,7 @@ mod minimize_cmaes_tests {
 
             let result = cmaes.cma_es(
                 &array![1.0.into()].into(),
+                None,
                 Some(0.5.into()),
                 Some(5), // Minimal but viable population for 1D (needs to be > dimension)
                 Some(1e-4.into()), // Relaxed tolerance

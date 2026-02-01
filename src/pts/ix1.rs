@@ -51,6 +51,10 @@ where
         matrix
     }
 
+    pub fn to_vec(&self) -> Vec<T> {
+        self.0.to_vec()
+    }
+
     /// Create a one-dimensional Points from an iterator or iterable.
     ///
     /// **Panics** if the length is greater than `isize::MAX`.
@@ -206,6 +210,10 @@ where
         Ok(matrix)
     }
 
+    fn from_elem(shape: impl IntoDimension<Dim = Ix1>, elem: T) -> Self {
+        Points(Array1::from_elem(shape, elem))
+    }
+
     fn from_shape_fn<F>(shape: impl IntoDimension<Dim = Dim<[usize; 1]>>, f: F) -> Self
     where
         F: Fn(usize) -> T,
@@ -293,7 +301,7 @@ where
     }
 
     /// Get and set outer axis point
-    fn pt<I>(&self, index: usize) -> ndarray::ArrayView<'_, T, I::OutDim>
+    fn pt<I>(&self, index: usize) -> Points<T, I::OutDim>
     where
         I: SliceArg<Ix1, OutDim = Dim<[usize; 0]>>,
     {
@@ -305,10 +313,10 @@ where
             );
         }
 
-        self.slice(s![index])
+        Points(self.slice(s![index]).to_owned())
     }
 
-    fn pt_mut<I>(&mut self, index: usize) -> ndarray::ArrayViewMut<'_, T, I::OutDim>
+    fn pt_mut<I>(&mut self, index: usize) -> Points<T, I::OutDim>
     where
         I: SliceArg<Ix1, OutDim = Dim<[usize; 0]>>,
     {
@@ -320,7 +328,7 @@ where
             );
         }
 
-        self.slice_mut(s![index])
+        Points(self.slice_mut(s![index]).to_owned())
     }
 
     fn set_pt(&mut self, index: usize, pt: Points<T, Ix0>) {
@@ -333,6 +341,10 @@ where
         }
 
         self[index] = pt.0.into_scalar().clone();
+    }
+
+    fn insert_axis(self, axis: Axis) -> Points<T, Ix2> {
+        Points(self.inner().clone().insert_axis(axis))
     }
 
     /// Get the number of rows

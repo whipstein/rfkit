@@ -103,8 +103,8 @@ impl Q {
         self.q = val;
     }
 
-    pub fn set_fq(&mut self, val: Frequency) {
-        self.fq = val;
+    pub fn set_fq(&mut self, val: &Frequency) {
+        self.fq = val.clone();
     }
 
     pub fn set_mode(&mut self, val: QMode) {

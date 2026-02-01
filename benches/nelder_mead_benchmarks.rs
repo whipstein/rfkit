@@ -1,10 +1,7 @@
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use ndarray::prelude::*;
 use rfkit::{
-    minimize::{
-        Minimizer, MultiDimFn, NelderMead, NelderMeadBounded, NelderMeadBoundedOptions,
-        NelderMeadOptions, Powell,
-    },
+    minimize::{Minimizer, MultiDimFn, NelderMead, NelderMeadOptions, Powell},
     pts::{Points, Points1, Pts},
 };
 
@@ -96,8 +93,11 @@ fn bench_nelder_mead_sphere(c: &mut Criterion) {
                 let options = NelderMeadOptions::new(
                     &init,
                     Some(&scale),
+                    None,
+                    None,
                     Some(500),
                     Some(1e-8),
+                    None,
                     None,
                     None,
                     None,
@@ -126,8 +126,11 @@ fn bench_nelder_mead_rosenbrock(c: &mut Criterion) {
                 let options = NelderMeadOptions::new(
                     &init,
                     Some(&scale),
+                    None,
+                    None,
                     Some(2000),
                     Some(1e-8),
+                    None,
                     None,
                     None,
                     None,
@@ -155,8 +158,11 @@ fn bench_nelder_mead_2d_functions(c: &mut Criterion) {
             let options = NelderMeadOptions::new(
                 &init,
                 Some(&scale),
+                None,
+                None,
                 Some(500),
                 Some(1e-8),
+                None,
                 None,
                 None,
                 None,
@@ -175,8 +181,11 @@ fn bench_nelder_mead_2d_functions(c: &mut Criterion) {
             let options = NelderMeadOptions::new(
                 &init,
                 Some(&scale),
+                None,
+                None,
                 Some(500),
                 Some(1e-8),
+                None,
                 None,
                 None,
                 None,
@@ -195,8 +204,11 @@ fn bench_nelder_mead_2d_functions(c: &mut Criterion) {
             let options = NelderMeadOptions::new(
                 &init,
                 Some(&scale),
+                None,
+                None,
                 Some(500),
                 Some(1e-8),
+                None,
                 None,
                 None,
                 None,
@@ -215,8 +227,11 @@ fn bench_nelder_mead_2d_functions(c: &mut Criterion) {
             let options = NelderMeadOptions::new(
                 &init,
                 Some(&scale),
+                None,
+                None,
                 Some(500),
                 Some(1e-8),
+                None,
                 None,
                 None,
                 None,
@@ -247,7 +262,7 @@ fn bench_nelder_mead_bounded_sphere(c: &mut Criterion) {
 
         group.bench_with_input(BenchmarkId::new("dim", dim), &dim, |b, _| {
             b.iter(|| {
-                let options = NelderMeadBoundedOptions::new(
+                let options = NelderMeadOptions::new(
                     &init,
                     Some(&scale),
                     Some(&lb),
@@ -262,7 +277,7 @@ fn bench_nelder_mead_bounded_sphere(c: &mut Criterion) {
                     Some(0),
                 );
                 let objective = MultiDimFn::new(sphere);
-                let mut minimizer = NelderMeadBounded::new(objective);
+                let mut minimizer = NelderMead::new(objective);
                 black_box(minimizer.minimize(&options))
             })
         });
@@ -282,7 +297,7 @@ fn bench_nelder_mead_bounded_rosenbrock(c: &mut Criterion) {
 
         group.bench_with_input(BenchmarkId::new("dim", dim), &dim, |b, _| {
             b.iter(|| {
-                let options = NelderMeadBoundedOptions::new(
+                let options = NelderMeadOptions::new(
                     &init,
                     Some(&scale),
                     Some(&lb),
@@ -297,7 +312,7 @@ fn bench_nelder_mead_bounded_rosenbrock(c: &mut Criterion) {
                     Some(0),
                 );
                 let objective = MultiDimFn::new(rosenbrock);
-                let mut minimizer = NelderMeadBounded::new(objective);
+                let mut minimizer = NelderMead::new(objective);
                 black_box(minimizer.minimize(&options))
             })
         });
@@ -317,7 +332,7 @@ fn bench_nelder_mead_bounded_with_anti_stagnation(c: &mut Criterion) {
 
     group.bench_function("rastrigin_basic", |b| {
         b.iter(|| {
-            let options = NelderMeadBoundedOptions::new(
+            let options = NelderMeadOptions::new(
                 &init,
                 Some(&scale),
                 Some(&lb),
@@ -332,14 +347,14 @@ fn bench_nelder_mead_bounded_with_anti_stagnation(c: &mut Criterion) {
                 Some(0),
             );
             let objective = MultiDimFn::new(rastrigin);
-            let mut minimizer = NelderMeadBounded::new(objective);
+            let mut minimizer = NelderMead::new(objective);
             black_box(minimizer.minimize(&options))
         })
     });
 
     group.bench_function("rastrigin_anti_stagnation", |b| {
         b.iter(|| {
-            let mut options = NelderMeadBoundedOptions::new(
+            let mut options = NelderMeadOptions::new(
                 &init,
                 Some(&scale),
                 Some(&lb),
@@ -358,7 +373,7 @@ fn bench_nelder_mead_bounded_with_anti_stagnation(c: &mut Criterion) {
             options.enable_anti_stagnation(Some(3), Some(10), Some(0.1));
 
             let objective = MultiDimFn::new(rastrigin);
-            let mut minimizer = NelderMeadBounded::new(objective);
+            let mut minimizer = NelderMead::new(objective);
             black_box(minimizer.minimize(&options))
         })
     });
@@ -380,7 +395,7 @@ fn bench_powell_sphere(c: &mut Criterion) {
             b.iter(|| {
                 let objective = MultiDimFn::new(sphere);
                 let mut minimizer = Powell::new(objective);
-                black_box(minimizer.powell_method(&init, Some(1e-8), Some(500), None))
+                black_box(minimizer.powell_method(&init, None, Some(1e-8), Some(500), None))
             })
         });
     }
@@ -398,7 +413,7 @@ fn bench_powell_rosenbrock(c: &mut Criterion) {
             b.iter(|| {
                 let objective = MultiDimFn::new(rosenbrock);
                 let mut minimizer = Powell::new(objective);
-                black_box(minimizer.powell_method(&init, Some(1e-8), Some(2000), None))
+                black_box(minimizer.powell_method(&init, None, Some(1e-8), Some(2000), None))
             })
         });
     }
@@ -414,7 +429,7 @@ fn bench_powell_2d_functions(c: &mut Criterion) {
         b.iter(|| {
             let objective = MultiDimFn::new(himmelblau);
             let mut minimizer = Powell::new(objective);
-            black_box(minimizer.powell_method(&init, Some(1e-8), Some(500), None))
+            black_box(minimizer.powell_method(&init, None, Some(1e-8), Some(500), None))
         })
     });
 
@@ -423,7 +438,7 @@ fn bench_powell_2d_functions(c: &mut Criterion) {
         b.iter(|| {
             let objective = MultiDimFn::new(beale);
             let mut minimizer = Powell::new(objective);
-            black_box(minimizer.powell_method(&init, Some(1e-8), Some(500), None))
+            black_box(minimizer.powell_method(&init, None, Some(1e-8), Some(500), None))
         })
     });
 
@@ -432,7 +447,7 @@ fn bench_powell_2d_functions(c: &mut Criterion) {
         b.iter(|| {
             let objective = MultiDimFn::new(booth);
             let mut minimizer = Powell::new(objective);
-            black_box(minimizer.powell_method(&init, Some(1e-8), Some(500), None))
+            black_box(minimizer.powell_method(&init, None, Some(1e-8), Some(500), None))
         })
     });
 
@@ -441,7 +456,7 @@ fn bench_powell_2d_functions(c: &mut Criterion) {
         b.iter(|| {
             let objective = MultiDimFn::new(ackley);
             let mut minimizer = Powell::new(objective);
-            black_box(minimizer.powell_method(&init, Some(1e-8), Some(500), None))
+            black_box(minimizer.powell_method(&init, None, Some(1e-8), Some(500), None))
         })
     });
 
@@ -466,8 +481,11 @@ fn bench_method_comparison(c: &mut Criterion) {
             let options = NelderMeadOptions::new(
                 &init,
                 Some(&scale),
+                None,
+                None,
                 Some(1000),
                 Some(1e-8),
+                None,
                 None,
                 None,
                 None,
@@ -482,7 +500,7 @@ fn bench_method_comparison(c: &mut Criterion) {
 
     group.bench_function("nelder_mead_bounded", |b| {
         b.iter(|| {
-            let options = NelderMeadBoundedOptions::new(
+            let options = NelderMeadOptions::new(
                 &init,
                 Some(&scale),
                 Some(&lb),
@@ -497,7 +515,7 @@ fn bench_method_comparison(c: &mut Criterion) {
                 Some(0),
             );
             let objective = MultiDimFn::new(rosenbrock);
-            let mut minimizer = NelderMeadBounded::new(objective);
+            let mut minimizer = NelderMead::new(objective);
             black_box(minimizer.minimize(&options))
         })
     });
@@ -506,7 +524,7 @@ fn bench_method_comparison(c: &mut Criterion) {
         b.iter(|| {
             let objective = MultiDimFn::new(rosenbrock);
             let mut minimizer = Powell::new(objective);
-            black_box(minimizer.powell_method(&init, Some(1e-8), Some(1000), None))
+            black_box(minimizer.powell_method(&init, None, Some(1e-8), Some(1000), None))
         })
     });
 
@@ -529,8 +547,11 @@ fn bench_iteration_scaling(c: &mut Criterion) {
                     let options = NelderMeadOptions::new(
                         &init,
                         Some(&scale),
+                        None,
+                        None,
                         Some(iters),
                         Some(1e-8),
+                        None,
                         None,
                         None,
                         None,

@@ -15,20 +15,81 @@ pub struct InteriorPointResult<T>
 where
     T: RFFloat,
 {
-    pub xmin: Points1<T>,
-    pub fmin: T,
-    pub lambda: Points1<T>, // Lagrange multipliers for equality constraints
-    pub mu: Points1<T>,     // Lagrange multipliers for inequality constraints
-    pub iters: usize,
-    pub barrier_iters: usize,
-    pub fn_evals: usize,
-    pub grad_evals: usize,
-    pub hess_evals: usize,
-    pub converged: bool,
-    pub final_barrier_param: T,
-    pub convergence_history: Points1<T>,
-    pub constraint_violation: T,
-    pub complementarity_gap: T,
+    xmin: Points1<T>,
+    fmin: T,
+    lambda: Points1<T>, // Lagrange multipliers for equality constraints
+    mu: Points1<T>,     // Lagrange multipliers for inequality constraints
+    iters: usize,
+    barrier_iters: usize,
+    fn_evals: usize,
+    grad_evals: usize,
+    hess_evals: usize,
+    converged: bool,
+    final_barrier_param: T,
+    convergence_history: Points1<T>,
+    constraint_violation: T,
+    complementarity_gap: T,
+}
+
+impl<T> InteriorPointResult<T>
+where
+    T: RFFloat,
+{
+    pub fn xmin(&self) -> Points1<T> {
+        self.xmin.clone()
+    }
+
+    pub fn fmin(&self) -> T {
+        self.fmin.clone()
+    }
+
+    pub fn lambda(&self) -> Points1<T> {
+        self.lambda.clone()
+    }
+
+    pub fn mu(&self) -> Points1<T> {
+        self.mu.clone()
+    }
+
+    pub fn iters(&self) -> usize {
+        self.iters
+    }
+
+    pub fn barrier_iters(&self) -> usize {
+        self.barrier_iters
+    }
+
+    pub fn fn_evals(&self) -> usize {
+        self.fn_evals
+    }
+
+    pub fn grad_evals(&self) -> usize {
+        self.grad_evals
+    }
+
+    pub fn hess_evals(&self) -> usize {
+        self.hess_evals
+    }
+
+    pub fn converged(&self) -> bool {
+        self.converged
+    }
+
+    pub fn final_barrier_param(&self) -> T {
+        self.final_barrier_param.clone()
+    }
+
+    pub fn history(&self) -> Points1<T> {
+        self.convergence_history.clone()
+    }
+
+    pub fn constraint_violation(&self) -> T {
+        self.constraint_violation.clone()
+    }
+
+    pub fn complementarity_gap(&self) -> T {
+        self.complementarity_gap.clone()
+    }
 }
 
 /// Interior point method variants

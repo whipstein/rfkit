@@ -10,12 +10,41 @@ use std::fmt;
 /// Result of Brent's method root finding
 #[derive(Debug, Clone)]
 pub struct BrentResult<T> {
-    pub xmin: T,
-    pub fmin: T,
-    pub fn_evals: usize,
-    pub iters: usize,
-    pub converged: bool,
-    pub final_bracket_size: T,
+    xmin: T,
+    fmin: T,
+    fn_evals: usize,
+    iters: usize,
+    converged: bool,
+    final_bracket_size: T,
+}
+
+impl<T> BrentResult<T>
+where
+    T: RFFloat,
+{
+    pub fn xmin(&self) -> T {
+        self.xmin.clone()
+    }
+
+    pub fn fmin(&self) -> T {
+        self.fmin.clone()
+    }
+
+    pub fn fn_evals(&self) -> usize {
+        self.fn_evals
+    }
+
+    pub fn iters(&self) -> usize {
+        self.iters
+    }
+
+    pub fn converged(&self) -> bool {
+        self.converged
+    }
+
+    pub fn bracket_size(&self) -> T {
+        self.final_bracket_size.clone()
+    }
 }
 
 pub struct Brent<T> {
@@ -301,7 +330,7 @@ where
     ) -> Result<BrentResult<T>, MinimizerError> {
         let mut bracket = Bracket::new_boxed(self.f.clone());
         let (ax, bx) = match bracket.bracket(a, b) {
-            Ok(result) => (result.a, result.b),
+            Ok(result) => (result.a(), result.b()),
             Err(e) => return Err(e),
         };
         self.minimize(&ax, &bx, Some(tol.clone()), Some(max_iter))

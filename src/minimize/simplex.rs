@@ -3,7 +3,7 @@
 use crate::{
     error::MinimizerError,
     minimize::{ObjFn, Vertex},
-    num::{RFFloat, RFNum},
+    num::RFFloat,
     pts::{Points1, Pts},
 };
 use ndarray::prelude::*;
@@ -13,15 +13,48 @@ use std::fmt;
 #[derive(Debug, Clone)]
 pub struct SimplexResult<T>
 where
-    T: RFNum,
+    T: RFFloat,
 {
-    pub xmin: Points1<T>,
-    pub fmin: T,
-    pub iters: usize,
-    pub fn_evals: usize,
-    pub converged: bool,
-    pub final_simplex_size: T,
-    pub history: Points1<T>,
+    xmin: Points1<T>,
+    fmin: T,
+    iters: usize,
+    fn_evals: usize,
+    converged: bool,
+    final_simplex_size: T,
+    history: Points1<T>,
+}
+
+impl<T> SimplexResult<T>
+where
+    T: RFFloat,
+{
+    pub fn xmin(&self) -> Points1<T> {
+        self.xmin.clone()
+    }
+
+    pub fn fmin(&self) -> T {
+        self.fmin.clone()
+    }
+
+    pub fn iters(&self) -> usize {
+        self.iters
+    }
+
+    pub fn fn_evals(&self) -> usize {
+        self.fn_evals
+    }
+
+    pub fn converged(&self) -> bool {
+        self.converged
+    }
+
+    pub fn final_simplex_size(&self) -> T {
+        self.final_simplex_size.clone()
+    }
+
+    pub fn history(&self) -> Points1<T> {
+        self.history.clone()
+    }
 }
 
 pub struct Simplex<T> {
@@ -127,6 +160,7 @@ where
     fn run_simplex_algorithm(
         &mut self,
         mut simplex: Vec<Vertex<T>>,
+        scale: &Points1<T>,
         tol: &T,
         max_iters: usize,
     ) -> Result<SimplexResult<T>, MinimizerError> {
@@ -155,7 +189,7 @@ where
 
             let simplex_size = self.calculate_simplex_size(&simplex);
             if simplex_size < *tol {
-                self.xmin = best.point.clone();
+                self.xmin = &best.point / scale;
                 self.fmin = best.value.clone();
                 self.converged = true;
                 return Ok(SimplexResult {
@@ -173,7 +207,7 @@ where
 
             // Standard Nelder-Mead operations
             let reflected = self.reflect_point(&worst.point, &centroid, &alpha);
-            let f_reflected = self.f.call(&reflected);
+            let f_reflected = self.f.call(&(&reflected / scale));
             fn_evals += 1;
 
             if !f_reflected.is_finite() {
@@ -187,7 +221,7 @@ where
                 };
             } else if f_reflected < best.value {
                 let expanded = self.reflect_point(&worst.point, &centroid, &(&alpha * &gamma));
-                let f_expanded = self.f.call(&expanded);
+                let f_expanded = self.f.call(&(&expanded / scale));
                 fn_evals += 1;
 
                 if !f_expanded.is_finite() {
@@ -208,11 +242,11 @@ where
             } else {
                 let (contracted, f_contracted) = if f_reflected < worst.value {
                     let point = self.reflect_point(&worst.point, &centroid, &(&alpha * &rho));
-                    let value = self.f.call(&point);
+                    let value = self.f.call(&(&point / scale));
                     (point, value)
                 } else {
                     let point = self.reflect_point(&worst.point, &centroid, &-rho.clone());
-                    let value = self.f.call(&point);
+                    let value = self.f.call(&(&point / scale));
                     (point, value)
                 };
                 fn_evals += 1;
@@ -234,7 +268,7 @@ where
                             new_point[j] =
                                 &best_point[j] + &sigma * (&simplex[i].point[j] - &best_point[j]);
                         }
-                        let new_value = self.f.call(&new_point);
+                        let new_value = self.f.call(&(&new_point / scale));
                         fn_evals += 1;
 
                         if !new_value.is_finite() {
@@ -252,7 +286,7 @@ where
 
         simplex.sort_by(|a, b| a.value.partial_cmp(&b.value).unwrap());
 
-        self.xmin = simplex[0].point.clone();
+        self.xmin = &simplex[0].point / scale;
         self.fmin = simplex[0].value.clone();
         self.converged = false;
         Ok(SimplexResult {
@@ -284,6 +318,7 @@ where
     pub fn downhill_simplex(
         &mut self,
         initial_point: &Points1<T>,
+        scale: Option<&Points1<T>>,
         initial_step: Option<T>,
         tol: Option<T>,
         max_iters: Option<usize>,
@@ -294,6 +329,8 @@ where
             return Err(MinimizerError::InvalidDimension);
         }
 
+        let scl = scale.unwrap_or(&Points1::ones(n)).clone();
+        let x_scaled = initial_point * &scl;
         let step = initial_step.unwrap_or(T::one());
         let tol = tol.unwrap_or(T::from_f64(1e-8));
         let max_iter = max_iters.unwrap_or(1000);
@@ -312,11 +349,11 @@ where
         let mut simplex = Vec::with_capacity(n + 1);
 
         // First vertex is the initial point
-        simplex.push(Vertex::new_boxed(initial_point, self.f.clone())?);
+        simplex.push(Vertex::new_boxed(&x_scaled, self.f.clone())?);
 
         // Create additional vertices by perturbing each coordinate
         for i in 0..n {
-            let mut point = initial_point.to_owned();
+            let mut point = x_scaled.to_owned();
             point[i] += step.clone();
             simplex.push(Vertex::new_boxed(&point, self.f.clone())?);
         }
@@ -340,7 +377,7 @@ where
             // Check for convergence
             let simplex_size = self.calculate_simplex_size(&simplex);
             if simplex_size < tol {
-                self.xmin = best.point.clone();
+                self.xmin = &best.point / &scl;
                 self.fmin = best.value.clone();
                 self.converged = true;
                 return Ok(SimplexResult {
@@ -359,7 +396,7 @@ where
 
             // Reflection
             let reflected = self.reflect_point(&worst.point, &centroid, &alpha);
-            let f_reflected = self.f.call(&reflected);
+            let f_reflected = self.f.call(&(&reflected / &scl));
             fn_evals += 1;
 
             if !f_reflected.is_finite() {
@@ -375,7 +412,7 @@ where
             } else if f_reflected < best.value {
                 // Try expansion
                 let expanded = self.reflect_point(&worst.point, &centroid, &(&alpha * &gamma));
-                let f_expanded = self.f.call(&expanded);
+                let f_expanded = self.f.call(&(&expanded / &scl));
                 fn_evals += 1;
 
                 if !f_expanded.is_finite() {
@@ -400,13 +437,13 @@ where
                 let (contracted, f_contracted) = if f_reflected < worst.value {
                     // Outside contraction
                     let point = self.reflect_point(&worst.point, &centroid, &(&alpha * &rho));
-                    let value = self.f.call(&point);
+                    let value = self.f.call(&(&point / &scl));
                     fn_evals += 1;
                     (point, value)
                 } else {
                     // Inside contraction
                     let point = self.reflect_point(&worst.point, &centroid, &-rho.clone());
-                    let value = self.f.call(&point);
+                    let value = self.f.call(&(&point / &scl));
                     fn_evals += 1;
                     (point, value)
                 };
@@ -430,7 +467,7 @@ where
                             new_point[j] =
                                 &best_point[j] + &sigma * (&simplex[i].point[j] - &best_point[j]);
                         }
-                        let new_value = self.f.call(&new_point);
+                        let new_value = self.f.call(&(&new_point / &scl));
                         fn_evals += 1;
 
                         if !new_value.is_finite() {
@@ -449,7 +486,7 @@ where
         // Sort final simplex
         simplex.sort_by(|a, b| a.value.partial_cmp(&b.value).unwrap());
 
-        self.xmin = simplex[0].point.clone();
+        self.xmin = &simplex[0].point / &scl;
         self.fmin = simplex[0].value.clone();
         self.converged = false;
         Ok(SimplexResult {
@@ -470,6 +507,7 @@ where
     pub fn adaptive_downhill_simplex(
         &mut self,
         initial_point: &Points1<T>,
+        scale: Option<&Points1<T>>,
         initial_step: Option<T>,
         tol: Option<T>,
         max_iters: Option<usize>,
@@ -480,6 +518,8 @@ where
             return Err(MinimizerError::InvalidDimension);
         }
 
+        let scl = scale.unwrap_or(&Points1::ones(n)).clone();
+        let x_scaled = initial_point * &scl;
         let step = initial_step.unwrap_or(T::one());
         let tol = tol.unwrap_or(T::from_f64(1e-8));
         let max_iter = max_iters.unwrap_or(1000);
@@ -492,7 +532,7 @@ where
 
         // Initialize simplex using regular simplex construction
         let mut simplex = Vec::with_capacity(n + 1);
-        simplex.push(Vertex::new_boxed(initial_point, self.f.clone())?);
+        simplex.push(Vertex::new_boxed(&x_scaled, self.f.clone())?);
 
         // Use right-angled simplex construction for better performance
         let delta_usual = &step
@@ -501,7 +541,7 @@ where
             &step * T::from_f64((((n + 1) as f64).sqrt() - 1.0) / (n as f64 * 2.0_f64.sqrt()));
 
         for i in 0..n {
-            let mut point = initial_point.to_owned();
+            let mut point = x_scaled.to_owned();
             for j in 0..n {
                 if i == j {
                     point[j] += &delta_usual;
@@ -541,7 +581,7 @@ where
             // Check for convergence
             let simplex_size = self.calculate_simplex_size(&simplex);
             if simplex_size < tol || no_improvement_count > 20 {
-                self.xmin = best.point.clone();
+                self.xmin = &best.point / &scl;
                 self.fmin = best.value.clone();
                 self.converged = true;
                 return Ok(SimplexResult {
@@ -560,7 +600,7 @@ where
 
             // Reflection
             let reflected = self.reflect_point(&worst.point, &centroid, &alpha);
-            let f_reflected = self.f.call(&reflected);
+            let f_reflected = self.f.call(&(&reflected / &scl));
             fn_evals += 1;
 
             if !f_reflected.is_finite() {
@@ -577,7 +617,7 @@ where
                 // Expansion
                 let expanded =
                     self.reflect_point(&worst.point, &centroid, &(&alpha + (&gamma - &alpha)));
-                let f_expanded = self.f.call(&expanded);
+                let f_expanded = self.f.call(&(&expanded / &scl));
                 fn_evals += 1;
 
                 if !f_expanded.is_finite() {
@@ -599,11 +639,11 @@ where
                 // Contraction
                 let (contracted, f_contracted) = if f_reflected < worst.value {
                     let point = self.reflect_point(&worst.point, &centroid, &(&alpha * &rho));
-                    let value = self.f.call(&point);
+                    let value = self.f.call(&(&point / &scl));
                     (point, value)
                 } else {
                     let point = self.reflect_point(&worst.point, &centroid, &-rho.clone());
-                    let value = self.f.call(&point);
+                    let value = self.f.call(&(&point / &scl));
                     (point, value)
                 };
                 fn_evals += 1;
@@ -626,7 +666,7 @@ where
                             new_point[j] =
                                 &best_point[j] + &sigma * (&simplex[i].point[j] - &best_point[j]);
                         }
-                        let new_value = self.f.call(&new_point);
+                        let new_value = self.f.call(&(&new_point / &scl));
                         fn_evals += 1;
 
                         if !new_value.is_finite() {
@@ -644,7 +684,7 @@ where
 
         simplex.sort_by(|a, b| a.value.partial_cmp(&b.value).unwrap());
 
-        self.xmin = simplex[0].point.clone();
+        self.xmin = &simplex[0].point / &scl;
         self.fmin = simplex[0].value.clone();
         self.converged = false;
         Ok(SimplexResult {
@@ -662,17 +702,19 @@ where
     pub fn minimize(
         &mut self,
         initial_point: &Points1<T>,
+        scale: Option<&Points1<T>>,
         initial_step: Option<T>,
         tol: Option<T>,
         max_iters: Option<usize>,
     ) -> Result<SimplexResult<T>, MinimizerError> {
-        self.downhill_simplex(initial_point, initial_step, tol, max_iters)
+        self.downhill_simplex(initial_point, scale, initial_step, tol, max_iters)
     }
 
     /// Create initial simplex with custom step sizes for each dimension
     pub fn minimize_with_steps(
         &mut self,
         initial_point: &Points1<T>,
+        scale: Option<&Points1<T>>,
         step_sizes: &Points1<T>,
     ) -> Result<SimplexResult<T>, MinimizerError> {
         let n = initial_point.len();
@@ -680,18 +722,21 @@ where
             return Err(MinimizerError::InvalidInitialSimplex);
         }
 
+        let scl = scale.unwrap_or(&Points1::ones(n)).clone();
+        let x_scaled = initial_point * &scl;
+
         // Custom implementation with individual step sizes
         let mut simplex = Vec::with_capacity(n + 1);
-        simplex.push(Vertex::new_boxed(initial_point, self.f.clone())?);
+        simplex.push(Vertex::new_boxed(&x_scaled, self.f.clone())?);
 
         for i in 0..n {
-            let mut point = initial_point.to_owned();
+            let mut point = x_scaled.to_owned();
             point[i] += &step_sizes[i];
             simplex.push(Vertex::new_boxed(&point, self.f.clone())?);
         }
 
         // Continue with standard algorithm
-        self.run_simplex_algorithm(simplex, &T::from_f64(1e-8), 1000)
+        self.run_simplex_algorithm(simplex, &scl, &T::from_f64(1e-8), 1000)
     }
 }
 
@@ -784,7 +829,13 @@ mod minimize_simplex_tests {
         let mut simplex = Simplex::new(objective);
 
         let result = simplex
-            .minimize(&array![0.0.into(), 0.0.into()].into(), None, None, None)
+            .minimize(
+                &array![0.0.into(), 0.0.into()].into(),
+                None,
+                None,
+                None,
+                None,
+            )
             .unwrap();
 
         assert!((&result.xmin[0] - 1.0).abs() < 1e-6);
@@ -809,6 +860,7 @@ mod minimize_simplex_tests {
         let result = simplex
             .downhill_simplex(
                 &array![MyFloat::new(-1.2), 1.0.into()].into(),
+                None,
                 Some(0.1.into()),
                 Some(1e-6.into()),
                 Some(2000),
@@ -837,6 +889,7 @@ mod minimize_simplex_tests {
                 None,
                 None,
                 None,
+                None,
             )
             .unwrap();
 
@@ -862,6 +915,7 @@ mod minimize_simplex_tests {
         let result = simplex
             .adaptive_downhill_simplex(
                 &array![0.0.into(), 0.0.into()].into(),
+                None,
                 Some(1.0.into()),
                 Some(1e-8.into()),
                 None,
@@ -886,6 +940,7 @@ mod minimize_simplex_tests {
         let result = simplex
             .minimize_with_steps(
                 &array![0.0.into(), 0.0.into()].into(),
+                None,
                 &array![10.0.into(), 1.0.into()].into(), // Different step sizes for each dimension
             )
             .unwrap();
@@ -903,7 +958,7 @@ mod minimize_simplex_tests {
         let objective = MultiDimFn::new(func);
         let mut simplex = Simplex::new(objective);
 
-        let result = simplex.minimize(&array![].into(), None, None, None);
+        let result = simplex.minimize(&array![].into(), None, None, None, None);
         assert!(result.is_err());
 
         assert!(matches!(result, Err(MinimizerError::InvalidDimension)));
@@ -916,7 +971,13 @@ mod minimize_simplex_tests {
         let mut simplex = Simplex::new(objective);
 
         let result = simplex
-            .minimize(&array![2.0.into(), 2.0.into()].into(), None, None, None)
+            .minimize(
+                &array![2.0.into(), 2.0.into()].into(),
+                None,
+                None,
+                None,
+                None,
+            )
             .unwrap();
 
         assert!(!result.history.is_empty());
@@ -932,7 +993,7 @@ mod minimize_simplex_tests {
         let mut simplex = Simplex::new(objective);
 
         let result = simplex
-            .minimize(&Points1::ones(5).into(), None, None, None)
+            .minimize(&Points1::ones(5).into(), None, None, None, None)
             .unwrap();
 
         assert!(result.converged);
@@ -953,6 +1014,7 @@ mod minimize_simplex_tests {
         let result = simplex
             .downhill_simplex(
                 &array![MyFloat::new(-1.2), 1.0.into()].into(),
+                None,
                 Some(0.1.into()),
                 Some(1e-6.into()),
                 Some(3000),
@@ -972,7 +1034,13 @@ mod minimize_simplex_tests {
         let mut simplex = Simplex::new(objective);
 
         let result = simplex
-            .minimize(&(Points1::<MyFloat>::ones(4) * -1.0), None, None, None)
+            .minimize(
+                &(Points1::<MyFloat>::ones(4) * -1.0),
+                None,
+                None,
+                None,
+                None,
+            )
             .unwrap();
 
         for coord in result.xmin {
@@ -996,7 +1064,13 @@ mod minimize_simplex_tests {
         let mut simplex = Simplex::new(objective);
 
         let result = simplex
-            .minimize(&array![0.6.into(), 0.6.into()].into(), None, None, None)
+            .minimize(
+                &array![0.6.into(), 0.6.into()].into(),
+                None,
+                None,
+                None,
+                None,
+            )
             .unwrap();
 
         // Should satisfy constraint x + y >= 1
@@ -1018,10 +1092,22 @@ mod minimize_simplex_tests {
         let mut simplex = Simplex::new(objective);
 
         let standard_result = simplex
-            .downhill_simplex(&array![1.0.into(), 1.0.into()].into(), None, None, None)
+            .downhill_simplex(
+                &array![1.0.into(), 1.0.into()].into(),
+                None,
+                None,
+                None,
+                None,
+            )
             .unwrap();
         let adaptive_result = simplex
-            .adaptive_downhill_simplex(&array![1.0.into(), 1.0.into()].into(), None, None, None)
+            .adaptive_downhill_simplex(
+                &array![1.0.into(), 1.0.into()].into(),
+                None,
+                None,
+                None,
+                None,
+            )
             .unwrap();
 
         // Both should converge
@@ -1049,7 +1135,7 @@ mod minimize_simplex_tests {
             let mut simplex = Simplex::new(objective);
 
             let result = simplex
-                .minimize(&array![0.0.into()].into(), None, None, None)
+                .minimize(&array![0.0.into()].into(), None, None, None, None)
                 .unwrap();
 
             assert!((&result.xmin[0] - 5.0).abs() < 1e-6);
@@ -1066,7 +1152,13 @@ mod minimize_simplex_tests {
             let mut simplex = Simplex::new(objective);
 
             let result = simplex
-                .minimize(&array![0.0.into(), 0.0.into()].into(), None, None, None)
+                .minimize(
+                    &array![0.0.into(), 0.0.into()].into(),
+                    None,
+                    None,
+                    None,
+                    None,
+                )
                 .unwrap();
 
             assert!(result.xmin[0].abs() < 1e-6);
@@ -1082,7 +1174,13 @@ mod minimize_simplex_tests {
             let mut simplex = Simplex::new(objective);
 
             let result = simplex
-                .minimize(&array![0.0.into(), 0.0.into()].into(), None, None, None)
+                .minimize(
+                    &array![0.0.into(), 0.0.into()].into(),
+                    None,
+                    None,
+                    None,
+                    None,
+                )
                 .unwrap();
 
             assert!((&result.xmin[0] + 3.0).abs() < 1e-6);
@@ -1100,7 +1198,7 @@ mod minimize_simplex_tests {
             let objective = MultiDimFn::new(func);
             let mut simplex = Simplex::new(objective);
 
-            let result = simplex.minimize(&array![].into(), None, None, None);
+            let result = simplex.minimize(&array![].into(), None, None, None, None);
             assert!(result.is_err());
             assert!(matches!(
                 result.unwrap_err(),
@@ -1114,8 +1212,13 @@ mod minimize_simplex_tests {
             let objective = MultiDimFn::new(func);
             let mut simplex = Simplex::new(objective);
 
-            let result =
-                simplex.downhill_simplex(&array![1.0.into()].into(), None, Some(0.0.into()), None);
+            let result = simplex.downhill_simplex(
+                &array![1.0.into()].into(),
+                None,
+                None,
+                Some(0.0.into()),
+                None,
+            );
             assert!(result.is_err());
             assert!(matches!(
                 result.unwrap_err(),
@@ -1124,6 +1227,7 @@ mod minimize_simplex_tests {
 
             let result = simplex.downhill_simplex(
                 &array![1.0.into()].into(),
+                None,
                 None,
                 Some(MyFloat::new(-1e-8)),
                 None,
@@ -1147,7 +1251,7 @@ mod minimize_simplex_tests {
             let objective = MultiDimFn::new(func);
             let mut simplex = Simplex::new(objective);
 
-            let result = simplex.minimize(&array![2.0.into()].into(), None, None, None); // Start where function is infinite
+            let result = simplex.minimize(&array![2.0.into()].into(), None, None, None, None); // Start where function is infinite
             assert!(result.is_err());
             assert!(matches!(
                 result.unwrap_err(),
@@ -1167,7 +1271,8 @@ mod minimize_simplex_tests {
             let objective = MultiDimFn::new(func);
             let mut simplex = Simplex::new(objective);
 
-            let result = simplex.minimize(&array![MyFloat::new(-1.0)].into(), None, None, None); // Start where function is NaN
+            let result =
+                simplex.minimize(&array![MyFloat::new(-1.0)].into(), None, None, None, None); // Start where function is NaN
             assert!(result.is_err());
             assert!(matches!(
                 result.unwrap_err(),
@@ -1183,6 +1288,7 @@ mod minimize_simplex_tests {
 
             let result = simplex.minimize_with_steps(
                 &array![1.0.into(), 1.0.into()].into(),
+                None,
                 &array![0.1.into()].into(),
             ); // Wrong length
             assert!(result.is_err());
@@ -1209,6 +1315,7 @@ mod minimize_simplex_tests {
                 .downhill_simplex(
                     &array![0.0.into(), 0.0.into()].into(),
                     None,
+                    None,
                     Some(1e-12.into()),
                     Some(10),
                 )
@@ -1225,7 +1332,13 @@ mod minimize_simplex_tests {
             let mut simplex = Simplex::new(objective);
 
             let result = simplex
-                .minimize(&array![0.0.into(), 0.0.into()].into(), None, None, None)
+                .minimize(
+                    &array![0.0.into(), 0.0.into()].into(),
+                    None,
+                    None,
+                    None,
+                    None,
+                )
                 .unwrap();
 
             assert!(!result.history.is_empty());
@@ -1250,6 +1363,7 @@ mod minimize_simplex_tests {
                 .downhill_simplex(
                     &array![1.0.into(), 1.0.into()].into(),
                     None,
+                    None,
                     Some(1e-12.into()),
                     None,
                 )
@@ -1272,7 +1386,7 @@ mod minimize_simplex_tests {
             let mut simplex = Simplex::new(objective);
 
             let result = simplex
-                .minimize(&Points1::ones(10).into(), None, None, None)
+                .minimize(&Points1::ones(10).into(), None, None, None, None)
                 .unwrap();
 
             for coord in result.xmin {
@@ -1295,6 +1409,7 @@ mod minimize_simplex_tests {
             let result = simplex
                 .downhill_simplex(
                     &(Points1::<MyFloat>::ones(4) * -0.5),
+                    None,
                     Some(0.5.into()),
                     Some(1e-4.into()),
                     Some(5000),
@@ -1327,6 +1442,7 @@ mod minimize_simplex_tests {
             let result = simplex
                 .downhill_simplex(
                     &array![1.0.into(), 1.0.into()].into(),
+                    None,
                     Some(0.5.into()),
                     Some(1e-6.into()),
                     Some(2000),
@@ -1360,6 +1476,7 @@ mod minimize_simplex_tests {
             let result = simplex
                 .downhill_simplex(
                     &array![0.5.into(), MyFloat::new(-0.5)].into(),
+                    None,
                     Some(0.2.into()),
                     Some(1e-6.into()),
                     Some(3000),
@@ -1392,6 +1509,7 @@ mod minimize_simplex_tests {
                 let result = simplex
                     .downhill_simplex(
                         &start.into(),
+                        None,
                         Some(0.5.into()),
                         Some(1e-6.into()),
                         Some(2000),
@@ -1434,6 +1552,7 @@ mod minimize_simplex_tests {
                 .downhill_simplex(
                     &array![0.0.into(), 0.0.into()].into(),
                     None,
+                    None,
                     Some(1e-8.into()),
                     None,
                 )
@@ -1441,6 +1560,7 @@ mod minimize_simplex_tests {
             let adaptive_result = simplex
                 .adaptive_downhill_simplex(
                     &array![0.0.into(), 0.0.into()].into(),
+                    None,
                     None,
                     Some(1e-8.into()),
                     None,
@@ -1471,6 +1591,7 @@ mod minimize_simplex_tests {
             let result = simplex
                 .adaptive_downhill_simplex(
                     &array![2.0.into(), 2.0.into()].into(),
+                    None,
                     Some(1.0.into()),
                     Some(1e-8.into()),
                     Some(1000),
@@ -1502,6 +1623,7 @@ mod minimize_simplex_tests {
             let result = simplex
                 .minimize_with_steps(
                     &array![0.0.into(), 0.0.into()].into(),
+                    None,
                     &array![1000.0.into(), 0.001.into()].into(), // Large step for first dim, small for second
                 )
                 .unwrap();
@@ -1519,6 +1641,7 @@ mod minimize_simplex_tests {
             // Test with zero step size - this creates a degenerate simplex
             let result = simplex.minimize_with_steps(
                 &array![1.0.into(), 1.0.into()].into(),
+                None,
                 &array![0.0.into(), 1.0.into()].into(),
             );
 
@@ -1545,7 +1668,13 @@ mod minimize_simplex_tests {
             let mut simplex = Simplex::new(objective);
 
             let result = simplex
-                .minimize(&array![1.0.into(), 2.0.into()].into(), None, None, None)
+                .minimize(
+                    &array![1.0.into(), 2.0.into()].into(),
+                    None,
+                    None,
+                    None,
+                    None,
+                )
                 .unwrap();
 
             assert!((result.fmin - 42.0).abs() < 1e-10);
@@ -1561,6 +1690,7 @@ mod minimize_simplex_tests {
 
             let result = simplex.downhill_simplex(
                 &array![0.0.into(), 0.0.into()].into(),
+                None,
                 Some(1.0.into()),
                 Some(1e-8.into()),
                 Some(100),
@@ -1592,7 +1722,13 @@ mod minimize_simplex_tests {
             let mut simplex = Simplex::new(objective);
 
             let result = simplex
-                .minimize(&array![1.0.into(), 1.0.into()].into(), None, None, None)
+                .minimize(
+                    &array![1.0.into(), 1.0.into()].into(),
+                    None,
+                    None,
+                    None,
+                    None,
+                )
                 .unwrap();
 
             // Should find minimum in the x >= 0 region
@@ -1612,7 +1748,13 @@ mod minimize_simplex_tests {
             let mut simplex = Simplex::new(objective);
 
             let result = simplex
-                .minimize(&array![0.0.into(), 0.0.into()].into(), None, None, None)
+                .minimize(
+                    &array![0.0.into(), 0.0.into()].into(),
+                    None,
+                    None,
+                    None,
+                    None,
+                )
                 .unwrap();
 
             // Check that simplex internal state matches result
@@ -1630,12 +1772,24 @@ mod minimize_simplex_tests {
 
             // First optimization
             let result1 = simplex
-                .minimize(&array![0.0.into(), 0.0.into()].into(), None, None, None)
+                .minimize(
+                    &array![0.0.into(), 0.0.into()].into(),
+                    None,
+                    None,
+                    None,
+                    None,
+                )
                 .unwrap();
 
             // Second optimization with different starting point
             let result2 = simplex
-                .minimize(&array![5.0.into(), 5.0.into()].into(), None, None, None)
+                .minimize(
+                    &array![5.0.into(), 5.0.into()].into(),
+                    None,
+                    None,
+                    None,
+                    None,
+                )
                 .unwrap();
 
             // Both should find the same minimum
@@ -1663,7 +1817,13 @@ mod minimize_simplex_tests {
             let mut simplex = Simplex::new(objective);
 
             let result = simplex
-                .minimize(&array![1.0.into(), 1.0.into()].into(), None, None, None)
+                .minimize(
+                    &array![1.0.into(), 1.0.into()].into(),
+                    None,
+                    None,
+                    None,
+                    None,
+                )
                 .unwrap();
 
             // Should have reasonable number of function evaluations
@@ -1682,6 +1842,7 @@ mod minimize_simplex_tests {
             let result = simplex
                 .downhill_simplex(
                     &array![1.0.into(), 1.0.into()].into(),
+                    None,
                     Some(1e-12.into()),
                     Some(1e-6.into()),
                     Some(5000),
@@ -1715,6 +1876,7 @@ mod minimize_simplex_tests {
             let result = simplex
                 .downhill_simplex(
                     &array![1.0.into(), 1.0.into()].into(),
+                    None,
                     Some(1e-6.into()),
                     Some(1e-8.into()),
                     None,
@@ -1736,6 +1898,7 @@ mod minimize_simplex_tests {
             let result = simplex
                 .downhill_simplex(
                     &array![0.0.into(), 0.0.into()].into(),
+                    None,
                     Some(1000.0.into()),
                     None,
                     None,
@@ -1761,6 +1924,7 @@ mod minimize_simplex_tests {
             let result = simplex
                 .downhill_simplex(
                     &array![1.0.into(), 1.0.into()].into(),
+                    None,
                     Some(0.1.into()),
                     Some(1e-4.into()),
                     Some(5000),
@@ -1783,7 +1947,13 @@ mod minimize_simplex_tests {
             let mut simplex = Simplex::new(objective);
 
             let result = simplex
-                .minimize(&array![1.0.into(), 1.0.into()].into(), None, None, None)
+                .minimize(
+                    &array![1.0.into(), 1.0.into()].into(),
+                    None,
+                    None,
+                    None,
+                    None,
+                )
                 .unwrap();
 
             assert!(result.xmin[0].abs() < 1e-6);
@@ -1924,7 +2094,13 @@ mod minimize_simplex_tests {
             let objective = MultiDimFn::new(func);
             let mut simplex = Simplex::new(objective);
             let result = simplex
-                .minimize(&x, None, Some(1e-10.into()), Some(1e3 as usize * n.pow(2)))
+                .minimize(
+                    &x,
+                    None,
+                    None,
+                    Some(1e-10.into()),
+                    Some(1e3 as usize * n.pow(2)),
+                )
                 .unwrap();
             for i in 0..10 {
                 assert!((&result.xmin[i] - shift[i]).abs() < 1e-2);
@@ -1950,7 +2126,13 @@ mod minimize_simplex_tests {
                 let objective = MultiDimFn::new(func);
                 let mut simplex = Simplex::new(objective);
                 let result = simplex
-                    .minimize(&x, None, Some(1e-10.into()), Some(1e3 as usize * n.pow(2)))
+                    .minimize(
+                        &x,
+                        None,
+                        None,
+                        Some(1e-10.into()),
+                        Some(1e3 as usize * n.pow(2)),
+                    )
                     .unwrap();
                 for i in 0..10 {
                     assert!((&result.xmin[i] - shift[i]).abs() < 1e-2);
@@ -1977,7 +2159,13 @@ mod minimize_simplex_tests {
                 let objective = MultiDimFn::new(func);
                 let mut simplex = Simplex::new(objective);
                 let result = simplex
-                    .minimize(&x, None, Some(1e-10.into()), Some(1e3 as usize * n.pow(2)))
+                    .minimize(
+                        &x,
+                        None,
+                        None,
+                        Some(1e-10.into()),
+                        Some(1e3 as usize * n.pow(2)),
+                    )
                     .unwrap();
                 for i in 0..10 {
                     assert!((&result.xmin[i] - shift[i]).abs() < 1e-2);
@@ -2116,7 +2304,13 @@ mod minimize_simplex_tests {
             let objective = MultiDimFn::new(func);
             let mut simplex = Simplex::new(objective);
             let result = simplex
-                .minimize(&x, None, Some(1e-10.into()), Some(1e3 as usize * n.pow(2)))
+                .minimize(
+                    &x,
+                    None,
+                    None,
+                    Some(1e-10.into()),
+                    Some(1e3 as usize * n.pow(2)),
+                )
                 .unwrap();
             for i in 0..10 {
                 assert!((&result.xmin[i] - shift[i]).abs() < 1e-2);
@@ -2148,7 +2342,13 @@ mod minimize_simplex_tests {
                 let objective = MultiDimFn::new(func);
                 let mut simplex = Simplex::new(objective);
                 let result = simplex
-                    .minimize(&x, None, Some(1e-10.into()), Some(1e3 as usize * n.pow(2)))
+                    .minimize(
+                        &x,
+                        None,
+                        None,
+                        Some(1e-10.into()),
+                        Some(1e3 as usize * n.pow(2)),
+                    )
                     .unwrap();
                 for i in 0..10 {
                     assert!((&result.xmin[i] - shift[i]).abs() < 1e-2);
@@ -2181,7 +2381,13 @@ mod minimize_simplex_tests {
                 let objective = MultiDimFn::new(func);
                 let mut simplex = Simplex::new(objective);
                 let result = simplex
-                    .minimize(&x, None, Some(1e-10.into()), Some(1e3 as usize * n.pow(2)))
+                    .minimize(
+                        &x,
+                        None,
+                        None,
+                        Some(1e-10.into()),
+                        Some(1e3 as usize * n.pow(2)),
+                    )
                     .unwrap();
                 for i in 0..10 {
                     assert!((&result.xmin[i] - shift[i]).abs() < 1e-2);
@@ -2342,7 +2548,13 @@ mod minimize_simplex_tests {
                 let x = x1.dot(&m);
                 let mut simplex = Simplex::new(elliptic(bias));
                 let result = simplex
-                    .minimize(&x, None, Some(1e-10.into()), Some(1e3 as usize * n.pow(2)))
+                    .minimize(
+                        &x,
+                        None,
+                        Some(1e-10.into()),
+                        None,
+                        Some(1e3 as usize * n.pow(2)),
+                    )
                     .unwrap();
                 println!(
                     "\n\nxmin = {:?}\nfmin = {:?}\n\n",
@@ -2496,7 +2708,13 @@ mod minimize_simplex_tests {
             let objective = MultiDimFn::new(func);
             let mut simplex = Simplex::new(objective);
             let result = simplex
-                .minimize(&x, None, Some(1e-10.into()), Some(1e3 as usize * n.pow(2)))
+                .minimize(
+                    &x,
+                    None,
+                    None,
+                    Some(1e-10.into()),
+                    Some(1e3 as usize * n.pow(2)),
+                )
                 .unwrap();
             for i in 0..10 {
                 assert!((&result.xmin[i] - &shift[i]).abs() < 1e-2);
@@ -2624,7 +2842,13 @@ mod minimize_simplex_tests {
                 let mut simplex =
                     Simplex::new(rosenbrock(shift.slice(s![0..10]).to_owned().into(), bias));
                 let result = simplex
-                    .minimize(&x, None, Some(1e-12.into()), Some(1e3 as usize * n.pow(2)))
+                    .minimize(
+                        &x,
+                        None,
+                        None,
+                        Some(1e-12.into()),
+                        Some(1e3 as usize * n.pow(2)),
+                    )
                     .unwrap();
                 println!(
                     "\n\nxmin = {:?}\nfmin = {:?}\n\n",

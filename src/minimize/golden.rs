@@ -6,10 +6,31 @@ use std::fmt;
 /// Result of golden section search
 #[derive(Debug, Clone)]
 pub struct GoldenResult<T> {
-    pub xmin: T,
-    pub fmin: T,
-    pub iters: usize,
-    pub converged: bool,
+    xmin: T,
+    fmin: T,
+    iters: usize,
+    converged: bool,
+}
+
+impl<T> GoldenResult<T>
+where
+    T: RFFloat,
+{
+    pub fn xmin(&self) -> T {
+        self.xmin.clone()
+    }
+
+    pub fn fmin(&self) -> T {
+        self.fmin.clone()
+    }
+
+    pub fn iters(&self) -> usize {
+        self.iters
+    }
+
+    pub fn converged(&self) -> bool {
+        self.converged
+    }
 }
 
 pub struct Golden<T> {

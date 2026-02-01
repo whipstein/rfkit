@@ -5,14 +5,74 @@ use std::fmt;
 
 /// Result of Brent's method with derivatives
 #[derive(Debug, Clone)]
-pub struct DBrentResult<T> {
-    pub xmin: T,
-    pub fmin: T,
-    pub dfmin: T,
-    pub iters: usize,
-    pub converged: bool,
-    pub final_bracket_size: T,
-    pub method_used: Vec<String>, // Track which methods were used
+pub struct DBrentResult<T>
+where
+    T: RFFloat,
+{
+    xmin: T,
+    fmin: T,
+    dfmin: T,
+    iters: usize,
+    converged: bool,
+    final_bracket_size: T,
+    method_used: Vec<DBrentMethod>, // Track which methods were used
+}
+
+impl<T> DBrentResult<T>
+where
+    T: RFFloat,
+{
+    pub fn xmin(&self) -> T {
+        self.xmin.clone()
+    }
+
+    pub fn fmin(&self) -> T {
+        self.fmin.clone()
+    }
+
+    pub fn dfmin(&self) -> T {
+        self.dfmin.clone()
+    }
+
+    pub fn iters(&self) -> usize {
+        self.iters
+    }
+
+    pub fn converged(&self) -> bool {
+        self.converged
+    }
+
+    pub fn bracket_size(&self) -> T {
+        self.final_bracket_size.clone()
+    }
+
+    pub fn methods(&self) -> Vec<DBrentMethod> {
+        self.method_used.clone()
+    }
+}
+
+/// Conjugate gradient update formulas
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum DBrentMethod {
+    Bisection,
+    Newton,
+    InvQuad,
+    InvQuadDer,
+    Secant,
+    Converged,
+}
+
+impl fmt::Display for DBrentMethod {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            DBrentMethod::Bisection => write!(f, "Bisection"),
+            DBrentMethod::Newton => write!(f, "Newton"),
+            DBrentMethod::InvQuad => write!(f, "Inverse Quadratic"),
+            DBrentMethod::InvQuadDer => write!(f, "Inverse Quadratic with Derivative"),
+            DBrentMethod::Secant => write!(f, "Secant"),
+            DBrentMethod::Converged => write!(f, "Converged"),
+        }
+    }
 }
 
 pub struct DBrent<T> {
@@ -146,7 +206,7 @@ where
         let mut eval_c = eval_a.clone();
         let mut mflag = true;
         let mut eval_d = (T::zero(), T::zero(), T::zero());
-        let mut method_used = Vec::new();
+        let mut method_used: Vec<DBrentMethod> = Vec::new();
 
         self.iters = 0;
 
@@ -154,7 +214,7 @@ where
             self.iters += 1;
 
             let mut s = bx.clone();
-            let mut method = "bisection";
+            let mut method = DBrentMethod::Bisection;
 
             // Try Newton's method first if derivative is significant
             if eval_b.2.abs() > tol && eval_b.2.abs() > T::from_f64(1e-8) {
@@ -166,12 +226,12 @@ where
 
                 if newton_in_bracket && newton_reasonable {
                     s = newton_step.clone();
-                    method = "newton";
+                    method = DBrentMethod::Newton;
                 }
             }
 
             // If Newton wasn't used or suitable, try other interpolation methods
-            if method == "bisection" {
+            if method == DBrentMethod::Bisection {
                 // Try inverse quadratic interpolation with derivatives
                 if eval_a.1 != eval_c.1 && eval_b.1 != eval_c.1 && eval_a.1 != eval_b.1 {
                     // Hermite interpolation using function values and derivatives
@@ -197,14 +257,15 @@ where
                                         / ((&eval_b.1 - &eval_a.1) * (&eval_b.1 - &eval_c.1))
                                     + &eval_c.0 * &eval_a.1 * &eval_b.1
                                         / ((&eval_c.1 - &eval_a.1) * (&eval_c.1 - &eval_b.1));
-                                method = "inverse_quadratic_with_derivative";
+                                method = DBrentMethod::InvQuadDer;
                             }
                         }
                     }
                 }
 
                 // Fallback to standard inverse quadratic interpolation
-                if method == "bisection" && eval_a.1 != eval_c.1 && eval_b.1 != eval_c.1 {
+                if method == DBrentMethod::Bisection && eval_a.1 != eval_c.1 && eval_b.1 != eval_c.1
+                {
                     let denom =
                         (&eval_a.1 - &eval_b.1) * (&eval_a.1 - &eval_c.1) * (&eval_b.1 - &eval_c.1);
                     if denom.abs() > tol {
@@ -214,14 +275,14 @@ where
                                 / ((&eval_b.1 - &eval_a.1) * (&eval_b.1 - &eval_c.1))
                             + &eval_c.0 * &eval_a.1 * &eval_b.1
                                 / ((&eval_c.1 - &eval_a.1) * (&eval_c.1 - &eval_b.1));
-                        method = "inverse_quadratic";
+                        method = DBrentMethod::InvQuad;
                     }
                 }
 
                 // Fallback to secant method
-                if method == "bisection" && eval_a.1 != eval_b.1 {
+                if method == DBrentMethod::Bisection && eval_a.1 != eval_b.1 {
                     s = &eval_b.0 - &eval_b.1 * (&eval_b.0 - &eval_a.0) / (&eval_b.1 - &eval_a.1);
-                    method = "secant";
+                    method = DBrentMethod::Secant;
                 }
             }
 
@@ -235,14 +296,14 @@ where
 
             if condition1 || condition2 || condition3 || condition4 || condition5 {
                 s = (&ax + &bx) / 2.0;
-                method = "bisection";
+                method = DBrentMethod::Bisection;
                 mflag = true;
             } else {
                 mflag = false;
             }
 
             let eval_s = (s.clone(), self.f.call_scalar(&s), self.f.df_scalar(&s));
-            method_used.push(method.to_string());
+            method_used.push(method);
 
             // Update for next iteration
             eval_d = eval_c.clone();
@@ -335,7 +396,7 @@ where
 
             let fx = self.f.call_scalar(&x);
             if fx.abs() < tol {
-                method_used.push("converged".to_string());
+                method_used.push(DBrentMethod::Converged);
                 break;
             }
 
@@ -344,18 +405,18 @@ where
             if dfx.abs() < tol {
                 // Use bisection when derivative is too small
                 x = (&bracket_a + &bracket_b) / 2.0;
-                method_used.push("bisection".to_string());
+                method_used.push(DBrentMethod::Bisection);
             } else {
                 // Try Newton step
                 let x_newton = &x - &fx / &dfx;
 
                 if x_newton > bracket_a && x_newton < bracket_b {
                     x = x_newton.clone();
-                    method_used.push("newton".to_string());
+                    method_used.push(DBrentMethod::Newton);
                 } else {
                     // Newton step outside bracket, use bisection
                     x = (&bracket_a + &bracket_b) / 2.0;
-                    method_used.push("bisection".to_string());
+                    method_used.push(DBrentMethod::Bisection);
                 }
             }
 
@@ -530,7 +591,12 @@ mod minimize_myfloat_dbrent_tests {
         assert!(result.fmin.abs() < 1e-12);
         assert!(result.converged);
         // Newton should be primary method used
-        assert!(result.method_used.iter().any(|m| m == "newton"));
+        assert!(
+            result
+                .method_used
+                .iter()
+                .any(|&m| m == DBrentMethod::Newton)
+        );
         assert!(dbrent.fmin.abs() < 1e-12);
         assert!(dbrent.converged);
     }
@@ -641,8 +707,8 @@ mod minimize_myfloat_dbrent_tests {
 
         assert!((&result.xmin - 1.0).abs() < 1e-3);
         assert!(
-            result.method_used.contains(&String::from("newton"))
-                || result.method_used.contains(&String::from("bisection"))
+            result.method_used.contains(&DBrentMethod::Newton)
+                || result.method_used.contains(&DBrentMethod::Bisection)
         );
     }
 
@@ -946,7 +1012,12 @@ mod minimize_myfloat_dbrent_tests {
 
             assert!((&result.xmin - 2.0).abs() < 1e-12);
             assert!(result.fmin.abs() < 1e-12);
-            assert!(result.method_used.iter().any(|m| m == "newton"));
+            assert!(
+                result
+                    .method_used
+                    .iter()
+                    .any(|&m| m == DBrentMethod::Newton)
+            );
             assert!(result.converged);
         }
 
@@ -994,7 +1065,12 @@ mod minimize_myfloat_dbrent_tests {
                 .unwrap();
 
             assert!(result.fmin.abs() < 1e-6);
-            assert!(result.method_used.iter().any(|m| m == "bisection"));
+            assert!(
+                result
+                    .method_used
+                    .iter()
+                    .any(|&m| m == DBrentMethod::Bisection)
+            );
             assert!(result.converged);
         }
     }
@@ -1116,7 +1192,12 @@ mod minimize_myfloat_dbrent_tests {
                 .unwrap();
 
             // Should have used bisection at some point for safety
-            assert!(result.method_used.iter().any(|m| m == "bisection"));
+            assert!(
+                result
+                    .method_used
+                    .iter()
+                    .any(|&m| m == DBrentMethod::Bisection)
+            );
             assert!(result.fmin.abs() < 1e-10);
             assert!(result.converged);
         }

@@ -6,9 +6,11 @@ use crate::{
 };
 use ndarray::prelude::*;
 use num::complex::{Complex64, c64};
-use serde::Serialize;
-use std::fmt;
-use std::str::FromStr;
+use serde::{
+    Serialize,
+    ser::{SerializeStruct, Serializer},
+};
+use std::{fmt, str::FromStr};
 
 pub mod capacitor;
 pub mod ground;
@@ -23,24 +25,27 @@ pub mod resistor;
 pub mod short;
 pub mod transformer;
 
-pub use self::capacitor::{Capacitor, CapacitorBuilder};
-pub use self::ground::Ground;
-pub use self::inductor::{Inductor, InductorBuilder};
-pub use self::mbend::{Mbend, MbendBuilder};
-pub use self::mlef::{Mlef, MlefBuilder};
-pub use self::mlin::{Mlin, MlinBuilder};
-pub use self::msub::{Msub, MsubBuilder};
-pub use self::port::{Port, PortBuilder};
-pub use self::q::{Q, QBuilder, QMode};
-pub use self::resistor::{Resistor, ResistorBuilder};
-pub use self::short::Short;
-pub use self::transformer::{Transformer, TransformerBuilder};
+pub use self::{
+    capacitor::{Capacitor, CapacitorBuilder},
+    ground::Ground,
+    inductor::{Inductor, InductorBuilder},
+    mbend::{Mbend, MbendBuilder},
+    mlef::{Mlef, MlefBuilder},
+    mlin::{Mlin, MlinBuilder},
+    msub::{Msub, MsubBuilder},
+    port::{Port, PortBuilder},
+    q::{Q, QBuilder, QMode},
+    resistor::{Resistor, ResistorBuilder},
+    short::Short,
+    transformer::{IdealTransformer, IdealTransformerBuilder, Transformer, TransformerBuilder},
+};
 
 #[derive(Copy, Clone, Debug, Default, PartialEq, Serialize)]
 pub enum ElemType {
     #[default]
     Capacitor,
     Ground,
+    IdealTransformer,
     Inductor,
     Mbend,
     Mlef,
@@ -59,6 +64,7 @@ impl ElemType {
         match self {
             ElemType::Capacitor => "Capacitor",
             ElemType::Ground => "GND",
+            ElemType::IdealTransformer => "Ideal Transformer",
             ElemType::Inductor => "Inductor",
             ElemType::Mbend => "MBEND",
             ElemType::Mlef => "MLEF",
@@ -80,6 +86,7 @@ impl FromStr for ElemType {
         match s {
             "C" | "c" | "Cap" | "cap" | "Capacitor" | "capacitor" => Ok(ElemType::Capacitor),
             "GND" | "gnd" | "Ground" | "ground" => Ok(ElemType::Ground),
+            "ixfmr" => Ok(ElemType::IdealTransformer),
             "L" | "l" | "Ind" | "ind" | "Inductor" | "inductor" => Ok(ElemType::Inductor),
             "mbend" | "MBEND" => Ok(ElemType::Mbend),
             "mlef" | "MLEF" => Ok(ElemType::Mlef),
@@ -100,6 +107,7 @@ impl fmt::Display for ElemType {
         match &self {
             ElemType::Capacitor => write!(f, "Capacitor"),
             ElemType::Ground => write!(f, "GND"),
+            ElemType::IdealTransformer => write!(f, "Ideal Transformer"),
             ElemType::Inductor => write!(f, "Inductor"),
             ElemType::Mbend => write!(f, "MBEND"),
             ElemType::Mlef => write!(f, "MLEF"),
@@ -246,6 +254,7 @@ pub trait Term: Elem {
 pub enum Element {
     Capacitor(Capacitor),
     Ground(Ground),
+    IdealTransformer(IdealTransformer),
     Inductor(Inductor),
     Mbend(Mbend),
     Mlef(Mlef),
@@ -267,8 +276,23 @@ impl Element {
     }
 }
 
+impl Serialize for Element {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut s = serializer.serialize_struct("Element", 7)?;
+        s.serialize_field("elemId", &self.id())?;
+        s.serialize_field("elemType", &self.elem().to_str())?;
+        s.serialize_field("elemVal", &self.val())?;
+        s.serialize_field("elemNodes", &self.nodes())?;
+        s.serialize_field("elemInfo", &self)?;
+        s.end()
+    }
+}
+
 define_elem_impl!(
-    variants: [Capacitor, Ground, Inductor, Mbend, Mlef, Mlin, Port, Resistor, Short, Transformer]
+    variants: [Capacitor, Ground, IdealTransformer, Inductor, Mbend, Mlef, Mlin, Port, Resistor, Short, Transformer]
 );
 
 /// Builder design pattern for Element
@@ -287,7 +311,14 @@ pub struct ElementBuilder {
     id: String,
     unitval: UnitValue,
     val: f64,
+    n: Option<f64>,
+    km: Option<f64>,
+    m: Option<UnitValue>,
+    l1: UnitValue,
+    l2: Option<UnitValue>,
     q: Option<Q>,
+    q1: Option<Q>,
+    q2: Option<Q>,
     width: UnitValue,
     length: UnitValue,
     gamma: Complex64,
@@ -297,6 +328,7 @@ pub struct ElementBuilder {
     tand: f64,
     height: UnitValue,
     thickness: UnitValue,
+    freq: Frequency,
     z: Complex64,
     nodes: Vec<usize>,
     elemtype: ElemType,
@@ -309,7 +341,14 @@ impl ElementBuilder {
             id: "".to_string(),
             unitval: UnitValue::default(),
             val: 1.0,
+            n: None,
+            km: None,
+            m: None,
+            l1: *UnitValue::default().set_unit(Unit::Henry),
+            l2: None,
             q: None,
+            q1: None,
+            q2: None,
             width: *UnitValue::default().set_unit(Unit::Meter),
             length: *UnitValue::default().set_unit(Unit::Meter),
             gamma: Complex64::ZERO,
@@ -319,6 +358,7 @@ impl ElementBuilder {
             tand: 0.0,
             height: UnitValue::default(),
             thickness: UnitValue::default(),
+            freq: Frequency::default(),
             z: Complex64::ZERO,
             nodes: vec![],
             elemtype: ElemType::None,
@@ -360,12 +400,134 @@ impl ElementBuilder {
     /// Provide element value
     pub fn val(mut self, val: f64) -> Self {
         self.val = val;
+        if self.elemtype == ElemType::IdealTransformer {
+            self.n = Some(val);
+        }
         self
     }
 
-    /// Provide element Q
+    /// Provide element N for Transformer
+    pub fn n(mut self, val: f64) -> Self {
+        self.n = Some(val);
+        self
+    }
+
+    /// Provide element km for Transformer
+    pub fn km(mut self, km: f64) -> Self {
+        self.km = Some(km);
+        self
+    }
+
+    /// Provide element M for Transformer
+    pub fn m(mut self, ind: UnitValue) -> Self {
+        self.m = Some(ind);
+        self
+    }
+
+    /// Provide element M for Transformer
+    pub fn m_val(mut self, ind: f64) -> Self {
+        let _ = *self
+            .m
+            .get_or_insert(*UnitValue::default().set_unit(Unit::Henry))
+            .set_val(ind);
+        self
+    }
+
+    /// Provide element M for Transformer
+    pub fn m_val_scaled(mut self, ind: f64, scale: Scale) -> Self {
+        let _ = *self
+            .m
+            .get_or_insert(*UnitValue::default().set_unit(Unit::Henry))
+            .set_scale(scale);
+        let _ = *self
+            .m
+            .get_or_insert(*UnitValue::default().set_unit(Unit::Henry))
+            .set_val_scaled(ind);
+        self
+    }
+
+    /// Provide element L1 for Transformer
+    pub fn l1(mut self, ind: UnitValue) -> Self {
+        self.l1 = ind;
+        self
+    }
+
+    /// Provide element L1 for Transformer
+    pub fn l1_val(mut self, ind: f64) -> Self {
+        self.l1.set_val(ind);
+        self
+    }
+
+    /// Provide element L1 for Transformer
+    pub fn l1_val_scaled(mut self, ind: f64, scale: Scale) -> Self {
+        self.l1.set_scale(scale);
+        self.l1.set_val_scaled(ind);
+        self
+    }
+
+    /// Provide element L2 for Transformer
+    pub fn l2(mut self, ind: UnitValue) -> Self {
+        self.l2 = Some(ind);
+        self
+    }
+
+    /// Provide element L2 for Transformer
+    pub fn l2_val(mut self, ind: f64) -> Self {
+        let _ = *self
+            .l2
+            .get_or_insert(*UnitValue::default().set_unit(Unit::Henry))
+            .set_val(ind);
+        self
+    }
+
+    /// Provide element L2 for Transformer
+    pub fn l2_val_scaled(mut self, ind: f64, scale: Scale) -> Self {
+        let _ = *self
+            .l2
+            .get_or_insert(*UnitValue::default().set_unit(Unit::Henry))
+            .set_scale(scale);
+        let _ = *self
+            .l2
+            .get_or_insert(*UnitValue::default().set_unit(Unit::Henry))
+            .set_val_scaled(ind);
+        self
+    }
+
+    /// Provide element Q or both Q1 & Q2 for Transformer
     pub fn q(mut self, val: Q) -> Self {
-        self.q = Some(val);
+        self.q = Some(val.clone());
+        self.q1 = Some(val.clone());
+        self.q2 = Some(val);
+        self
+    }
+
+    /// Provide element Q1 for Transformer
+    pub fn q1(mut self, val: Q) -> Self {
+        self.q1 = Some(val);
+        self
+    }
+
+    /// Provide element Q1 for Transformer
+    pub fn q1_val(mut self, q: f64) -> Self {
+        let _ = self.q1.get_or_insert(Q::default()).set_q(q);
+        if let Some(val) = self.q1.as_mut() {
+            val.set_fq(&self.freq);
+        }
+        self
+    }
+
+    /// Provide element Q2 for Transformer
+    pub fn q2(mut self, val: Q) -> Self {
+        self.q2 = Some(val);
+        self
+    }
+
+    /// Provide element Q2 for Transformer
+    pub fn q2_val(mut self, q: f64) -> Self {
+        let _ = self.q2.get_or_insert(Q::default()).set_q(q);
+        if let Some(val) = self.q2.as_mut() {
+            val.set_fq(&self.freq);
+        }
         self
     }
 
@@ -467,6 +629,22 @@ impl ElementBuilder {
         self
     }
 
+    /// Provide er Frequency
+    pub fn freq(mut self, freq: &Frequency) -> Self {
+        self.freq = freq.clone();
+        if self.q1.is_some() {
+            if let Some(val) = self.q1.as_mut() {
+                val.set_fq(&self.freq);
+            }
+        }
+        if self.q2.is_some() {
+            if let Some(val) = self.q2.as_mut() {
+                val.set_fq(&self.freq);
+            }
+        }
+        self
+    }
+
     /// Provide element value in impedance
     pub fn z(mut self, val: Complex64) -> Self {
         self.z = val;
@@ -496,6 +674,14 @@ impl ElementBuilder {
                     .build(),
             )),
             ElemType::Ground => Some(Element::Ground(Ground::new())),
+            ElemType::IdealTransformer => Some(Element::IdealTransformer(
+                IdealTransformerBuilder::new()
+                    .id(self.id.as_str())
+                    .n(self.n.unwrap())
+                    .nodes(self.nodes.try_into().unwrap())
+                    .z0(self.z0)
+                    .build(),
+            )),
             ElemType::Inductor => Some(Element::Inductor(
                 InductorBuilder::new()
                     .id(self.id.as_str())
@@ -555,7 +741,14 @@ impl ElementBuilder {
             ElemType::Transformer => Some(Element::Transformer(
                 TransformerBuilder::new()
                     .id(self.id.as_str())
-                    .val(self.val)
+                    .freq(&self.freq)
+                    .n(self.n)
+                    .km(self.km)
+                    .m(self.m)
+                    .l1(self.l1)
+                    .l2(self.l2)
+                    .q1(self.q1)
+                    .q2(self.q2)
                     .nodes(self.nodes.try_into().unwrap())
                     .z0(self.z0)
                     .build(),

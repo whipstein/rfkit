@@ -5,27 +5,20 @@ use std::fmt;
 
 /// Result of minimum bracketing
 #[derive(Debug, Clone)]
-pub struct BracketResult<T> {
-    pub a: T,  // Left bracket point
-    pub b: T,  // Middle point (should have lowest function value)
-    pub c: T,  // Right bracket point
-    pub fa: T, // f(a)
-    pub fb: T, // f(b)
-    pub fc: T, // f(c)
-    pub iterations: usize,
-    pub function_evaluations: usize,
-    pub bracket_width: T,
-    pub expansion_ratio: T,
-}
-
-impl<T> BracketResult<T>
+pub struct BracketResult<T>
 where
-    T: PartialOrd + Clone,
+    T: RFFloat,
 {
-    /// Check if the bracket is valid (fb < fa and fb < fc)
-    pub fn is_valid(&self) -> bool {
-        self.fb < self.fa && self.fb < self.fc
-    }
+    a: T,  // Left bracket point
+    b: T,  // Middle point (should have lowest function value)
+    c: T,  // Right bracket point
+    fa: T, // f(a)
+    fb: T, // f(b)
+    fc: T, // f(c)
+    iterations: usize,
+    function_evaluations: usize,
+    bracket_width: T,
+    expansion_ratio: T,
 }
 
 impl<T> BracketResult<T>
@@ -33,6 +26,51 @@ where
     T: RFFloat,
     for<'a, 'b> &'a T: std::ops::Sub<&'b T, Output = T>,
 {
+    /// Check if the bracket is valid (fb < fa and fb < fc)
+    pub fn is_valid(&self) -> bool {
+        self.fb < self.fa && self.fb < self.fc
+    }
+
+    pub fn a(&self) -> T {
+        self.a.clone()
+    }
+
+    pub fn b(&self) -> T {
+        self.b.clone()
+    }
+
+    pub fn c(&self) -> T {
+        self.c.clone()
+    }
+
+    pub fn fa(&self) -> T {
+        self.fa.clone()
+    }
+
+    pub fn fb(&self) -> T {
+        self.fb.clone()
+    }
+
+    pub fn fc(&self) -> T {
+        self.fc.clone()
+    }
+
+    pub fn iters(&self) -> usize {
+        self.iterations
+    }
+
+    pub fn fn_evals(&self) -> usize {
+        self.function_evaluations
+    }
+
+    pub fn bracket_width(&self) -> T {
+        self.bracket_width.clone()
+    }
+
+    pub fn ratio(&self) -> T {
+        self.expansion_ratio.clone()
+    }
+
     /// Get the width of the bracket
     pub fn width(&self) -> T {
         (&self.c - &self.a).abs()

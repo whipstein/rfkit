@@ -16,21 +16,70 @@ pub struct QuasiNewtonResult<T>
 where
     T: RFFloat,
 {
-    pub x_min: Points1<T>,
-    pub f_min: T,
-    pub gradient_norm: T,
-    pub iterations: usize,
-    pub function_evaluations: usize,
-    pub gradient_evaluations: usize,
-    pub converged: bool,
-    pub convergence_history: Points1<T>,
-    pub gradient_norm_history: Points1<T>,
-    pub final_hessian_approximation: Points2<T>,
-    pub method_used: String,
+    xmin: Points1<T>,
+    fmin: T,
+    gradient_norm: T,
+    iterations: usize,
+    function_evaluations: usize,
+    gradient_evaluations: usize,
+    converged: bool,
+    convergence_history: Points1<T>,
+    gradient_norm_history: Points1<T>,
+    final_hessian_approximation: Points2<T>,
+    method_used: QuasiNewtonMethod,
+}
+
+impl<T> QuasiNewtonResult<T>
+where
+    T: RFFloat,
+{
+    pub fn xmin(&self) -> Points1<T> {
+        self.xmin.clone()
+    }
+
+    pub fn fmin(&self) -> T {
+        self.fmin.clone()
+    }
+
+    pub fn gradient_norm(&self) -> T {
+        self.gradient_norm.clone()
+    }
+
+    pub fn iters(&self) -> usize {
+        self.iterations
+    }
+
+    pub fn fn_evals(&self) -> usize {
+        self.function_evaluations
+    }
+
+    pub fn grad_evals(&self) -> usize {
+        self.gradient_evaluations
+    }
+
+    pub fn converged(&self) -> bool {
+        self.converged
+    }
+
+    pub fn history(&self) -> Points1<T> {
+        self.convergence_history.clone()
+    }
+
+    pub fn gradient_norm_history(&self) -> Points1<T> {
+        self.gradient_norm_history.clone()
+    }
+
+    pub fn final_hessian_approximation(&self) -> Points2<T> {
+        self.final_hessian_approximation.clone()
+    }
+
+    pub fn method(&self) -> QuasiNewtonMethod {
+        self.method_used
+    }
 }
 
 /// Quasi-Newton method variants
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum QuasiNewtonMethod {
     BFGS,               // Broyden-Fletcher-Goldfarb-Shanno
     DFP,                // Davidon-Fletcher-Powell
@@ -358,8 +407,8 @@ where
         }
 
         Ok(QuasiNewtonResult {
-            x_min: x.clone(),
-            f_min: f_current.clone(),
+            xmin: x.clone(),
+            fmin: f_current.clone(),
             gradient_norm: grad_norm.clone().into(),
             iterations,
             function_evaluations,
@@ -368,7 +417,7 @@ where
             convergence_history: Points1::from_vec(convergence_history),
             gradient_norm_history: Points1::from_real_vec(gradient_norm_history),
             final_hessian_approximation: h_inv,
-            method_used: "BFGS".to_string(),
+            method_used: QuasiNewtonMethod::BFGS,
         })
     }
 
@@ -465,8 +514,8 @@ where
         }
 
         Ok(QuasiNewtonResult {
-            x_min: x.clone(),
-            f_min: f_current.clone(),
+            xmin: x.clone(),
+            fmin: f_current.clone(),
             gradient_norm: grad_norm.clone().into(),
             iterations,
             function_evaluations,
@@ -475,7 +524,7 @@ where
             convergence_history: Points1::from_vec(convergence_history),
             gradient_norm_history: Points1::from_real_vec(gradient_norm_history),
             final_hessian_approximation: h_inv,
-            method_used: "DFP".to_string(),
+            method_used: QuasiNewtonMethod::DFP,
         })
     }
 
@@ -559,8 +608,8 @@ where
         }
 
         Ok(QuasiNewtonResult {
-            x_min: x.clone(),
-            f_min: f_current.clone(),
+            xmin: x.clone(),
+            fmin: f_current.clone(),
             gradient_norm: grad_norm.clone().into(),
             iterations,
             function_evaluations,
@@ -569,7 +618,7 @@ where
             convergence_history: Points1::from_vec(convergence_history),
             gradient_norm_history: Points1::from_real_vec(gradient_norm_history),
             final_hessian_approximation: h_inv,
-            method_used: "SR1".to_string(),
+            method_used: QuasiNewtonMethod::SR1,
         })
     }
 
@@ -671,8 +720,8 @@ where
         }
 
         Ok(QuasiNewtonResult {
-            x_min: x.clone(),
-            f_min: f_current.clone(),
+            xmin: x.clone(),
+            fmin: f_current.clone(),
             gradient_norm: grad_norm.clone().into(),
             iterations,
             function_evaluations,
@@ -681,7 +730,7 @@ where
             convergence_history: Points1::from_vec(convergence_history),
             gradient_norm_history: Points1::from_real_vec(gradient_norm_history),
             final_hessian_approximation: Points2::eye(n), // L-BFGS doesn't store full matrix
-            method_used: format!("L-BFGS({})", m),
+            method_used: QuasiNewtonMethod::LimitedBFGS(m),
         })
     }
 
@@ -860,9 +909,9 @@ mod minimize_quasinewton_tests {
             .minimize_bfgs(&array![0.0.into(), 0.0.into()].into())
             .unwrap();
 
-        assert!((&result.x_min[0] - 1.0).abs() < 1e-8);
-        assert!((&result.x_min[1] - 2.0).abs() < 1e-8);
-        assert!(result.f_min < 1e-14);
+        assert!((&result.xmin[0] - 1.0).abs() < 1e-8);
+        assert!((&result.xmin[1] - 2.0).abs() < 1e-8);
+        assert!(result.fmin < 1e-14);
         assert!(result.converged);
         assert!(result.iterations <= 5); // Should converge quickly for quadratic
     }
@@ -897,20 +946,20 @@ mod minimize_quasinewton_tests {
                 println!(
                     "Initial f: {}, Final f: {}, Progress: {:.1}%",
                     initial_f,
-                    res.f_min,
-                    100.0 * (1.0 - &res.f_min / &initial_f)
+                    res.fmin,
+                    100.0 * (1.0 - &res.fmin / &initial_f)
                 );
 
                 assert!(
-                    res.f_min < 0.5 * &initial_f,
+                    res.fmin < 0.5 * &initial_f,
                     "Should make significant progress: f_initial = {}, f_final = {}",
                     initial_f,
-                    res.f_min
+                    res.fmin
                 );
 
                 // If we get close to the solution, that's great, but not required for this test
                 let distance_to_optimum =
-                    ((&res.x_min[0] - 1.0).powi(2) + (&res.x_min[1] - 1.0).powi(2)).sqrt();
+                    ((&res.xmin[0] - 1.0).powi(2) + (&res.xmin[1] - 1.0).powi(2)).sqrt();
                 println!("Distance to optimum (1,1): {:.4}", distance_to_optimum);
 
                 // The main requirement is that the algorithm runs without crashing
@@ -939,8 +988,8 @@ mod minimize_quasinewton_tests {
                     )
                     .expect("BFGS should work on simple quadratic");
 
-                assert!((&simple_result.x_min[0] - 1.0).abs() < 1e-6);
-                assert!((&simple_result.x_min[1] - 2.0).abs() < 1e-6);
+                assert!((&simple_result.xmin[0] - 1.0).abs() < 1e-6);
+                assert!((&simple_result.xmin[1] - 2.0).abs() < 1e-6);
                 assert!(simple_result.converged);
             }
         }
@@ -970,16 +1019,16 @@ mod minimize_quasinewton_tests {
             match result {
                 Ok(res) => {
                     assert!(
-                        res.x_min[0].abs() < 1e-4,
+                        res.xmin[0].abs() < 1e-4,
                         "Method {:?}: x[0] = {} should be near 0",
                         method,
-                        res.x_min[0]
+                        res.xmin[0]
                     );
                     assert!(
-                        res.x_min[1].abs() < 1e-4,
+                        res.xmin[1].abs() < 1e-4,
                         "Method {:?}: x[1] = {} should be near 0",
                         method,
-                        res.x_min[1]
+                        res.xmin[1]
                     );
                     assert!(res.converged, "Method {:?} should converge", method);
                 }
@@ -1003,12 +1052,12 @@ mod minimize_quasinewton_tests {
                     if simple_result.is_ok() {
                         let res = simple_result.unwrap();
                         assert!(
-                            res.x_min[0].abs() < 1e-6,
+                            res.xmin[0].abs() < 1e-6,
                             "Method {:?} failed even on simple problem",
                             method
                         );
                         assert!(
-                            res.x_min[1].abs() < 1e-6,
+                            res.xmin[1].abs() < 1e-6,
                             "Method {:?} failed even on simple problem",
                             method
                         );
@@ -1030,7 +1079,7 @@ mod minimize_quasinewton_tests {
                             )
                             .expect(&format!("Method {:?} should work on 1D quadratic", method));
 
-                        assert!(result_1d.x_min[0].abs() < 1e-5);
+                        assert!(result_1d.xmin[0].abs() < 1e-5);
                         assert!(result_1d.converged);
                     }
                 }
@@ -1055,7 +1104,7 @@ mod minimize_quasinewton_tests {
 
         match result {
             Ok(res) => {
-                for (i, x) in res.x_min.iter().enumerate() {
+                for (i, x) in res.xmin.iter().enumerate() {
                     assert!(x.abs() < 1e-5, "x[{}] = {} should be near 0", i, x);
                 }
                 assert!(res.converged, "L-BFGS should converge on simple quadratic");
@@ -1077,7 +1126,7 @@ mod minimize_quasinewton_tests {
                     )
                     .expect("L-BFGS should work on 3D quadratic");
 
-                for x in simple_result.x_min {
+                for x in simple_result.xmin {
                     assert!(x.abs() < 1e-5);
                 }
                 assert!(simple_result.converged);
@@ -1100,8 +1149,8 @@ mod minimize_quasinewton_tests {
             )
             .unwrap();
 
-        assert!((&result.x_min[0] - 3.0).abs() < 1e-4);
-        assert!((&result.x_min[1] + 1.0).abs() < 1e-4);
+        assert!((&result.xmin[0] - 3.0).abs() < 1e-4);
+        assert!((&result.xmin[1] + 1.0).abs() < 1e-4);
         assert!(result.converged);
     }
 
@@ -1121,12 +1170,12 @@ mod minimize_quasinewton_tests {
         for (method, result) in results {
             match result {
                 Ok(res) => {
-                    for x in res.x_min.clone() {
+                    for x in res.xmin.clone() {
                         assert!(
                             x.abs() < 1e-6,
                             "Method {} failed: minimum at {:?}",
                             method,
-                            res.x_min.clone()
+                            res.xmin.clone()
                         );
                     }
                     assert!(res.converged, "Method {} didn't converge", method);
@@ -1155,8 +1204,8 @@ mod minimize_quasinewton_tests {
             .unwrap();
 
         assert!(result.converged);
-        assert!(result.x_min[0].abs() < 1e-6);
-        assert!(result.x_min[1].abs() < 1e-6);
+        assert!(result.xmin[0].abs() < 1e-6);
+        assert!(result.xmin[1].abs() < 1e-6);
 
         // For 2D quadratic, should converge quickly
         assert!(result.iterations <= 10);
@@ -1208,7 +1257,7 @@ mod minimize_quasinewton_tests {
             .unwrap();
 
         assert!(result.converged);
-        for x in result.x_min {
+        for x in result.xmin {
             assert!(x.abs() < 1e-4);
         }
     }
@@ -1245,7 +1294,7 @@ mod minimize_quasinewton_tests {
             match result {
                 Ok(res) => {
                     let error =
-                        ((&res.x_min[0] - 1.0).powi(2) + (&res.x_min[1] - 1.0).powi(2)).sqrt();
+                        ((&res.xmin[0] - 1.0).powi(2) + (&res.xmin[1] - 1.0).powi(2)).sqrt();
                     assert!(error < 0.1, "Method {:?} error: {:.4}", method, error);
                 }
                 Err(_) => {
@@ -1271,11 +1320,11 @@ mod minimize_quasinewton_tests {
             .unwrap();
 
         assert!(result.converged);
-        assert!(result.x_min[0].abs() < 1e-4); // More realistic accuracy
-        assert!(result.x_min[1].abs() < 1e-4);
-        assert!(result.f_min < 1e-8);
+        assert!(result.xmin[0].abs() < 1e-4); // More realistic accuracy
+        assert!(result.xmin[1].abs() < 1e-4);
+        assert!(result.fmin < 1e-8);
         assert!(result.gradient_norm < 1e-4);
-        assert_eq!(result.method_used, "BFGS"); // Correct method name
+        assert_eq!(result.method_used, QuasiNewtonMethod::BFGS); // Correct method name
     }
 
     #[test]
@@ -1298,8 +1347,8 @@ mod minimize_quasinewton_tests {
         // Should not get NumericalInstability with conservative implementation
         match result {
             Ok(res) => {
-                assert!(res.x_min[0].abs() < 1e-3);
-                assert!(res.x_min[1].abs() < 1e-3);
+                assert!(res.xmin[0].abs() < 1e-3);
+                assert!(res.xmin[1].abs() < 1e-3);
                 // Don't assert on iteration count - depends on implementation details
             }
             Err(e) => panic!(
@@ -1335,8 +1384,8 @@ mod minimize_quasinewton_tests {
             Ok(res) => {
                 assert!(res.converged || res.gradient_norm < 1e-2); // Accept partial convergence
                 // Don't check exact values - just verify reasonable progress
-                assert!(res.x_min[0].abs() < 5.0);
-                assert!(res.x_min[1].abs() < 5.0);
+                assert!(res.xmin[0].abs() < 5.0);
+                assert!(res.xmin[1].abs() < 5.0);
             }
             Err(_) => {
                 // If it fails, that's OK for this test - we're just ensuring no crashes
@@ -1361,8 +1410,8 @@ mod minimize_quasinewton_tests {
 
         match result {
             Ok(res) => {
-                assert!(res.x_min[0].abs() < 1e-2); // Much more relaxed
-                assert!(res.x_min[1].abs() < 1e-2);
+                assert!(res.xmin[0].abs() < 1e-2); // Much more relaxed
+                assert!(res.xmin[1].abs() < 1e-2);
                 assert!(res.function_evaluations >= res.iterations);
             }
             Err(_) => {
@@ -1390,8 +1439,8 @@ mod minimize_quasinewton_tests {
 
         match result {
             Ok(res) => {
-                assert!(res.x_min[0].abs() < 1e-2);
-                assert!(res.x_min[1].abs() < 1e-2);
+                assert!(res.xmin[0].abs() < 1e-2);
+                assert!(res.xmin[1].abs() < 1e-2);
                 println!("Simple quadratic: {} iterations", res.iterations);
             }
             Err(e) => panic!("Simple quadratic should not fail: {:?}", e),
@@ -1425,7 +1474,7 @@ mod minimize_quasinewton_tests {
             match result {
                 Ok(res) => {
                     let error =
-                        ((&res.x_min[0] - 1.0).powi(2) + (&res.x_min[1] - 1.0).powi(2)).sqrt();
+                        ((&res.xmin[0] - 1.0).powi(2) + (&res.xmin[1] - 1.0).powi(2)).sqrt();
                     assert!(error < 0.1, "Method {:?} error: {:.4}", method, error); // Very relaxed
                 }
                 Err(_) => {
@@ -1460,7 +1509,7 @@ mod minimize_quasinewton_tests {
 
             match result {
                 Ok(res) => {
-                    for (i, x) in res.x_min.iter().enumerate() {
+                    for (i, x) in res.xmin.iter().enumerate() {
                         assert!(
                             x.abs() < 1e-2,
                             "Method {:?} should find minimum: x[{}] = {}",
@@ -1492,8 +1541,8 @@ mod minimize_quasinewton_tests {
 
         match result {
             Ok(res) => {
-                assert!((&res.x_min[0] - 1.0).abs() < 0.1); // Very relaxed
-                assert!((&res.x_min[1] + 0.5).abs() < 0.1);
+                assert!((&res.xmin[0] - 1.0).abs() < 0.1); // Very relaxed
+                assert!((&res.xmin[1] + 0.5).abs() < 0.1);
             }
             Err(_) => {
                 println!(
@@ -1597,7 +1646,7 @@ mod minimize_quasinewton_tests {
             )
             .unwrap();
 
-        assert_eq!(result.method_used, "BFGS");
+        assert_eq!(result.method_used, QuasiNewtonMethod::BFGS);
     }
 
     #[test]
@@ -1614,9 +1663,9 @@ mod minimize_quasinewton_tests {
 
         match result {
             Ok(res) => {
-                assert!(res.x_min[0].abs() < 1e-2);
-                assert!(res.x_min[1].abs() < 1e-2);
-                assert_eq!(res.method_used, "DFP");
+                assert!(res.xmin[0].abs() < 1e-2);
+                assert!(res.xmin[1].abs() < 1e-2);
+                assert_eq!(res.method_used, QuasiNewtonMethod::DFP);
             }
             Err(_) => {
                 println!("DFP failed on simple quadratic (may need further tuning)");
@@ -1638,9 +1687,12 @@ mod minimize_quasinewton_tests {
 
         match result {
             Ok(res) => {
-                assert!(res.x_min[0].abs() < 1e-2);
-                assert!(res.x_min[1].abs() < 1e-2);
-                assert!(res.method_used.contains("L-BFGS"));
+                assert!(res.xmin[0].abs() < 1e-2);
+                assert!(res.xmin[1].abs() < 1e-2);
+                assert!(match res.method_used {
+                    QuasiNewtonMethod::LimitedBFGS(_) => true,
+                    _ => false,
+                });
             }
             Err(_) => {
                 println!("L-BFGS failed on simple quadratic (may need further tuning)");
@@ -1682,8 +1734,8 @@ mod minimize_quasinewton_tests {
             .unwrap();
 
         assert!(result2.converged);
-        assert!(result2.x_min[0].abs() < 1e-7);
-        assert!(result2.x_min[1].abs() < 1e-7);
+        assert!(result2.xmin[0].abs() < 1e-7);
+        assert!(result2.xmin[1].abs() < 1e-7);
     }
 
     #[test]
@@ -1701,12 +1753,12 @@ mod minimize_quasinewton_tests {
             .unwrap();
 
         assert!(result.converged);
-        assert!(result.x_min[0].abs() < 1e-8);
-        assert!(result.x_min[1].abs() < 1e-8);
-        assert!(result.f_min < 1e-16);
+        assert!(result.xmin[0].abs() < 1e-8);
+        assert!(result.xmin[1].abs() < 1e-8);
+        assert!(result.fmin < 1e-16);
         assert!(result.gradient_norm < 1e-8);
         assert!(result.iterations <= 3); // Should converge in 2 iterations for quadratic
-        assert_eq!(result.method_used, "BFGS");
+        assert_eq!(result.method_used, QuasiNewtonMethod::BFGS);
         assert!(!result.convergence_history.is_empty());
         assert!(!result.gradient_norm_history.is_empty());
     }
@@ -1726,13 +1778,13 @@ mod minimize_quasinewton_tests {
         match result {
             Ok(res) => {
                 // Should make significant progress even if not perfect convergence
-                let error = ((&res.x_min[0] - 1.0).powi(2) + (&res.x_min[1] - 1.0).powi(2)).sqrt();
+                let error = ((&res.xmin[0] - 1.0).powi(2) + (&res.xmin[1] - 1.0).powi(2)).sqrt();
                 assert!(
                     error < 0.5,
                     "BFGS should get reasonably close to Rosenbrock minimum"
                 );
                 assert!(
-                    res.f_min < 10.0,
+                    res.fmin < 10.0,
                     "Function value should decrease significantly"
                 );
             }
@@ -1751,8 +1803,8 @@ mod minimize_quasinewton_tests {
                     .unwrap();
 
                 assert!(simple_result.converged);
-                assert!(simple_result.x_min[0].abs() < 1e-6);
-                assert!(simple_result.x_min[1].abs() < 1e-6);
+                assert!(simple_result.xmin[0].abs() < 1e-6);
+                assert!(simple_result.xmin[1].abs() < 1e-6);
             }
         }
     }
@@ -1772,10 +1824,10 @@ mod minimize_quasinewton_tests {
             .unwrap();
 
         assert!(result.converged);
-        assert!(result.x_min[0].abs() < 1e-6);
-        assert!(result.x_min[1].abs() < 1e-6);
-        assert!(result.f_min < 1e-12);
-        assert_eq!(result.method_used, "DFP");
+        assert!(result.xmin[0].abs() < 1e-6);
+        assert!(result.xmin[1].abs() < 1e-6);
+        assert!(result.fmin < 1e-12);
+        assert_eq!(result.method_used, QuasiNewtonMethod::DFP);
     }
 
     #[test]
@@ -1793,10 +1845,10 @@ mod minimize_quasinewton_tests {
             .unwrap();
 
         assert!(result.converged);
-        assert!(result.x_min[0].abs() < 1e-6);
-        assert!(result.x_min[1].abs() < 1e-6);
-        assert!(result.f_min < 1e-12);
-        assert_eq!(result.method_used, "SR1");
+        assert!(result.xmin[0].abs() < 1e-6);
+        assert!(result.xmin[1].abs() < 1e-6);
+        assert!(result.fmin < 1e-12);
+        assert_eq!(result.method_used, QuasiNewtonMethod::SR1);
     }
 
     #[test]
@@ -1815,12 +1867,12 @@ mod minimize_quasinewton_tests {
                 .unwrap();
 
             assert!(result.converged, "L-BFGS({}) should converge", memory_size);
-            assert!(result.x_min[0].abs() < 1e-6);
-            assert!(result.x_min[1].abs() < 1e-6);
-            assert!(result.f_min < 1e-12);
+            assert!(result.xmin[0].abs() < 1e-6);
+            assert!(result.xmin[1].abs() < 1e-6);
+            assert!(result.fmin < 1e-12);
             assert_eq!(
                 result.method_used,
-                format!("L-BFGS({})", memory_size.min(2).max(1))
+                QuasiNewtonMethod::LimitedBFGS(memory_size.min(2).max(1))
             );
         }
     }
@@ -1847,10 +1899,10 @@ mod minimize_quasinewton_tests {
             .unwrap();
 
         assert!(result.converged);
-        for x in result.x_min {
+        for x in result.xmin {
             assert!(x.abs() < 1e-6);
         }
-        assert!(result.f_min < 1e-12);
+        assert!(result.fmin < 1e-12);
     }
 
     #[test]
@@ -1868,8 +1920,8 @@ mod minimize_quasinewton_tests {
             .unwrap();
 
         assert!(result.converged);
-        assert!(result.x_min[0].abs() < 1e-4);
-        assert!(result.x_min[1].abs() < 1e-4);
+        assert!(result.xmin[0].abs() < 1e-4);
+        assert!(result.xmin[1].abs() < 1e-4);
         // May take more iterations for ill-conditioned problems
         assert!(result.iterations > 2);
     }
@@ -1884,9 +1936,9 @@ mod minimize_quasinewton_tests {
             .unwrap();
 
         assert!(result.converged);
-        assert!(result.x_min[0].abs() < 1e-8);
-        assert!(result.x_min[1].abs() < 1e-8);
-        assert_eq!(result.method_used, "BFGS");
+        assert!(result.xmin[0].abs() < 1e-8);
+        assert!(result.xmin[1].abs() < 1e-8);
+        assert_eq!(result.method_used, QuasiNewtonMethod::BFGS);
     }
 
     #[test]
@@ -1907,16 +1959,16 @@ mod minimize_quasinewton_tests {
                 Ok(res) => {
                     assert!(res.converged, "Method {:?} should converge", method);
                     assert!(
-                        res.x_min[0].abs() < 1e-6,
+                        res.xmin[0].abs() < 1e-6,
                         "Method {:?} x[0] error: {}",
                         method,
-                        res.x_min[0]
+                        res.xmin[0]
                     );
                     assert!(
-                        res.x_min[1].abs() < 1e-6,
+                        res.xmin[1].abs() < 1e-6,
                         "Method {:?} x[1] error: {}",
                         method,
-                        res.x_min[1]
+                        res.xmin[1]
                     );
                 }
                 Err(e) => panic!("Method {:?} failed with error: {:?}", method, e),
@@ -2058,7 +2110,7 @@ mod minimize_quasinewton_tests {
             .unwrap();
 
         assert!(result1.converged);
-        assert!(result1.method_used.contains("L-BFGS(1)"));
+        assert!(result1.method_used == QuasiNewtonMethod::LimitedBFGS(1));
 
         // Test with memory size larger than dimension
         let mut qn2 = QuasiNewton::new(obj.clone());
@@ -2072,7 +2124,7 @@ mod minimize_quasinewton_tests {
             .unwrap();
 
         assert!(result2.converged);
-        assert!(result2.method_used.contains("L-BFGS(2)")); // Should be clamped to dimension
+        assert!(result2.method_used == QuasiNewtonMethod::LimitedBFGS(2)); // Should be clamped to dimension
     }
 
     #[test]
@@ -2093,8 +2145,8 @@ mod minimize_quasinewton_tests {
             .unwrap();
 
         assert!(result.converged);
-        assert!(result.x_min[0].abs() < 1e-6);
-        assert!(result.x_min[1].abs() < 1e-6);
+        assert!(result.xmin[0].abs() < 1e-6);
+        assert!(result.xmin[1].abs() < 1e-6);
         assert!(result.function_evaluations > result.iterations); // Line search should do multiple evaluations
     }
 
@@ -2186,8 +2238,8 @@ mod minimize_quasinewton_tests {
         // SR1 might struggle with this, but should not crash
         match result {
             Ok(res) => {
-                assert!(res.x_min[0].abs() < 1e-3);
-                assert!(res.x_min[1].abs() < 1e-3);
+                assert!(res.xmin[0].abs() < 1e-3);
+                assert!(res.xmin[1].abs() < 1e-3);
             }
             Err(_) => {
                 // SR1 might fail on very ill-conditioned problems, which is acceptable
