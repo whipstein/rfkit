@@ -2,8 +2,7 @@ use crate::define_mlin_calcs;
 use crate::{
     element::{Distributed, Elem, ElemType, mlin_exp, msub::Msub},
     frequency::{FreqArray, Frequency, new_frequency},
-    point,
-    pts::{Points, Pts},
+    pts::Points,
     scale::Scale,
     unit::{Unit, UnitValue, Unitized},
 };
@@ -54,8 +53,7 @@ impl Default for Mlin {
 
 impl Elem for Mlin {
     fn c(&self, freq: &Frequency) -> Points<Complex64, Ix2> {
-        point![
-            Complex64,
+        points![
             [
                 Complex64::ZERO,
                 mlin_exp(self.length, self.gamma(freq)).exp()
@@ -392,17 +390,18 @@ mod element_mlin_tests {
     use crate::{
         element::msub::MsubBuilder,
         unit::UnitValBuilder,
-        util::{comp_f64, comp_num, comp_pts_ix2},
+        util::{ApproxEq, NumMargin, comp_pts_ix2},
     };
-    use float_cmp::*;
 
-    const DEFAULT_MARGIN: F64Margin = F64Margin {
+    const DEFAULT_MARGIN: NumMargin<f64> = NumMargin {
         epsilon: 1e-10,
+        relative: 1e-10,
         ulps: 4,
     };
 
-    const RELAXED_MARGIN: F64Margin = F64Margin {
+    const RELAXED_MARGIN: NumMargin<f64> = NumMargin {
         epsilon: 1e-6,
+        relative: 1e-6,
         ulps: 10,
     };
 
@@ -460,7 +459,7 @@ mod element_mlin_tests {
             .nodes([1, 2])
             .id("ML1")
             .build();
-        let margin = F64Margin::default();
+        let margin = NumMargin::default();
 
         assert_eq!(&exemplar.id(), &calc.id());
         assert_eq!(&exemplar.scale(), &calc.scale());
@@ -469,12 +468,15 @@ mod element_mlin_tests {
         assert_eq!(&exemplar.er(&freq), &calc.er(&freq));
         comp_pts_ix2(&exemplar.c(&freq), &calc.c(&freq), margin, "calc.c()");
 
-        let margin = F64Margin {
+        let margin = NumMargin {
             epsilon: 1e-4,
+            relative: 1e-4,
             ulps: 10,
         };
-        comp_num(&exemplar_z, &calc.z(&freq), margin, "calc.z()", "0");
-        comp_f64(&exemplar_z.re, &calc.z0(&freq), margin, "calc.z0()", "0");
+        exemplar_z.assert_approx_eq(calc.z(&freq), margin, "calc.z()", "0");
+        exemplar_z
+            .re
+            .assert_approx_eq(calc.z0(&freq), margin, "calc.z0()", "0");
     }
 
     // #[test]
@@ -543,7 +545,7 @@ mod element_mlin_tests {
     //         epsilon: 1e-14,
     //         ulps: 10,
     //     };
-    //     comp_num(&exemplar_z, &calc.z(&freq), margin, "calc2.z()", "0");
+    //     assert_approx_eq(&exemplar_z, &calc.z(&freq), margin, "calc2.z()", "0");
     //     comp_f64(&exemplar_z.re, &calc.z0(&freq), margin, "calc2.z0()", "0");
     // }
 
@@ -604,7 +606,8 @@ mod element_mlin_tests {
                 .sub(&sub)
                 .build();
 
-            approx_eq!(f64, mlin.width(), 10e-6);
+            mlin.width()
+                .assert_approx_eq(10e-6, NumMargin::default(), "width", "");
         }
 
         #[test]

@@ -1092,7 +1092,7 @@ checksum = "7a2d987857b319362043e95f5353c0535c1f58eec5336fdfcf626430af7def58"
 
 [[package]]
 name = "rfkit"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "approx",
@@ -1352,13 +1352,12 @@ dependencies = [
 
 [[package]]
 name = "twofloat"
-version = "0.8.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2f25f7bfd28a043cba51ea618ad2d29c5fa991a1237a4c0b592b466fbbb60c5c"
+version = "0.8.3"
 dependencies = [
  "hexf",
  "libm",
  "num-traits",
+ "serde",
 ]
 
 [[package]]

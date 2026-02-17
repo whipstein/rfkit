@@ -1,7 +1,6 @@
 use crate::{
     element::{Elem, ElemType, Lumped, Q, QMode},
     frequency::{FreqArray, Frequency, new_frequency},
-    point,
     pts::{Points, Pts},
     scale::Scale,
     unit::{Unit, UnitValue, Unitized},
@@ -32,8 +31,7 @@ impl Inductor {
             ind: ind,
             q,
             nodes: nodes,
-            c: point![
-                Complex64,
+            c: points![
                 [c64(1.0 / 3.0, 0.0), c64(2.0 / 3.0, 0.0)],
                 [c64(2.0 / 3.0, 0.0), c64(1.0 / 3.0, 0.0)]
             ],
@@ -61,8 +59,7 @@ impl Default for Inductor {
             ind: *UnitValue::default().set_unit(Unit::Henry),
             q: None,
             nodes: [1, 2],
-            c: point![
-                Complex64,
+            c: points![
                 [c64(1.0 / 3.0, 0.0), c64(2.0 / 3.0, 0.0)],
                 [c64(2.0 / 3.0, 0.0), c64(1.0 / 3.0, 0.0)]
             ],
@@ -261,8 +258,7 @@ impl InductorBuilder {
             ind: self.ind,
             q: self.q,
             nodes: self.nodes,
-            c: point![
-                Complex64,
+            c: points![
                 [c64(1.0 / 3.0, 0.0), c64(2.0 / 3.0, 0.0)],
                 [c64(2.0 / 3.0, 0.0), c64(1.0 / 3.0, 0.0)]
             ],
@@ -288,18 +284,19 @@ mod element_inductor_tests {
     use super::*;
     use crate::{
         unit::UnitValBuilder,
-        util::{comp_num, comp_pts_ix2},
+        util::{ApproxEq, NumMargin, comp_pts_ix2},
     };
-    use float_cmp::*;
     use std::f64::consts::PI;
 
-    const DEFAULT_MARGIN: F64Margin = F64Margin {
+    const DEFAULT_MARGIN: NumMargin<f64> = NumMargin {
         epsilon: 1e-10,
+        relative: 1e-10,
         ulps: 4,
     };
 
-    const RELAXED_MARGIN: F64Margin = F64Margin {
+    const RELAXED_MARGIN: NumMargin<f64> = NumMargin {
         epsilon: 1e-6,
+        relative: 1e-6,
         ulps: 10,
     };
 
@@ -315,26 +312,25 @@ mod element_inductor_tests {
             ind: unitval,
             q: None,
             nodes: [1, 2],
-            c: point![
-                Complex64,
+            c: points![
                 [c64(1.0 / 3.0, 0.0), c64(2.0 / 3.0, 0.0)],
                 [c64(2.0 / 3.0, 0.0), c64(1.0 / 3.0, 0.0)]
             ],
             z0: c64(50.0, 0.0),
         };
-        let exemplar_z = Complex64::I * 2.0 * PI * freq.freq(0) * unitval.val();
+        let exemplar_z: Complex<f64> = Complex64::I * 2.0 * PI * freq.freq(0) * unitval.val();
         let calc = InductorBuilder::new()
             .val_scaled(val_scaled, scale)
             .nodes([1, 2])
             .id("L1")
             .build();
-        let margin = F64Margin::default();
+        let margin = NumMargin::default();
 
         assert_eq!(&exemplar.id(), &calc.id());
         assert_eq!(&exemplar.scale(), &calc.scale());
         assert_eq!(&Unit::Henry, &calc.unit());
         comp_pts_ix2(&exemplar.c(&freq), &calc.c(&freq), margin, "calc.c()");
-        comp_num(&exemplar_z.into(), &calc.z(&freq), margin, "calc.z()", "0");
+        exemplar_z.assert_approx_eq(calc.z(&freq), margin, "calc.z()", "0");
     }
 
     mod inductor_tests {
@@ -356,8 +352,16 @@ mod element_inductor_tests {
             let z = ind.z(&freq);
             let expected_z = Complex64::I * 2.0 * PI * 1e9 * 1e-9;
 
-            assert!(approx_eq!(f64, z.re, expected_z.re, epsilon = 1e-6));
-            assert!(approx_eq!(f64, z.im, expected_z.im, epsilon = 1e-6));
+            z.assert_approx_eq(
+                expected_z,
+                NumMargin {
+                    epsilon: 1e-6,
+                    relative: 1e-6,
+                    ulps: 4,
+                },
+                "z",
+                "",
+            );
         }
 
         #[test]
@@ -370,7 +374,8 @@ mod element_inductor_tests {
             let z2 = ind.z_at(&freq, 1);
 
             // At 2x frequency, impedance should be 2x
-            assert!(approx_eq!(f64, z2.im, z1.im * 2.0, RELAXED_MARGIN));
+            z2.im
+                .assert_approx_eq(z1.im * 2.0, RELAXED_MARGIN, "z2", "");
         }
 
         #[test]
@@ -379,24 +384,15 @@ mod element_inductor_tests {
             let ind = InductorBuilder::new().build();
             let c_matrix = ind.c(&freq);
 
-            assert!(approx_eq!(
-                f64,
-                c_matrix[[0, 0]].re,
-                1.0 / 3.0,
-                DEFAULT_MARGIN
-            ));
-            assert!(approx_eq!(
-                f64,
-                c_matrix[[1, 1]].re,
-                1.0 / 3.0,
-                DEFAULT_MARGIN
-            ));
-            assert!(approx_eq!(
-                f64,
-                c_matrix[[0, 1]].re,
-                2.0 / 3.0,
-                DEFAULT_MARGIN
-            ));
+            c_matrix[[0, 0]]
+                .re
+                .assert_approx_eq(1.0 / 3.0, DEFAULT_MARGIN, "c_matrix", "[0,0]");
+            c_matrix[[1, 1]]
+                .re
+                .assert_approx_eq(1.0 / 3.0, DEFAULT_MARGIN, "c_matrix", "[1,1]");
+            c_matrix[[0, 1]]
+                .re
+                .assert_approx_eq(2.0 / 3.0, DEFAULT_MARGIN, "c_matrix", "[0,1]");
         }
 
         #[test]
@@ -416,7 +412,7 @@ mod element_inductor_tests {
                 let actual_val = val * scale.multiplier();
                 let expected = Complex64::I * 2.0 * PI * 1e9 * actual_val;
 
-                assert!(approx_eq!(f64, z.im, expected.im, RELAXED_MARGIN));
+                z.im.assert_approx_eq(expected.im, RELAXED_MARGIN, "z", "");
             }
         }
 

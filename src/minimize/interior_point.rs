@@ -3,8 +3,8 @@
 use crate::{
     error::MinimizerError,
     minimize::{Constraint, HF1dim, ObjHessFn, Vector},
-    num::RFFloat,
-    pts::{Matrix, Points, Points1, Points2, Pts},
+    num::{RealScalar, ScalarConst},
+    pts::{Points, Points1, Points2, Pts},
 };
 use ndarray::prelude::*;
 use std::fmt;
@@ -13,7 +13,7 @@ use std::fmt;
 #[derive(Debug, Clone)]
 pub struct InteriorPointResult<T>
 where
-    T: RFFloat,
+    T: RealScalar,
 {
     xmin: Points1<T>,
     fmin: T,
@@ -33,14 +33,14 @@ where
 
 impl<T> InteriorPointResult<T>
 where
-    T: RFFloat,
+    T: RealScalar,
 {
     pub fn xmin(&self) -> Points1<T> {
         self.xmin.clone()
     }
 
     pub fn fmin(&self) -> T {
-        self.fmin.clone()
+        self.fmin
     }
 
     pub fn lambda(&self) -> Points1<T> {
@@ -76,7 +76,7 @@ where
     }
 
     pub fn final_barrier_param(&self) -> T {
-        self.final_barrier_param.clone()
+        self.final_barrier_param
     }
 
     pub fn history(&self) -> Points1<T> {
@@ -84,11 +84,11 @@ where
     }
 
     pub fn constraint_violation(&self) -> T {
-        self.constraint_violation.clone()
+        self.constraint_violation
     }
 
     pub fn complementarity_gap(&self) -> T {
-        self.complementarity_gap.clone()
+        self.complementarity_gap
     }
 }
 
@@ -125,18 +125,18 @@ pub struct InteriorPointParams<T> {
 
 impl<T> Default for InteriorPointParams<T>
 where
-    T: RFFloat,
+    T: RealScalar,
 {
     fn default() -> Self {
         Self {
-            tol: T::from_f64(1e-8),
+            tol: 1e-8.into(),
             max_iters: 100,
             max_barrier_iters: 50,
-            initial_barrier_param: T::from_f64(1.0),
-            barrier_reduction_factor: T::from_f64(0.1),
-            min_barrier_param: T::from_f64(1e-12),
-            feasibility_tol: T::from_f64(1e-8),
-            complementarity_tol: T::from_f64(1e-8),
+            initial_barrier_param: 1.0.into(),
+            barrier_reduction_factor: 0.1.into(),
+            min_barrier_param: 1e-12.into(),
+            feasibility_tol: 1e-8.into(),
+            complementarity_tol: 1e-8.into(),
         }
     }
 }
@@ -145,7 +145,7 @@ where
 #[derive(Debug)]
 struct NewtonResult<T>
 where
-    T: RFFloat,
+    T: RealScalar,
 {
     x: Points1<T>,
     iters: usize,
@@ -167,12 +167,12 @@ pub struct InteriorPoint<T> {
 
 impl<T> Clone for InteriorPoint<T>
 where
-    T: Clone,
+    T: RealScalar,
 {
     fn clone(&self) -> Self {
         Self {
             xmin: self.xmin.clone(),
-            fmin: self.fmin.clone(),
+            fmin: self.fmin,
             f: dyn_clone::clone_box(&*self.f),
             ieq: self.ieq.clone(),
             eq: self.eq.clone(),
@@ -184,27 +184,7 @@ where
 
 impl<T> InteriorPoint<T>
 where
-    T: RFFloat + 'static,
-    for<'a, 'b> &'a T: std::ops::Add<&'b T, Output = T>,
-    for<'a, 'b> &'a T: std::ops::Sub<&'b T, Output = T>,
-    for<'a, 'b> &'a T: std::ops::Mul<&'b T, Output = T>,
-    for<'a, 'b> &'a T: std::ops::Div<&'b T, Output = T>,
-    for<'a> &'a T: std::ops::Add<T, Output = T>,
-    for<'a> &'a T: std::ops::Sub<T, Output = T>,
-    for<'a> &'a T: std::ops::Mul<T, Output = T>,
-    for<'a> &'a T: std::ops::Div<T, Output = T>,
-    for<'a> &'a T: std::ops::Add<f64, Output = T>,
-    for<'a> &'a T: std::ops::Sub<f64, Output = T>,
-    for<'a> &'a T: std::ops::Mul<f64, Output = T>,
-    for<'a> &'a T: std::ops::Div<f64, Output = T>,
-    f64: std::ops::Add<T, Output = T>,
-    f64: std::ops::Sub<T, Output = T>,
-    f64: std::ops::Mul<T, Output = T>,
-    f64: std::ops::Div<T, Output = T>,
-    for<'a> f64: std::ops::Add<&'a T, Output = T>,
-    for<'a> f64: std::ops::Sub<&'a T, Output = T>,
-    for<'a> f64: std::ops::Mul<&'a T, Output = T>,
-    for<'a> f64: std::ops::Div<&'a T, Output = T>,
+    T: RealScalar + 'static + ScalarConst + std::iter::Sum,
 {
     pub fn new<F>(f: F) -> Self
     where
@@ -212,7 +192,7 @@ where
     {
         let boxed = Box::new(f);
         InteriorPoint {
-            xmin: array![].into(),
+            xmin: points![],
             fmin: T::zero(),
             f: boxed,
             ieq: vec![],
@@ -224,7 +204,7 @@ where
 
     pub fn new_boxed(f: Box<dyn ObjHessFn<T>>) -> Self {
         InteriorPoint {
-            xmin: array![].into(),
+            xmin: points![],
             fmin: T::zero(),
             f: f,
             ieq: vec![],
@@ -244,7 +224,7 @@ where
     {
         let boxed = Box::new(f);
         InteriorPoint {
-            xmin: array![].into(),
+            xmin: points![],
             fmin: T::zero(),
             f: boxed,
             ieq,
@@ -260,7 +240,7 @@ where
         eq: Vec<Box<dyn Constraint<T>>>,
     ) -> Self {
         InteriorPoint {
-            xmin: array![].into(),
+            xmin: points![],
             fmin: T::zero(),
             f: f,
             ieq,
@@ -322,10 +302,9 @@ where
         // Main barrier iterations
         while mu > params.min_barrier_param && total_iters < params.max_iters {
             // Solve barrier subproblem using Newton's method with relaxed tolerance
-            let barrier_obj =
-                HF1dim::new_boxed(self.f.clone(), &self.ieq, &self.eq, Some(mu.clone()));
+            let barrier_obj = HF1dim::new_boxed(self.f, &self.ieq, &self.eq, Some(mu));
             let barrier = InteriorPoint::new(barrier_obj);
-            let barrier_tolerance = (params.tol.clone() * mu.sqrt()).max(&(&params.tol * 0.1));
+            let barrier_tolerance = (params.tol * mu.sqrt()).max(params.tol * 0.1.into());
             let newton_result = barrier.newton_method_with_constraints(
                 &self.eq,
                 &x,
@@ -333,23 +312,23 @@ where
                 params.max_barrier_iters,
             )?;
 
-            x = newton_result.x.clone();
+            x = newton_result.x;
             total_iters += newton_result.iters;
             total_fn_iters += newton_result.fn_evals;
             total_grad_iters += newton_result.grad_evals;
             total_hess_iters += newton_result.hess_evals;
 
             let current_f = self.f.call(&x);
-            convergence_history.push(current_f.clone());
+            convergence_history.push(current_f);
 
             // Check convergence with better criteria
-            let duality_gap = T::from_usize(m) * &mu;
+            let duality_gap = T::from_usize(m) * mu;
             if duality_gap < params.tol && Vector::vector_norm(&self.f.grad(&x)) < params.tol {
                 break;
             }
 
             // Reduce barrier parameter more aggressively for this problem
-            mu *= params.barrier_reduction_factor.clone();
+            mu *= params.barrier_reduction_factor;
         }
 
         // Calculate final Lagrange multipliers
@@ -361,7 +340,7 @@ where
             let val = constraint.evaluate(&x);
             if val.abs() < 1e-10.into() {
                 // Active constraint
-                mu_final[i] = &mu / (-1.0 * &val).max(&1e-12.into());
+                mu_final[i] = mu / ((-1.0).into() * val).max(1e-12.into());
             }
         }
 
@@ -369,12 +348,12 @@ where
         let mut max_constraint_violation = T::zero();
         for constraint in &self.ieq {
             let val = constraint.evaluate(&x);
-            max_constraint_violation = max_constraint_violation.max(&val.max(&T::zero()));
+            max_constraint_violation = max_constraint_violation.max(val.max(T::zero()));
         }
 
         for constraint in &self.eq {
             let val = constraint.evaluate(&x);
-            max_constraint_violation = max_constraint_violation.max(&val.abs());
+            max_constraint_violation = max_constraint_violation.max(val.abs());
         }
 
         let complementarity_gap = self
@@ -383,12 +362,12 @@ where
             .enumerate()
             .map(|(i, constraint)| {
                 let val = constraint.evaluate(&x);
-                (&mu_final[i] * -1.0 * &val).abs()
+                (&mu_final[i] * -1.0 * val).abs()
             })
             .sum::<T>();
 
         Ok(InteriorPointResult {
-            xmin: x.clone(),
+            xmin: x,
             fmin: self.f.call(&x), // Fixed: was using convergence_history incorrectly
             lambda: Points1::from_vec(lambda),
             mu: Points1::from_vec(mu_final),
@@ -397,7 +376,7 @@ where
             fn_evals: total_fn_iters,
             grad_evals: total_grad_iters,
             hess_evals: total_hess_iters,
-            converged: mu <= params.min_barrier_param || (T::from_usize(m) * &mu < params.tol),
+            converged: mu <= params.min_barrier_param || (T::from_usize(m) * mu < params.tol),
             final_barrier_param: mu,
             convergence_history: Points1::from_vec(convergence_history),
             constraint_violation: max_constraint_violation,
@@ -410,7 +389,7 @@ where
         &self,
         eq: &[Box<dyn Constraint<T>>],
         x: &Points1<T>,
-        tol: &T,
+        tol: T,
         max_iters: usize,
     ) -> Result<NewtonResult<T>, MinimizerError> {
         let mut xx = x.to_owned();
@@ -428,9 +407,9 @@ where
             let grad_norm = Vector::vector_norm(&grad);
 
             // Improved convergence criteria
-            if grad_norm < *tol {
+            if grad_norm < tol {
                 return Ok(NewtonResult {
-                    x: xx.clone(),
+                    x: xx,
                     iters: iteration,
                     fn_evals: function_evals,
                     grad_evals: gradient_evals,
@@ -447,7 +426,7 @@ where
                 // Unconstrained Newton step
                 self.solve_linear_system(
                     &hess,
-                    &Vector::scalar_vector_multiply(&T::from_f64(-1.0), &grad),
+                    &Vector::scalar_vector_multiply(T::from_f64(-1.0), &grad),
                 )
             } else {
                 // Constrained Newton step (solve KKT system)
@@ -458,13 +437,13 @@ where
                 Ok(s) => s,
                 Err(_) => {
                     // If linear solve fails, use steepest descent
-                    Vector::scalar_vector_multiply(&(-1.0 / grad_norm.max(&1e-10.into())), &grad)
+                    Vector::scalar_vector_multiply(-grad_norm.max(1e-10.into()).recip(), &grad)
                 }
             };
 
             // Improved line search with better initial step size
             let line_search_result = if m == 0 {
-                self.backtracking_line_search(&xx, &step, &grad, &T::from_f64(1.0))
+                self.backtracking_line_search(&xx, &step, &grad, T::from_f64(1.0))
             } else {
                 self.feasible_line_search(eq, &xx, &step)
             };
@@ -477,33 +456,33 @@ where
             function_evals += fn_evals;
 
             // Update x
-            let x_old = xx.clone();
+            let x_old = xx;
             for i in 0..n {
-                let new_xi = &xx[i] + &alpha * &step[i];
+                let new_xi = xx[i] + alpha * step[i];
                 if new_xi.is_finite() {
-                    xx[i] = new_xi.clone();
+                    xx[i] = new_xi;
                 }
             }
 
             // Check for sufficient progress
             let step_norm = Vector::vector_norm(&Vector::vector_subtract(&xx, &x_old));
-            if step_norm < tol * 1e-2 && grad_norm < tol * 10.0 {
+            if step_norm < tol * 1e-2.into() && grad_norm < tol * 10.0.into() {
                 break;
             }
 
             // For barrier subproblems, accept looser convergence
-            if iteration > 5 && grad_norm < tol * 100.0 {
+            if iteration > 5 && grad_norm < tol * 100.0.into() {
                 break;
             }
         }
 
         Ok(NewtonResult {
-            x: xx.clone(),
+            x: xx,
             iters: max_iters,
             fn_evals: function_evals,
             grad_evals: gradient_evals,
             hess_evals: hessian_evals,
-            converged: Vector::vector_norm(&self.f.grad(&xx)) < tol * 100.0,
+            converged: Vector::vector_norm(&self.f.grad(&xx)) < tol * 100.0.into(),
         })
     }
 
@@ -521,7 +500,7 @@ where
         if m == 0 {
             return self.solve_linear_system(
                 &hessian,
-                &Vector::scalar_vector_multiply(&T::from_f64(-1.0), gradient),
+                &Vector::scalar_vector_multiply(T::from_f64(-1.0), gradient),
             );
         }
 
@@ -540,22 +519,22 @@ where
         // Copy Hessian to top-left block
         for i in 0..n {
             for j in 0..n {
-                kkt_matrix[[i, j]] = hessian[[i, j]].clone();
+                kkt_matrix[[i, j]] = hessian[[i, j]];
             }
         }
 
         // Copy Jacobian to bottom-left and top-right blocks
         for i in 0..m {
             for j in 0..n {
-                kkt_matrix[[n + i, j]] = jacobian[[i, j]].clone(); // Bottom-left: A
-                kkt_matrix[[j, n + i]] = jacobian[[i, j]].clone(); // Top-right: A^T
+                kkt_matrix[[n + i, j]] = jacobian[[i, j]]; // Bottom-left: A
+                kkt_matrix[[j, n + i]] = jacobian[[i, j]]; // Top-right: A^T
             }
         }
 
         // Build RHS: [-grad, -c]
         let mut rhs = Points1::zeros(n + m);
         for i in 0..n {
-            rhs[i] = -gradient[i].clone();
+            rhs[i] = -gradient[i];
         }
         for i in 0..m {
             rhs[n + i] = -eq[i].evaluate(x);
@@ -574,7 +553,7 @@ where
         x: &Points1<T>,
         direction: &Points1<T>,
         gradient: &Points1<T>,
-        initial_alpha: &T,
+        initial_alpha: T,
     ) -> Result<(T, usize), MinimizerError> {
         let c1 = T::from_f64(1e-4); // Armijo parameter
         let rho = T::from_f64(0.5); // Backtracking factor
@@ -586,7 +565,7 @@ where
             return Err(MinimizerError::LineSearchFailed);
         }
 
-        let mut alpha = initial_alpha.clone();
+        let mut alpha = initial_alpha;
         let mut function_evals = 0;
 
         for _ in 0..50 {
@@ -594,23 +573,23 @@ where
             let x_new: Points1<T> = x
                 .iter()
                 .zip(direction.iter())
-                .map(|(xi, di)| xi + &alpha * di)
+                .map(|(&xi, &di)| xi + alpha * di)
                 .collect();
 
             let f_new = self.f.call(&x_new);
             function_evals += 1;
 
             if !f_new.is_finite() {
-                alpha *= rho.clone();
+                alpha *= rho;
                 continue;
             }
 
             // Check Armijo condition
-            if f_new <= &f_current + &c1 * &alpha * &directional_derivative {
+            if f_new <= f_current + c1 * alpha * directional_derivative {
                 return Ok((alpha, function_evals));
             }
 
-            alpha *= &rho;
+            alpha *= rho;
 
             if alpha < 1e-16.into() {
                 break;
@@ -635,14 +614,14 @@ where
             let x_new: Points1<T> = x
                 .iter()
                 .zip(direction.iter())
-                .map(|(xi, di)| xi + &alpha * di)
+                .map(|(&xi, &di)| xi + alpha * di)
                 .collect();
 
             let f_new = self.f.call(&x_new);
             function_evals += 1;
 
             if !f_new.is_finite() {
-                alpha *= 0.5;
+                alpha *= 0.5.into();
                 continue;
             }
 
@@ -660,7 +639,7 @@ where
                 return Ok((alpha, function_evals));
             }
 
-            alpha *= 0.5;
+            alpha *= 0.5.into();
 
             if alpha < 1e-16.into() {
                 break;
@@ -716,25 +695,25 @@ where
 
             // Eliminate below pivot
             for i in k + 1..n {
-                let factor = &ax[[i, k]] / &ax[[k, k]];
+                let factor = ax[[i, k]] / ax[[k, k]];
                 for j in k..n {
-                    let val = ax[[k, j]].clone();
-                    ax[[i, j]] -= &factor * &val;
+                    let val = ax[[k, j]];
+                    ax[[i, j]] -= factor * val;
                 }
-                let val = bx[k].clone();
-                bx[i] -= &factor * &val;
+                let val = bx[k];
+                bx[i] -= factor * val;
             }
         }
 
         // Back substitution
         let mut x = Points1::zeros(n);
         for i in (0..n).rev() {
-            x[i] = bx[i].clone();
+            x[i] = bx[i];
             for j in i + 1..n {
-                let val = x[j].clone();
-                x[i] -= &ax[[i, j]] * &val;
+                let val = x[j];
+                x[i] -= ax[[i, j]] * val;
             }
-            x[i] /= &ax[[i, i]];
+            x[i] /= ax[[i, i]];
         }
 
         Ok(x)
@@ -743,7 +722,7 @@ where
 
 impl<T> fmt::Debug for InteriorPoint<T>
 where
-    T: RFFloat,
+    T: RealScalar,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
@@ -757,36 +736,34 @@ where
 #[cfg(test)]
 mod minimize_interiorpoint_tests {
     use super::*;
-    use crate::{
-        minimize::{
-            HF1dim, MultiDimHessFn, {LinearConstraint, create_box_constraints},
-        },
-        num::MyFloat,
+    use crate::minimize::{
+        HF1dim, MultiDimHessFn, {LinearConstraint, create_box_constraints},
     };
+    use twofloat::TwoFloat;
 
     #[test]
     fn test_simple_quadratic_program() {
         // Start much closer to the optimum to see if the algorithm works at all
-        let objective = |x: &Points1<MyFloat>| &x[0] * &x[0] + &x[1] * &x[1];
-        let obj_grad = |x: &Points1<MyFloat>| array![2.0 * &x[0], 2.0 * &x[1]].into();
-        let obj_hess = |x: &Points1<MyFloat>| Points2::<MyFloat>::eye(x.len()) * 2.0;
+        let objective = |x: &Points1<TwoFloat>| &x[0] * &x[0] + &x[1] * &x[1];
+        let obj_grad = |x: &Points1<TwoFloat>| points![2.0 * &x[0], 2.0 * &x[1]].into();
+        let obj_hess = |x: &Points1<TwoFloat>| Points2::<TwoFloat>::eye(x.len()) * 2.0;
         let obj = MultiDimHessFn::new(objective, obj_grad, Some(obj_hess));
 
         // Use create_box_constraints helper which might work better
-        let lower = array![0.0.into(), 0.0.into()].into();
-        let upper = array![MyFloat::new(f64::INFINITY), f64::INFINITY.into()].into();
+        let lower = points![0.0.into(), 0.0.into()].into();
+        let upper = points![TwoFloat::from_f64(f64::INFINITY), f64::INFINITY.into()].into();
         let mut constraints = create_box_constraints(&lower, &upper);
 
         // Add the sum constraint manually: x1 + x2 >= 1 becomes -x1 - x2 + 1 <= 0
         constraints.push(Box::new(LinearConstraint::inequality(
-            &array![MyFloat::new(-1.0), MyFloat::new(-1.0)].into(),
+            &points![TwoFloat::from_f64(-1.0), TwoFloat::from_f64(-1.0)].into(),
             &1.0.into(),
         )));
 
         let mut interiorpoint = InteriorPoint::new_w_constraints(obj, constraints, vec![]);
 
         // Start very close to the optimum
-        let initial_point = array![0.501.into(), 0.501.into()].into(); // Very close to (0.5, 0.5)
+        let initial_point = points![0.501.into(), 0.501.into()].into(); // Very close to (0.5, 0.5)
 
         // Much simpler parameters
         let params = InteriorPointParams {
@@ -800,7 +777,7 @@ mod minimize_interiorpoint_tests {
             complementarity_tol: 1e-6.into(),
         };
 
-        let result = interiorpoint.log_barrier_method(&initial_point, Some(params.clone()));
+        let result = interiorpoint.log_barrier_method(&initial_point, Some(params));
 
         match result {
             Ok(res) => {
@@ -811,12 +788,12 @@ mod minimize_interiorpoint_tests {
 
                 // Very loose tolerances to see if we're moving in the right direction
                 assert!(
-                    (&res.xmin[0] - 0.5).abs() < 0.1,
+                    (res.xmin[0] - 0.5.into()).abs() < 0.1,
                     "x1 = {} should be close to 0.5",
                     res.xmin[0]
                 );
                 assert!(
-                    (&res.xmin[1] - 0.5).abs() < 0.1,
+                    (res.xmin[1] - 0.5.into()).abs() < 0.1,
                     "x2 = {} should be close to 0.5",
                     res.xmin[1]
                 );
@@ -826,7 +803,7 @@ mod minimize_interiorpoint_tests {
                 println!("Constrained version failed: {}, trying unconstrained", e);
 
                 let unconstrained_result = interiorpoint
-                    .log_barrier_method(&array![0.6.into(), 0.6.into()].into(), Some(params))
+                    .log_barrier_method(&points![0.6.into(), 0.6.into()].into(), Some(params))
                     .expect("Unconstrained should work");
 
                 println!(
@@ -842,22 +819,22 @@ mod minimize_interiorpoint_tests {
     #[test]
     fn test_unconstrained_quadratic() {
         // Minimize (x1-1)² + (x2-1)² - should converge to (1,1) with f=0
-        let objective = |x: &Points1<MyFloat>| (&x[0] - 1.0).powi(2) + (&x[1] - 1.0).powi(2);
+        let objective = |x: &Points1<TwoFloat>| (&x[0] - 1.0).powi(2) + (&x[1] - 1.0).powi(2);
         let obj_grad =
-            |x: &Points1<MyFloat>| array![2.0 * (&x[0] - 1.0), 2.0 * (&x[1] - 1.0)].into();
-        let obj_hess = |x: &Points1<MyFloat>| Points2::<MyFloat>::eye(x.len()) * 2.0;
+            |x: &Points1<TwoFloat>| points![2.0 * (&x[0] - 1.0), 2.0 * (&x[1] - 1.0)].into();
+        let obj_hess = |x: &Points1<TwoFloat>| Points2::<TwoFloat>::eye(x.len()) * 2.0;
         let obj = MultiDimHessFn::new(objective, obj_grad, Some(obj_hess));
         let mut interiorpoint = InteriorPoint::new_w_constraints(obj, vec![], vec![]);
 
         let result = interiorpoint.log_barrier_method(
-            &array![0.0.into(), 0.0.into()].into(), // Starting point
+            &points![0.0.into(), 0.0.into()].into(), // Starting point
             None,
         );
 
         match result {
             Ok(res) => {
-                assert!((&res.xmin[0] - 1.0).abs() < 1e-4);
-                assert!((&res.xmin[1] - 1.0).abs() < 1e-4);
+                assert!((res.xmin[0] - 1.0.into()).abs() < 1e-4);
+                assert!((res.xmin[1] - 1.0.into()).abs() < 1e-4);
                 assert!(res.fmin < 1e-6);
             }
             Err(e) => {
@@ -869,37 +846,37 @@ mod minimize_interiorpoint_tests {
     #[test]
     fn test_feasibility_check() {
         let constraint = LinearConstraint::inequality(
-            &array![1.0.into(), 1.0.into()].into(),
-            &MyFloat::new(-2.0),
+            &points![1.0.into(), 1.0.into()],
+            &TwoFloat::from_f64(-2.0),
         );
 
         // Feasible point
-        let feasible_point = array![0.5.into(), 0.5.into()].into(); // 0.5 + 0.5 - 2 = -1 < 0 ✓
+        let feasible_point = points![0.5.into(), 0.5.into()]; // 0.5 + 0.5 - 2 = -1 < 0 ✓
         assert!(constraint.evaluate(&feasible_point) < 0.0);
 
         // Infeasible point
-        let infeasible_point = array![1.5.into(), 1.5.into()].into(); // 1.5 + 1.5 - 2 = 1 > 0 ✗
+        let infeasible_point = points![1.5.into(), 1.5.into()]; // 1.5 + 1.5 - 2 = 1 > 0 ✗
         assert!(constraint.evaluate(&infeasible_point) > 0.0);
     }
 
     // Helper function to create a simple quadratic objective
-    fn create_quadratic_objective(a: &MyFloat, b: &MyFloat) -> HF1dim<MyFloat> {
-        let ax = a.clone();
-        let bx = b.clone();
-        let objective = move |x: &Points1<MyFloat>| &ax * x[0].powi(2) + &bx * x[1].powi(2);
-        let ax = a.clone();
-        let bx = b.clone();
+    fn create_quadratic_objective(a: &TwoFloat, b: &TwoFloat) -> HF1dim<TwoFloat> {
+        let ax = a;
+        let bx = b;
+        let objective = move |x: &Points1<TwoFloat>| &ax * x[0].powi(2) + &bx * x[1].powi(2);
+        let ax = a;
+        let bx = b;
         let obj_grad =
-            move |x: &Points1<MyFloat>| array![2.0 * &ax * &x[0], 2.0 * &bx * &x[1]].into();
-        let ax = a.clone();
-        let bx = b.clone();
-        let obj_hess = move |x: &Points1<MyFloat>| {
+            move |x: &Points1<TwoFloat>| points![2.0 * &ax * &x[0], 2.0 * &bx * &x[1]].into();
+        let ax = a;
+        let bx = b;
+        let obj_hess = move |x: &Points1<TwoFloat>| {
             let n = x.len();
             Points2::from_shape_fn((n, n), |(i, j)| {
                 if i == j {
                     match i {
-                        0 => 2.0 * &ax,
-                        1 => 2.0 * &bx,
+                        0 => 2.0.into() * ax,
+                        1 => 2.0.into() * bx,
                         _ => 0.0.into(),
                     }
                 } else {
@@ -916,16 +893,16 @@ mod minimize_interiorpoint_tests {
     }
 
     // Helper function to create shifted quadratic
-    fn create_shifted_quadratic(center_x: &MyFloat, center_y: &MyFloat) -> HF1dim<MyFloat> {
-        let cx = center_x.clone();
-        let cy = center_y.clone();
-        let objective = move |x: &Points1<MyFloat>| (&x[0] - &cx).powi(2) + (&x[1] - &cy).powi(2);
-        let cx = center_x.clone();
-        let cy = center_y.clone();
+    fn create_shifted_quadratic(center_x: &TwoFloat, center_y: &TwoFloat) -> HF1dim<TwoFloat> {
+        let cx = center_x;
+        let cy = center_y;
+        let objective = move |x: &Points1<TwoFloat>| (x[0] - cx).powi(2) + (x[1] - cy).powi(2);
+        let cx = center_x;
+        let cy = center_y;
         let obj_grad =
-            move |x: &Points1<MyFloat>| array![2.0 * (&x[0] - &cx), 2.0 * (&x[1] - &cy)].into();
-        let obj_hess = move |_x: &Points1<MyFloat>| {
-            array![[2.0.into(), 0.0.into()], [0.0.into(), 2.0.into()]].into()
+            move |x: &Points1<TwoFloat>| points![2.0.into() * x[0] - cx), 2.0.into() * (x[1] - cy)];
+        let obj_hess = move |_x: &Points1<TwoFloat>| {
+            points![[2.0.into(), 0.0.into()], [0.0.into(), 2.0.into()]])
         };
         HF1dim::new(
             MultiDimHessFn::new(objective, obj_grad, Some(obj_hess)),
@@ -937,10 +914,10 @@ mod minimize_interiorpoint_tests {
 
     #[test]
     fn test_constructor_variants() {
-        let obj = create_quadratic_objective(&1.0.into(), &1.0.into());
+        let obj = create_quadratic_objective(1.0.into(), 1.0.into());
 
         // Test basic constructor
-        let ip1 = InteriorPoint::new(obj.clone());
+        let ip1 = InteriorPoint::new(obj);
         assert_eq!(ip1.ieq.len(), 0);
         assert_eq!(ip1.eq.len(), 0);
         assert_eq!(ip1.iters, 0);
@@ -948,15 +925,15 @@ mod minimize_interiorpoint_tests {
 
         // Test constructor with constraints
         let constraints = vec![Box::new(LinearConstraint::inequality(
-            &array![1.0.into(), 0.0.into()].into(),
+            &points![1.0.into(), 0.0.into()],
             &0.0.into(),
-        )) as Box<dyn Constraint<MyFloat>>];
+        )) as Box<dyn Constraint<TwoFloat>>];
         let eq_constraints = vec![Box::new(LinearConstraint::equality(
-            &array![0.0.into(), 1.0.into()].into(),
+            &points![0.0.into(), 1.0.into()],
             &1.0.into(),
-        )) as Box<dyn Constraint<MyFloat>>];
+        )) as Box<dyn Constraint<TwoFloat>>];
 
-        let ip2 = InteriorPoint::new_w_constraints(obj.clone(), constraints, eq_constraints);
+        let ip2 = InteriorPoint::new_w_constraints(obj, constraints, eq_constraints);
         assert_eq!(ip2.ieq.len(), 1);
         assert_eq!(ip2.eq.len(), 1);
 
@@ -969,10 +946,10 @@ mod minimize_interiorpoint_tests {
 
     #[test]
     fn test_interior_point_result_structure() {
-        let obj = create_quadratic_objective(&1.0.into(), &1.0.into());
+        let obj = create_quadratic_objective(1.0.into(), 1.0.into());
         let mut ip = InteriorPoint::new(obj);
 
-        let result = ip.log_barrier_method(&array![0.1.into(), 0.1.into()].into(), None);
+        let result = ip.log_barrier_method(&points![0.1.into(), 0.1.into()], None);
         assert!(result.is_ok());
 
         let res = result.unwrap();
@@ -983,11 +960,11 @@ mod minimize_interiorpoint_tests {
 
     #[test]
     fn test_parameter_variants() {
-        let obj = create_quadratic_objective(&1.0.into(), &1.0.into());
+        let obj = create_quadratic_objective(1.0.into(), 1.0.into());
         let mut ip = InteriorPoint::new(obj);
 
         // Test default parameters
-        let result1 = ip.log_barrier_method(&array![0.1.into(), 0.1.into()].into(), None);
+        let result1 = ip.log_barrier_method(&points![0.1.into(), 0.1.into()], None);
         assert!(result1.is_ok());
 
         // Test custom parameters
@@ -1002,17 +979,17 @@ mod minimize_interiorpoint_tests {
             complementarity_tol: 1e-4.into(),
         };
 
-        let result2 = ip.log_barrier_method(&array![0.1.into(), 0.1.into()].into(), Some(params));
+        let result2 = ip.log_barrier_method(&points![0.1.into(), 0.1.into()], Some(params));
         assert!(result2.is_ok());
     }
 
     #[test]
     fn test_unconstrained_problems() {
         // Simple quadratic: minimize x^2 + y^2
-        let obj = create_quadratic_objective(&1.0.into(), &1.0.into());
+        let obj = create_quadratic_objective(1.0.into(), 1.0.into());
         let mut ip = InteriorPoint::new(obj);
 
-        let result = ip.log_barrier_method(&array![1.0.into(), 1.0.into()].into(), None);
+        let result = ip.log_barrier_method(&points![1.0.into(), 1.0.into()], None);
         assert!(result.is_ok());
 
         let res = result.unwrap();
@@ -1033,10 +1010,10 @@ mod minimize_interiorpoint_tests {
         );
 
         // Shifted quadratic: minimize (x-2)^2 + (y-3)^2
-        let shifted_obj = create_shifted_quadratic(&2.0.into(), &3.0.into());
+        let shifted_obj = create_shifted_quadratic(2.0.into(), 3.0.into());
 
         let mut ip2 = InteriorPoint::new(shifted_obj);
-        let result2 = ip2.log_barrier_method(&array![0.0.into(), 0.0.into()].into(), None);
+        let result2 = ip2.log_barrier_method(&points![0.0.into(), 0.0.into()], None);
         assert!(result2.is_ok());
 
         let res2 = result2.unwrap();
@@ -1055,9 +1032,9 @@ mod minimize_interiorpoint_tests {
     #[test]
     fn test_simple_box_constraints() {
         // minimize x^2 + y^2 subject to x >= 0.5, y >= 0.5
-        let obj = create_quadratic_objective(&1.0.into(), &1.0.into());
-        let lower = array![0.5.into(), 0.5.into()].into();
-        let upper = array![MyFloat::new(f64::INFINITY), f64::INFINITY.into()].into();
+        let obj = create_quadratic_objective(1.0.into(), 1.0.into());
+        let lower = points![0.5.into(), 0.5.into()];
+        let upper = points![TwoFloat::from_f64(f64::INFINITY), f64::INFINITY.into()].into();
         let constraints = create_box_constraints(&lower, &upper);
 
         let mut ip = InteriorPoint::new_w_constraints(obj, constraints, vec![]);
@@ -1074,7 +1051,7 @@ mod minimize_interiorpoint_tests {
             complementarity_tol: 1e-3.into(),
         };
 
-        let result = ip.log_barrier_method(&array![0.6.into(), 0.6.into()].into(), Some(params));
+        let result = ip.log_barrier_method(&points![0.6.into(), 0.6.into()], Some(params));
         if result.is_ok() {
             let res = result.unwrap();
             assert!(
@@ -1103,12 +1080,12 @@ mod minimize_interiorpoint_tests {
     #[test]
     fn test_simple_inequality_constraint() {
         // minimize x^2 + y^2 subject to x + y >= 1 (i.e., -x - y <= -1)
-        let obj = create_quadratic_objective(&1.0.into(), &1.0.into());
+        let obj = create_quadratic_objective(1.0.into(), 1.0.into());
         let constraint = LinearConstraint::inequality(
-            &array![MyFloat::new(-1.0), MyFloat::new(-1.0)].into(),
-            &MyFloat::new(-1.0),
+            &points![TwoFloat::from_f64(-1.0), TwoFloat::from_f64(-1.0)].into(),
+            &TwoFloat::from_f64(-1.0),
         );
-        let constraints = vec![Box::new(constraint) as Box<dyn Constraint<MyFloat>>];
+        let constraints = vec![Box::new(constraint) as Box<dyn Constraint<TwoFloat>>];
 
         let mut ip = InteriorPoint::new_w_constraints(obj, constraints, vec![]);
 
@@ -1123,10 +1100,10 @@ mod minimize_interiorpoint_tests {
             complementarity_tol: 1e-3.into(),
         };
 
-        let result = ip.log_barrier_method(&array![0.6.into(), 0.6.into()].into(), Some(params));
+        let result = ip.log_barrier_method(&points![0.6.into(), 0.6.into()], Some(params));
         if result.is_ok() {
             let res = result.unwrap();
-            let sum = &res.xmin[0] + &res.xmin[1];
+            let sum = res.xmin[0] + res.xmin[1];
             assert!(sum >= 0.9, "x + y should be >= 1, got {}", sum);
             println!(
                 "Inequality constraint test passed: x={:.3}, y={:.3}, sum={:.3}",
@@ -1144,10 +1121,10 @@ mod minimize_interiorpoint_tests {
     fn test_equality_constraints_simple() {
         // For equality constraints, let's test a very simple case
         // minimize x^2 + y^2 subject to x = 1 (should give x=1, y=0)
-        let obj = create_quadratic_objective(&1.0.into(), &1.0.into());
+        let obj = create_quadratic_objective(1.0.into(), 1.0.into());
         let eq_constraint =
-            LinearConstraint::equality(&array![1.0.into(), 0.0.into()].into(), &1.0.into()); // x = 1
-        let eq_constraints = vec![Box::new(eq_constraint) as Box<dyn Constraint<MyFloat>>];
+            LinearConstraint::equality(&points![1.0.into(), 0.0.into()], 1.0.into()); // x = 1
+        let eq_constraints = vec![Box::new(eq_constraint) as Box<dyn Constraint<TwoFloat>>];
 
         let mut ip = InteriorPoint::new_w_constraints(obj, vec![], eq_constraints);
 
@@ -1162,7 +1139,7 @@ mod minimize_interiorpoint_tests {
             complementarity_tol: 1e-2.into(),
         };
 
-        let result = ip.log_barrier_method(&array![1.0.into(), 0.1.into()].into(), Some(params));
+        let result = ip.log_barrier_method(&points![1.0.into(), 0.1.into()], Some(params));
         match result {
             Ok(res) => {
                 assert!(
@@ -1192,19 +1169,19 @@ mod minimize_interiorpoint_tests {
 
     #[test]
     fn test_infeasible_starting_points_detection() {
-        let obj = create_quadratic_objective(&1.0.into(), &1.0.into());
+        let obj = create_quadratic_objective(1.0.into(), 1.0.into());
 
         // x >= 1 constraint (inequality: -x <= -1)
         let constraint = LinearConstraint::inequality(
-            &array![MyFloat::new(-1.0), 0.0.into()].into(),
-            &MyFloat::new(-1.0),
+            &points![TwoFloat::from_f64(-1.0), 0.0.into()],
+            TwoFloat::from_f64(-1.0),
         );
-        let constraints = vec![Box::new(constraint) as Box<dyn Constraint<MyFloat>>];
+        let constraints = vec![Box::new(constraint) as Box<dyn Constraint<TwoFloat>>];
 
         let mut ip = InteriorPoint::new_w_constraints(obj, constraints, vec![]);
 
         // Try starting at x = 0.5 (infeasible since x < 1)
-        let result = ip.log_barrier_method(&array![0.5.into(), 1.0.into()].into(), None);
+        let result = ip.log_barrier_method(&points![0.5.into(), 1.0.into()], None);
 
         // The method should detect infeasibility OR fail in some other way
         if result.is_err() {
@@ -1223,11 +1200,11 @@ mod minimize_interiorpoint_tests {
 
     #[test]
     fn test_invalid_dimensions() {
-        let obj = create_quadratic_objective(&1.0.into(), &1.0.into());
+        let obj = create_quadratic_objective(1.0.into(), 1.0.into());
         let mut ip = InteriorPoint::new(obj);
 
         // Empty initial point
-        let result = ip.log_barrier_method(&array![].into(), None);
+        let result = ip.log_barrier_method(&points![], None);
         assert!(result.is_err());
 
         match result.unwrap_err() {
@@ -1240,7 +1217,7 @@ mod minimize_interiorpoint_tests {
 
     #[test]
     fn test_convergence_with_loose_tolerance() {
-        let obj = create_quadratic_objective(&1.0.into(), &1.0.into());
+        let obj = create_quadratic_objective(1.0.into(), 1.0.into());
         let mut ip = InteriorPoint::new(obj);
 
         // Test with very loose tolerance
@@ -1251,7 +1228,7 @@ mod minimize_interiorpoint_tests {
         };
 
         let result =
-            ip.log_barrier_method(&array![1.0.into(), 1.0.into()].into(), Some(loose_params));
+            ip.log_barrier_method(&points![1.0.into(), 1.0.into()], Some(loose_params));
         assert!(result.is_ok());
 
         let res = result.unwrap();
@@ -1283,7 +1260,7 @@ mod minimize_interiorpoint_tests {
 
     #[test]
     fn test_debug_formatting() {
-        let obj = create_quadratic_objective(&1.0.into(), &1.0.into());
+        let obj = create_quadratic_objective(1.0.into(), 1.0.into());
         let ip = InteriorPoint::new(obj);
 
         let debug_str = format!("{:?}", ip);
@@ -1296,31 +1273,31 @@ mod minimize_interiorpoint_tests {
 
     #[test]
     fn test_line_search_edge_cases() {
-        let obj = create_quadratic_objective(&1.0.into(), &1.0.into());
+        let obj = create_quadratic_objective(1.0.into(), 1.0.into());
         let ip = InteriorPoint::new(obj);
 
-        let x = array![1.0.into(), 1.0.into()].into();
-        let grad = array![2.0.into(), 2.0.into()].into();
+        let x = points![1.0.into(), 1.0.into()];
+        let grad = points![2.0.into(), 2.0.into()];
 
         // Test with zero direction (should fail)
-        let zero_direction = array![0.0.into(), 0.0.into()].into();
-        let result = ip.backtracking_line_search(&x, &zero_direction, &grad, &1.0.into());
+        let zero_direction = points![0.0.into(), 0.0.into()];
+        let result = ip.backtracking_line_search(&x, &zero_direction, &grad, 1.0.into());
         match result {
             Ok(_) => println!("Unexpected: Zero direction succeeded in line search"),
             Err(_) => println!("Expected: Zero direction failed line search"),
         }
 
         // Test with upward direction (should fail)
-        let upward_direction = array![1.0.into(), 1.0.into()].into(); // Same direction as gradient
-        let result2 = ip.backtracking_line_search(&x, &upward_direction, &grad, &1.0.into());
+        let upward_direction = points![1.0.into(), 1.0.into()]; // Same direction as gradient
+        let result2 = ip.backtracking_line_search(&x, &upward_direction, &grad, 1.0.into());
         match result2 {
             Ok(_) => println!("Unexpected: Upward direction succeeded in line search"),
             Err(_) => println!("Expected: Upward direction failed line search"),
         }
 
         // Test with descent direction (should succeed)
-        let descent_direction = array![MyFloat::new(-1.0), MyFloat::new(-1.0)].into(); // Opposite to gradient
-        let result3 = ip.backtracking_line_search(&x, &descent_direction, &grad, &1.0.into());
+        let descent_direction = points![TwoFloat::from_f64(-1.0), TwoFloat::from_f64(-1.0)]; // Opposite to gradient
+        let result3 = ip.backtracking_line_search(&x, &descent_direction, &grad, 1.0.into());
         match result3 {
             Ok((alpha, fn_evals)) => {
                 println!(
@@ -1338,19 +1315,19 @@ mod minimize_interiorpoint_tests {
 
     #[test]
     fn test_kkt_system_solver_unconstrained() {
-        let obj = create_quadratic_objective(&1.0.into(), &1.0.into());
+        let obj = create_quadratic_objective(1.0.into(), 1.0.into());
         let ip = InteriorPoint::new(obj);
 
         // Simple 2x2 system without equality constraints
-        let hessian = array![[2.0.into(), 0.0.into()], [0.0.into(), 2.0.into()]].into();
-        let gradient = array![2.0.into(), 4.0.into()].into();
+        let hessian = points![[2.0.into(), 0.0.into()], [0.0.into(), 2.0.into()]];
+        let gradient = points![2.0.into(), 4.0.into()];
 
         // No equality constraints (empty slice)
         let result = ip.solve_kkt_system(
             &hessian,
             &gradient,
             &[],
-            &array![0.0.into(), 0.0.into()].into(),
+            &points![0.0.into(), 0.0.into()],
         );
 
         match result {
@@ -1377,7 +1354,7 @@ mod minimize_interiorpoint_tests {
                 // Test direct matrix solve as fallback to verify Matrix::solve_linear_system works
                 let direct_result = ip.solve_linear_system(
                     &hessian,
-                    &array![MyFloat::new(-2.0), MyFloat::new(-4.0)].into(),
+                    &points![TwoFloat::from_f64(-2.0), TwoFloat::from_f64(-4.0)],
                 );
                 match direct_result {
                     Ok(solution) => {
@@ -1405,7 +1382,7 @@ mod minimize_interiorpoint_tests {
 
     #[test]
     fn test_barrier_parameter_progression_unconstrained() {
-        let obj = create_quadratic_objective(&1.0.into(), &1.0.into());
+        let obj = create_quadratic_objective(1.0.into(), 1.0.into());
         let mut ip = InteriorPoint::new(obj);
 
         let params = InteriorPointParams {
@@ -1416,7 +1393,7 @@ mod minimize_interiorpoint_tests {
             ..Default::default()
         };
 
-        let result = ip.log_barrier_method(&array![0.5.into(), 0.5.into()].into(), Some(params));
+        let result = ip.log_barrier_method(&points![0.5.into(), 0.5.into()], Some(params));
         assert!(result.is_ok());
 
         let res = result.unwrap();
@@ -1428,21 +1405,21 @@ mod minimize_interiorpoint_tests {
 
     #[test]
     fn test_minimize_with_inequalities_convenience() {
-        let obj = create_quadratic_objective(&1.0.into(), &1.0.into());
+        let obj = create_quadratic_objective(1.0.into(), 1.0.into());
 
         // Simple constraint that's easy to satisfy
         let constraint = LinearConstraint::inequality(
-            &array![MyFloat::new(-1.0), MyFloat::new(-1.0)].into(),
-            &MyFloat::new(-0.5),
+            &points![TwoFloat::from_f64(-1.0), TwoFloat::from_f64(-1.0)],
+            TwoFloat::from_f64(-0.5),
         ); // x + y >= 0.5
-        let constraints = vec![Box::new(constraint) as Box<dyn Constraint<MyFloat>>];
+        let constraints = vec![Box::new(constraint) as Box<dyn Constraint<TwoFloat>>];
 
         let mut ip = InteriorPoint::new_w_constraints(obj, constraints, vec![]);
 
-        let result = ip.minimize_with_inequalities(&array![0.5.into(), 0.5.into()].into());
+        let result = ip.minimize_with_inequalities(&points![0.5.into(), 0.5.into()]);
         if result.is_ok() {
             let res = result.unwrap();
-            let sum = &res.xmin[0] + &res.xmin[1];
+            let sum = res.xmin[0] + res.xmin[1];
             assert!(
                 sum >= 0.4,
                 "Constraint should be approximately satisfied, got {}",
@@ -1460,10 +1437,10 @@ mod minimize_interiorpoint_tests {
     #[test]
     fn test_well_conditioned_problem() {
         // Test with a well-conditioned quadratic (same scaling)
-        let obj = create_quadratic_objective(&1.0.into(), &1.0.into());
+        let obj = create_quadratic_objective(1.0.into(), 1.0.into());
         let mut ip = InteriorPoint::new(obj);
 
-        let result = ip.log_barrier_method(&array![1.0.into(), 1.0.into()].into(), None);
+        let result = ip.log_barrier_method(&points![1.0.into(), 1.0.into()], None);
         assert!(result.is_ok(), "Should handle well-conditioned problems");
 
         let res = result.unwrap();
@@ -1482,14 +1459,14 @@ mod minimize_interiorpoint_tests {
     fn test_higher_dimensional_problem() {
         // Test with a 3-dimensional problem (more manageable than 5D)
         let n = 3;
-        let objective = move |x: &Points1<MyFloat>| x.iter().map(|xi| xi * xi).sum::<MyFloat>();
-        let obj_grad = |x: &Points1<MyFloat>| x.iter().map(|xi| 2.0 * xi).collect();
-        let obj_hess = move |_x: &Points1<MyFloat>| Points2::<MyFloat>::eye(n) * 2.0;
+        let objective = move |x: &Points1<TwoFloat>| x.iter().map(|xi| xi * xi).sum::<TwoFloat>();
+        let obj_grad = |x: &Points1<TwoFloat>| x.iter().map(|xi| 2.0 * xi).collect();
+        let obj_hess = move |_x: &Points1<TwoFloat>| Points2::<TwoFloat>::eye(n) * 2.0;
 
         let obj = MultiDimHessFn::new(objective, obj_grad, Some(obj_hess));
         let mut ip = InteriorPoint::new(obj);
 
-        let initial_point = Points1::<MyFloat>::ones(n) * 0.5;
+        let initial_point = Points1::<TwoFloat>::ones(n) * 0.5;
         let result = ip.log_barrier_method(&initial_point, None);
         assert!(result.is_ok());
 
@@ -1506,7 +1483,7 @@ mod minimize_interiorpoint_tests {
 
     #[test]
     fn test_parameter_bounds_reasonable() {
-        let obj = create_quadratic_objective(&1.0.into(), &1.0.into());
+        let obj = create_quadratic_objective(1.0.into(), 1.0.into());
         let mut ip = InteriorPoint::new(obj);
 
         // Test with reasonable but different parameter values
@@ -1522,7 +1499,7 @@ mod minimize_interiorpoint_tests {
         };
 
         let result =
-            ip.log_barrier_method(&array![0.1.into(), 0.1.into()].into(), Some(custom_params));
+            ip.log_barrier_method(&points![0.1.into(), 0.1.into()], Some(custom_params));
         assert!(
             result.is_ok(),
             "Should handle reasonable parameter variations"
@@ -1535,11 +1512,11 @@ mod minimize_interiorpoint_tests {
 
     #[test]
     fn test_numerical_stability_away_from_boundary() {
-        let obj = create_quadratic_objective(&1.0.into(), &1.0.into());
+        let obj = create_quadratic_objective(1.0.into(), 1.0.into());
         let mut ip = InteriorPoint::new(obj);
 
         // Start away from any potential boundaries
-        let result = ip.log_barrier_method(&array![0.0.into(), 0.0.into()].into(), None);
+        let result = ip.log_barrier_method(&points![0.0.into(), 0.0.into()], None);
         assert!(result.is_ok(), "Should handle points away from boundaries");
 
         let res = result.unwrap();
@@ -1549,10 +1526,10 @@ mod minimize_interiorpoint_tests {
 
     #[test]
     fn test_result_components() {
-        let obj = create_quadratic_objective(&1.0.into(), &1.0.into());
+        let obj = create_quadratic_objective(1.0.into(), 1.0.into());
         let mut ip = InteriorPoint::new(obj);
 
-        let result = ip.log_barrier_method(&array![0.5.into(), 0.5.into()].into(), None);
+        let result = ip.log_barrier_method(&points![0.5.into(), 0.5.into()], None);
         assert!(result.is_ok());
 
         let res = result.unwrap();

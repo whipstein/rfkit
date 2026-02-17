@@ -1,7 +1,7 @@
 use crate::{
     error::MinimizerError,
     minimize::{Minimizer, ObjFn},
-    num::RFFloat,
+    num::RealScalar,
     pts::{Matrix, Points, Points1, Points2, Pts},
 };
 use ndarray::prelude::*;
@@ -12,7 +12,7 @@ use std::fmt;
 #[derive(Debug, Clone, PartialEq)]
 pub enum NelderMeadMethod<T>
 where
-    T: RFFloat,
+    T: RealScalar,
 {
     Initial,
     Shrink,
@@ -26,7 +26,7 @@ where
 
 impl<T> fmt::Display for NelderMeadMethod<T>
 where
-    T: RFFloat,
+    T: RealScalar,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -45,7 +45,7 @@ where
 #[derive(Debug, Clone, Default)]
 pub struct NelderMeadOptions<T>
 where
-    T: RFFloat,
+    T: RealScalar,
 {
     initial_point: Points1<T>,
     lower_bound: Points1<T>,
@@ -72,9 +72,7 @@ where
 
 impl<T> NelderMeadOptions<T>
 where
-    T: RFFloat,
-    for<'a, 'b> &'a T: std::ops::Mul<&'b T, Output = T>,
-    for<'a> f64: std::ops::Mul<&'a T, Output = T>,
+    T: RealScalar,
 {
     pub fn new(
         init: &Points1<T>,
@@ -117,24 +115,24 @@ where
     }
 
     fn update(&mut self, opt: &NelderMeadOptions<T>) {
-        self.initial_point = opt.initial_point.clone();
-        self.lower_bound = opt.lower_bound.clone();
-        self.upper_bound = opt.upper_bound.clone();
-        self.scale = opt.scale.clone();
+        self.initial_point = opt.initial_point;
+        self.lower_bound = opt.lower_bound;
+        self.upper_bound = opt.upper_bound;
+        self.scale = opt.scale;
         self.n = opt.n;
         self.max_iterations = opt.max_iterations;
-        self.tolerance = opt.tolerance.clone();
-        self.alpha = opt.alpha.clone();
-        self.beta = opt.beta.clone();
-        self.gamma = opt.gamma.clone();
-        self.rho = opt.rho.clone();
-        self.mu = opt.mu.clone();
+        self.tolerance = opt.tolerance;
+        self.alpha = opt.alpha;
+        self.beta = opt.beta;
+        self.gamma = opt.gamma;
+        self.rho = opt.rho;
+        self.mu = opt.mu;
         self.use_random_restart = opt.use_random_restart;
         self.use_adaptive_simplex = opt.use_adaptive_simplex;
         self.stagnation_iters = opt.stagnation_iters;
         self.stagnation_threshold = opt.stagnation_threshold;
         self.max_restarts = opt.max_restarts;
-        self.perturbation_scale = opt.perturbation_scale.clone();
+        self.perturbation_scale = opt.perturbation_scale;
         self.rng_seed = opt.rng_seed;
         self.bounded = opt.bounded;
         self.verbosity = opt.verbosity;
@@ -144,9 +142,9 @@ where
         if self.is_bounded() {
             azip!((index i, lb in self.lower_bound.inner(), ub in self.upper_bound.inner(), scale in self.scale.inner()) {
                 if x_scaled[i] < lb * scale {
-                    x_scaled[i] = (1.0 + 0.05 / (iters + 1) as f64) * lb * scale;
+                    x_scaled[i] = (1.0 + 0.05 / (iters + 1) as f64) * lb * *scale;
                 } else if x_scaled[i] > ub * scale {
-                    x_scaled[i] = (1.0 - 0.05 / (iters + 1) as f64) * ub * scale;
+                    x_scaled[i] = (1.0 - 0.05 / (iters + 1) as f64) * ub * *scale;
                 } else {
                     ()
                 }
@@ -158,10 +156,10 @@ where
         if self.is_bounded() {
             if *x_scaled < &self.lower_bound[pt] * &self.scale[pt] {
                 *x_scaled =
-                    (1.0 + 0.05 / (iters + 1) as f64) * &self.lower_bound[pt] * &self.scale[pt];
+                    (1.0 + 0.05 / (iters + 1) as f64) * &self.lower_bound[pt] * self.scale[pt];
             } else if *x_scaled > &self.upper_bound[pt] * &self.scale[pt] {
                 *x_scaled =
-                    (1.0 - 0.05 / (iters + 1) as f64) * &self.upper_bound[pt] * &self.scale[pt];
+                    (1.0 - 0.05 / (iters + 1) as f64) * &self.upper_bound[pt] * self.scale[pt];
             } else {
                 ()
             }
@@ -289,7 +287,7 @@ where
     }
 
     pub fn tolerance(&self) -> T {
-        self.tolerance.clone()
+        self.tolerance
     }
 
     pub fn verbosity(&self) -> usize {
@@ -305,7 +303,7 @@ where
 #[derive(Clone)]
 pub struct NelderMeadResult<T>
 where
-    T: RFFloat,
+    T: RealScalar,
 {
     pub simplex: Points2<T>,
     pub res: Points1<T>,
@@ -313,6 +311,7 @@ where
     f: Box<dyn ObjFn<T>>,
     pub iters: usize,
     pub fn_evals: usize,
+    pub restarts: usize,
     pub options: NelderMeadOptions<T>,
     pub converged: bool,
     pub final_simplex_size: T,
@@ -321,7 +320,7 @@ where
 
 impl<T> NelderMeadResult<T>
 where
-    T: RFFloat,
+    T: RealScalar,
     for<'a, 'b> &'a T: std::ops::Add<&'b T, Output = T>
         + std::ops::Sub<&'b T, Output = T>
         + std::ops::Mul<&'b T, Output = T>,
@@ -340,10 +339,11 @@ where
             simplex: Points2::zeros((options.n + 1, options.n)),
             res: Points1::zeros(options.n + 1),
             tol: T::infinity(),
-            f: f.clone(),
+            f: f,
             iters: 0,
             fn_evals: 0,
-            options: options.clone(),
+            restarts: 0,
+            options: options,
             converged: false,
             final_simplex_size: T::infinity(),
             history: Points1::zeros(options.n),
@@ -358,11 +358,11 @@ where
     }
 
     pub fn fmin(&self) -> T {
-        self.res[0].clone()
+        self.res[0]
     }
 
     pub fn tolerance(&self) -> T {
-        self.tol.clone()
+        self.tol
     }
 
     pub fn fn_evals(&self) -> usize {
@@ -378,7 +378,7 @@ where
     }
 
     pub fn history(&self) -> Points1<T> {
-        self.history.clone()
+        self.history
     }
 
     pub fn calc_obj(&mut self, x: &Points1<T>) -> T {
@@ -386,8 +386,9 @@ where
         let mut sum = T::zero();
         if self.options.is_bounded() {
             for i in 0..x.len() {
-                sum += (&self.options.upper_bound[i] - &x[i]).ln()
+                let rhs = (&self.options.upper_bound[i] - &x[i]).ln()
                     + (&x[i] - &self.options.lower_bound[i]).ln();
+                sum += if rhs.is_finite() { rhs } else { 0.0.into() };
             }
             self.f.call(x) - &self.options.mu * sum
         } else {
@@ -410,7 +411,7 @@ where
     }
 
     pub fn best_f(&self) -> T {
-        self.res[0].clone()
+        self.res[0]
     }
 
     pub fn best_x(&self) -> Points1<T> {
@@ -428,7 +429,7 @@ where
 
     pub fn update_pt(&mut self, index: usize, simplex: &Points1<T>, res: &T) {
         self.simplex.set_row(index, simplex);
-        self.res[index] = res.clone();
+        self.res[index] = res;
         self.calc_tol();
         self.sort_simplex();
     }
@@ -459,11 +460,11 @@ where
                 self.simplex =
                     Points2::from_shape_fn((self.options.n + 1, self.options.n), |(i, j)| {
                         if i == j && i < self.options.n {
-                            x0_a_b[j].clone()
+                            x0_a_b[j]
                         } else if i < self.options.n {
-                            x0_b[j].clone()
+                            x0_b[j]
                         } else {
-                            x0_scaled[j].clone()
+                            x0_scaled[j]
                         }
                     });
                 self.res = Points1::zeros(self.options.n + 1);
@@ -577,10 +578,10 @@ where
     fn sort_simplex(&mut self) {
         let mut order: Vec<usize> = (0..self.res.len()).collect();
         order.sort_by(|&a, &b| self.res[a].partial_cmp(&self.res[b]).unwrap());
-        let tmp_res = self.res.clone();
-        let tmp_simplex = self.simplex.clone();
+        let tmp_res = self.res;
+        let tmp_simplex = self.simplex;
         for i in 0..order.len() {
-            self.res[i] = tmp_res[order[i]].clone();
+            self.res[i] = tmp_res[order[i]];
             self.simplex.set_row(i, &tmp_simplex.row(order[i]));
         }
     }
@@ -588,14 +589,14 @@ where
 
 pub struct NelderMead<T>
 where
-    T: RFFloat,
+    T: RealScalar,
 {
     f: Box<dyn ObjFn<T>>,
 }
 
 impl<T> NelderMead<T>
 where
-    T: RFFloat,
+    T: RealScalar,
     for<'a, 'b> &'a T: std::ops::Add<&'b T, Output = T>
         + std::ops::Sub<&'b T, Output = T>
         + std::ops::Mul<&'b T, Output = T>
@@ -634,16 +635,14 @@ where
             if out.options.verbosity > 1 {
                 println!(
                     "iteration: {}\terr: {}\ttol: {}",
-                    out.iters,
-                    out.res[0],
-                    out.tol.clone()
+                    out.iters, out.res[0], out.tol
                 );
             }
             out.iters += 1;
 
             // Determine if convergence criteria met
             match opt.tolerance.to_f64() {
-                0.0 => (),
+                Some(0.0) => (),
                 _ => {
                     if out.tol.is_finite()
                         && (out.tol < out.options.tolerance
@@ -654,7 +653,7 @@ where
                     }
                 }
             }
-            prev_tol = out.tol.clone();
+            prev_tol = out.tol;
 
             //
             // Calculate reflection point
@@ -672,7 +671,7 @@ where
                     println!("performing expansion");
                 }
                 let (x_e, f_e) = out
-                    .generate_point(NelderMeadMethod::Expansion(x_r.clone()))
+                    .generate_point(NelderMeadMethod::Expansion(x_r))
                     .unwrap();
                 if f_e < out.res[0] {
                     out.update_pt(nrows - 1, &x_e, &f_e);
@@ -742,12 +741,12 @@ where
         let nrows = out.options.n + 1;
 
         // Track global best across restarts
-        let mut restart_count = 0;
+        out.restarts = 0;
 
         // Outer loop for restarts
         'restart_loop: loop {
             // Determine starting point for this run
-            if restart_count != 0 {
+            if out.restarts != 0 {
                 if out.options.verbosity > 2 {
                     println!("Perturbing x point");
                 }
@@ -755,13 +754,13 @@ where
                 out.generate_point(NelderMeadMethod::Restart);
             };
 
-            if out.options.verbosity > 2 && restart_count > 0 {
-                println!("Restart {} from perturbed best point", restart_count);
+            if out.options.verbosity > 2 && out.restarts > 0 {
+                println!("Restart {} from perturbed best point", out.restarts);
             }
 
             let mut prev_tol = T::one();
             let mut stagnation_count: usize = 0;
-            let mut prev_best_fmin = out.res[0].clone();
+            let mut prev_best_fmin = out.res[0];
             let improvement_threshold = T::from_f64(1e-10);
 
             // Inner optimization loop
@@ -782,7 +781,7 @@ where
                 let current_fmin = out.best_f();
                 if (&prev_best_fmin - &current_fmin) > improvement_threshold {
                     stagnation_count = 0;
-                    prev_best_fmin = current_fmin.clone();
+                    prev_best_fmin = current_fmin;
                 } else {
                     stagnation_count += 1;
                 }
@@ -806,11 +805,11 @@ where
                         if out.options.verbosity > 1 {
                             println!("Applied simplex perturbation");
                         }
-                    } else if restart_count < out.options.max_restarts {
+                    } else if out.restarts < out.options.max_restarts {
                         // Trigger restart
-                        restart_count += 1;
+                        out.restarts += 1;
                         if out.options.verbosity > 1 {
-                            println!("Restart {}", restart_count);
+                            println!("Restart {}", out.restarts);
                         }
                         continue 'restart_loop;
                     }
@@ -818,7 +817,7 @@ where
 
                 // Determine if convergence criteria met
                 match opt.tolerance.to_f64() {
-                    0.0 => (),
+                    Some(0.0) => (),
                     _ => {
                         if out.tol.is_finite()
                             && (out.tol < opt.tolerance
@@ -829,7 +828,7 @@ where
                         }
                     }
                 }
-                prev_tol = out.tol.clone();
+                prev_tol = out.tol;
 
                 // Calculate reflection point
                 let (x_r, f_r) = out.generate_point(NelderMeadMethod::Reflection).unwrap();
@@ -845,7 +844,7 @@ where
                         println!("performing expansion");
                     }
                     let (x_e, f_e) = out
-                        .generate_point(NelderMeadMethod::Expansion(x_r.clone()))
+                        .generate_point(NelderMeadMethod::Expansion(x_r))
                         .unwrap();
                     if f_e < out.res[0] {
                         out.update_calc_pt(nrows - 1, &x_e);
@@ -900,13 +899,13 @@ where
             }
 
             // Check if we should try another restart
-            if restart_count < out.options.max_restarts
+            if out.restarts < out.options.max_restarts
                 && out.options.use_random_restart
                 && out.iters < out.options.max_iterations
             {
-                restart_count += 1;
+                out.restarts += 1;
                 if out.options.verbosity > 1 {
-                    println!("Restart {}", restart_count);
+                    println!("Restart {}", out.restarts);
                 }
                 continue 'restart_loop;
             }
@@ -915,7 +914,7 @@ where
         }
 
         if out.options.verbosity > 0 {
-            self.verbose_result(&out, restart_count);
+            self.verbose_result(&out, out.restarts);
         }
 
         Ok(out)
@@ -926,17 +925,17 @@ where
         println!("Total function evaluations: {}", result.fn_evals);
         println!("Best xmin:");
         for i in 0..result.options.n {
-            println!("{:?}", result.best_x()[i]);
+            println!("{:}", result.best_x()[i]);
         }
-        println!("Best fmin: {:?}", result.best_f());
+        println!("Best fmin: {}", result.best_f());
         println!("iters: {}", result.iters);
-        println!("tol: {:?}", result.tol);
+        println!("tol: {}", result.tol);
     }
 }
 
 impl<T> Minimizer<T> for NelderMead<T>
 where
-    T: RFFloat + 'static,
+    T: RealScalar + 'static,
     for<'a, 'b> &'a T: std::ops::Add<&'b T, Output = T>
         + std::ops::Sub<&'b T, Output = T>
         + std::ops::Mul<&'b T, Output = T>
@@ -970,26 +969,26 @@ mod minimize_neldermead_tests {
         frequency::*,
         minimize::MultiDimFn,
         network::{Network, NetworkBuilder},
-        num::{MyComplex, MyFloat},
         pts::Points3,
         util::*,
     };
-    use float_cmp::F64Margin;
-    use num::complex::Complex64;
+    use num::complex::{Complex, Complex64};
+    use twofloat::TwoFloat;
 
-    fn calc_feed_y(freq: Frequency, x: &Points1<MyFloat>) -> Points3<MyComplex> {
-        let mut yfeed = Points3::<MyComplex>::zeros((freq.npts(), 2, 2));
+    fn calc_feed_y(freq: Frequency, x: &Points1<TwoFloat>) -> Points3<Complex<TwoFloat>> {
+        let mut yfeed = Points3::<Complex<TwoFloat>>::zeros((freq.npts(), 2, 2));
 
         let w = freq.w();
-        let mut zs = Points1::<MyComplex>::zeros(freq.npts());
-        let mut zm = Points1::<MyComplex>::zeros(freq.npts());
-        let mut zp = Points1::<MyComplex>::zeros(freq.npts());
-        let mut zall = Points1::<MyComplex>::zeros(freq.npts());
+        let mut zs = Points1::<Complex<TwoFloat>>::zeros(freq.npts());
+        let mut zm = Points1::<Complex<TwoFloat>>::zeros(freq.npts());
+        let mut zp = Points1::<Complex<TwoFloat>>::zeros(freq.npts());
+        let mut zall = Points1::<Complex<TwoFloat>>::zeros(freq.npts());
         for i in 0..freq.npts() {
-            zs[i] = &x[3] * MyComplex::new(0.0.into(), 1.0.into()) * w[i] * &x[2]
-                / (&x[3] + MyComplex::new(0.0.into(), 1.0.into()) * w[i] * &x[2]);
-            zm[i] = &x[1] + MyComplex::new(0.0.into(), 1.0.into()) * w[i] * &x[0] + &zs[i];
-            zp[i] = &x[5] - MyComplex::new(0.0.into(), 1.0.into()) / (w[i] * &x[4]);
+            zs[i] = &x[3] * Complex::<TwoFloat>::new(0.0.into(), 1.0.into()) * w[i] * &x[2]
+                / (&x[3] + Complex::<TwoFloat>::new(0.0.into(), 1.0.into()) * w[i] * &x[2]);
+            zm[i] =
+                &x[1] + Complex::<TwoFloat>::new(0.0.into(), 1.0.into()) * w[i] * &x[0] + &zs[i];
+            zp[i] = &x[5] - Complex::<TwoFloat>::new(0.0.into(), 1.0.into()) / (w[i] * &x[4]);
             zall[i] = &zm[i] * &zp[i] / (&zm[i] + &zp[i]);
         }
 
@@ -997,16 +996,16 @@ mod minimize_neldermead_tests {
             yfeed[[i, 0, 1]] = -1.0 / &zall[i];
             yfeed[[i, 1, 0]] = -1.0 / &zall[i];
             yfeed[[i, 0, 0]] =
-                MyComplex::new(0.0.into(), 1.0.into()) * w[i] * &x[6] + 1.0 / &zall[i];
+                Complex::<TwoFloat>::new(0.0.into(), 1.0.into()) * w[i] * &x[6] + 1.0 / &zall[i];
             yfeed[[i, 1, 1]] =
-                MyComplex::new(0.0.into(), 1.0.into()) * w[i] * &x[7] + 1.0 / &zall[i];
+                Complex::<TwoFloat>::new(0.0.into(), 1.0.into()) * w[i] * &x[7] + 1.0 / &zall[i];
         }
 
         yfeed
     }
 
-    fn calc_err(model: &Network, meas: &Network) -> MyFloat {
-        let mut err = MyFloat::new(0.0);
+    fn calc_err(model: &Network, meas: &Network) -> TwoFloat {
+        let mut err = TwoFloat::from_f64(0.0);
         let meas_h = meas.h();
         let model_h = model.h();
         let meas_y = meas.y();
@@ -1039,14 +1038,14 @@ mod minimize_neldermead_tests {
         err
     }
 
-    fn eval_f_simplex(x: &Points1<MyFloat>, meas: &Network) -> MyFloat {
-        let model_y = calc_feed_y(meas.freq().clone(), x);
+    fn eval_f_simplex(x: &Points1<TwoFloat>, meas: &Network) -> TwoFloat {
+        let model_y = calc_feed_y(meas.freq(), x);
         let model_y_c64 = Points::<Complex64, Ix3>::from_shape_fn(model_y.dim(), |(i, j, k)| {
-            model_y[[i, j, k]].clone().into()
+            model_y[[i, j, k]].into()
         });
         let model = NetworkBuilder::new()
-            .freq(meas.freq().clone())
-            .z0(meas.z0().clone())
+            .freq(meas.freq())
+            .z0(meas.z0())
             .y(model_y_c64)
             .build();
 
@@ -1055,18 +1054,18 @@ mod minimize_neldermead_tests {
 
     fn calc_xfmr_z(
         freq: &Frequency,
-        ls: &MyFloat,
-        rs: &MyFloat,
-        km: &MyFloat,
-        qp: &MyFloat,
-        x: &Points1<MyFloat>,
-    ) -> Points3<MyComplex> {
-        let mut z = Points3::<MyComplex>::zeros((freq.npts(), 2, 2));
+        ls: &TwoFloat,
+        rs: &TwoFloat,
+        km: &TwoFloat,
+        qp: &TwoFloat,
+        x: &Points1<TwoFloat>,
+    ) -> Points3<Complex<TwoFloat>> {
+        let mut z = Points3::<Complex<TwoFloat>>::zeros((freq.npts(), 2, 2));
 
         let w = freq.w();
-        let mut m = Points1::<MyFloat>::zeros(freq.npts());
-        let mut n = Points1::<MyFloat>::zeros(freq.npts());
-        let mut rp = Points1::<MyFloat>::zeros(freq.npts());
+        let mut m = Points1::<TwoFloat>::zeros(freq.npts());
+        let mut n = Points1::<TwoFloat>::zeros(freq.npts());
+        let mut rp = Points1::<TwoFloat>::zeros(freq.npts());
         for i in 0..freq.npts() {
             m[i] = km * (&x[0] * ls).sqrt();
             n[i] = (ls / &x[0]).sqrt();
@@ -1074,17 +1073,17 @@ mod minimize_neldermead_tests {
         }
 
         for i in 0..freq.npts() {
-            z[[i, 0, 1]] = -MyComplex::new(0.0.into(), 1.0.into()) * freq.w_pt(i) * &m[i];
-            z[[i, 1, 0]] = -MyComplex::new(0.0.into(), 1.0.into()) * freq.w_pt(i) * &m[i];
-            z[[i, 0, 0]] = MyComplex::new(rp[i].clone(), w[i] * &x[0]);
-            z[[i, 1, 1]] = MyComplex::new(rs.clone(), -w[i] * ls);
+            z[[i, 0, 1]] = -Complex::<TwoFloat>::new(0.0.into(), 1.0.into()) * freq.w_pt(i) * &m[i];
+            z[[i, 1, 0]] = -Complex::<TwoFloat>::new(0.0.into(), 1.0.into()) * freq.w_pt(i) * &m[i];
+            z[[i, 0, 0]] = Complex::<TwoFloat>::new(rp[i], w[i] * &x[0]);
+            z[[i, 1, 1]] = Complex::<TwoFloat>::new(rs, -w[i] * ls);
         }
 
         z
     }
 
-    fn calc_err_xfmr(meas: &Network, model: &Network) -> MyFloat {
-        let mut err = MyFloat::new(0.0);
+    fn calc_err_xfmr(meas: &Network, model: &Network) -> TwoFloat {
+        let mut err = TwoFloat::from_f64(0.0);
         let meas_s = meas.s();
         let model_s = model.s();
         for i in 0..meas.freq().npts() {
@@ -1102,20 +1101,20 @@ mod minimize_neldermead_tests {
     }
 
     fn eval_f_xfmr(
-        x: &Points1<MyFloat>,
-        ls: &MyFloat,
-        rs: &MyFloat,
-        km: &MyFloat,
-        qp: &MyFloat,
+        x: &Points1<TwoFloat>,
+        ls: &TwoFloat,
+        rs: &TwoFloat,
+        km: &TwoFloat,
+        qp: &TwoFloat,
         meas: &Network,
-    ) -> MyFloat {
+    ) -> TwoFloat {
         let model_z = calc_xfmr_z(&meas.freq(), ls, rs, km, qp, x);
         let model_z_c64 = Points::<Complex64, Ix3>::from_shape_fn(model_z.dim(), |(i, j, k)| {
-            model_z[[i, j, k]].clone().into()
+            model_z[[i, j, k]].into()
         });
         let model = NetworkBuilder::new()
-            .freq(meas.freq().clone())
-            .z0(meas.z0().clone())
+            .freq(meas.freq())
+            .z0(meas.z0())
             .z(model_z_c64)
             .build();
 
@@ -1185,13 +1184,13 @@ mod minimize_neldermead_tests {
     }
 
     fn eval_f_simplex_f64(x: &Points1<f64>, meas: &Network) -> f64 {
-        let model_y = calc_feed_y_f64(meas.freq().clone(), x);
+        let model_y = calc_feed_y_f64(meas.freq(), x);
         let model_y_c64 = Points::<Complex64, Ix3>::from_shape_fn(model_y.dim(), |(i, j, k)| {
-            model_y[[i, j, k]].clone().into()
+            model_y[[i, j, k]].into()
         });
         let model = NetworkBuilder::new()
-            .freq(meas.freq().clone())
-            .z0(meas.z0().clone())
+            .freq(meas.freq())
+            .z0(meas.z0())
             .y(model_y_c64)
             .build();
 
@@ -1199,14 +1198,14 @@ mod minimize_neldermead_tests {
     }
 
     fn get_init() -> (
-        Points1<MyFloat>,
-        Points1<MyFloat>,
-        Points1<MyFloat>,
-        Points1<MyFloat>,
+        Points1<TwoFloat>,
+        Points1<TwoFloat>,
+        Points1<TwoFloat>,
+        Points1<TwoFloat>,
     ) {
         // (x, scale, lb, ub)
         (
-            array![
+            points![
                 1e-11.into(),
                 1e-3.into(),
                 1e-13.into(),
@@ -1217,7 +1216,7 @@ mod minimize_neldermead_tests {
                 1e-15.into()
             ]
             .into(),
-            array![
+            points![
                 1e12.into(),
                 1.0.into(),
                 1e12.into(),
@@ -1228,7 +1227,7 @@ mod minimize_neldermead_tests {
                 1e15.into()
             ]
             .into(),
-            array![
+            points![
                 1e-15.into(),
                 1e-6.into(),
                 1e-15.into(),
@@ -1239,7 +1238,7 @@ mod minimize_neldermead_tests {
                 1e-18.into()
             ]
             .into(),
-            array![
+            points![
                 1e-9.into(),
                 1.0.into(),
                 1e-9.into(),
@@ -1255,7 +1254,7 @@ mod minimize_neldermead_tests {
 
     fn get_init_f64() -> (Points1<f64>, Points1<f64>, Points1<f64>, Points1<f64>) {
         (
-            array![
+            points![
                 1e-11.into(),
                 1e-3.into(),
                 1e-13.into(),
@@ -1266,7 +1265,7 @@ mod minimize_neldermead_tests {
                 1e-15.into()
             ]
             .into(),
-            array![
+            points![
                 1e12.into(),
                 1.0.into(),
                 1e12.into(),
@@ -1277,7 +1276,7 @@ mod minimize_neldermead_tests {
                 1e15.into()
             ]
             .into(),
-            array![
+            points![
                 1e-15.into(),
                 1e-6.into(),
                 1e-15.into(),
@@ -1288,7 +1287,7 @@ mod minimize_neldermead_tests {
                 1e-18.into()
             ]
             .into(),
-            array![
+            points![
                 1e-9.into(),
                 1.0.into(),
                 1e-9.into(),
@@ -1302,10 +1301,10 @@ mod minimize_neldermead_tests {
         )
     }
 
-    fn get_minimizer() -> NelderMead<MyFloat> {
+    fn get_minimizer() -> NelderMead<TwoFloat> {
         let filename = "./data/1010_6x60um/feeds/drain_short.s2p".to_string();
         let net = read_touchstone(&filename).unwrap();
-        let objective = MultiDimFn::new(move |x: &Points1<MyFloat>| eval_f_simplex(x, &net));
+        let objective = MultiDimFn::new(move |x: &Points1<TwoFloat>| eval_f_simplex(x, &net));
         NelderMead::new(objective)
     }
 
@@ -1316,15 +1315,22 @@ mod minimize_neldermead_tests {
         NelderMead::new(objective)
     }
 
-    const MARGIN: F64Margin = F64Margin {
-        epsilon: 1e-4,
+    const MARGIN: NumMargin<f64> = NumMargin {
+        epsilon: 1e-14,
+        relative: 1e-14,
+        ulps: 10,
+    };
+
+    const MARGIN_LOOSE: NumMargin<f64> = NumMargin {
+        epsilon: 1e-6,
+        relative: 1e-6,
         ulps: 10,
     };
 
     mod bounded_tests {
         use super::*;
 
-        fn get_options(iters: usize) -> NelderMeadOptions<MyFloat> {
+        fn get_options(iters: usize) -> NelderMeadOptions<TwoFloat> {
             let (x, scale, lb, ub) = get_init();
             NelderMeadOptions::new(
                 &x,
@@ -1342,114 +1348,139 @@ mod minimize_neldermead_tests {
             )
         }
 
-        fn get_exemplar(iters: usize) -> (Points1<MyFloat>, MyFloat, Points1<MyFloat>) {
+        fn get_exemplar(iters: usize) -> (Points1<TwoFloat>, TwoFloat, Points1<TwoFloat>) {
             // (x, tol, res)
             match iters {
                 1 => (
-                    array![
-                        1.0883883476483184e-11.into(),
-                        0.04519417382415922.into(),
-                        2.7677669529663682e-13.into(),
-                        0.04419517382415922.into(),
-                        1.1767766952966369e-15.into(),
-                        1000.0441941738242.into(),
-                        1.1767766952966369e-15.into(),
-                        1.1767766952966369e-15.into()
+                    points![
+                        1.0397747564417433e-11.into(),
+                        0.000001025.into(),
+                        4.977475644174329e-13.into(),
+                        0.39774856441743295.into(),
+                        1.397747564417433e-15.into(),
+                        1000.3977475644174.into(),
+                        1.397747564417433e-15.into(),
+                        1.397747564417433e-15.into(),
                     ]
                     .into(),
-                    1.7892918605298145.into(),
-                    array![
-                        34009.378223556902.into(),
-                        38464.430515104599.into(),
-                        41299.962361391248.into(),
-                        41306.789077727772.into(),
-                        43347.207307893790.into(),
-                        43459.577263575266.into(),
-                        71891.470838700130.into(),
-                        611611.20974369883.into(),
-                        2345668.1203726004.into()
+                    0.1538341412436294.into(),
+                    points![
+                        6693.609746285452.into(),
+                        7809.117003941544.into(),
+                        34009.378216241916.into(),
+                        38464.43050900792.into(),
+                        41299.962356445765.into(),
+                        41306.7890728605.into(),
+                        43347.2073002025.into(),
+                        43459.57725673441.into(),
+                        71891.47083411746.into(),
                     ]
                     .into(),
                 ),
                 2 => (
-                    array![
-                        1.0535854357617935e-11.into(),
-                        1.0166666666666665e-6.into(),
-                        6.3585435761793050e-13.into(),
-                        5.3585535761793079e-1.into(),
-                        1.5358543576179309e-15.into(),
-                        1000.5358543576186.into(),
-                        1.5358543576179309e-15.into(),
-                        1.5358543576179318e-15.into()
+                    points![
+                        1.0397747564417433e-11.into(),
+                        0.000001025.into(),
+                        4.977475644174329e-13.into(),
+                        0.39774856441743295.into(),
+                        1.397747564417433e-15.into(),
+                        1000.3977475644174.into(),
+                        1.397747564417433e-15.into(),
+                        1.397747564417433e-15.into(),
                     ]
                     .into(),
-                    1.3399527561782816.into(),
-                    array![
-                        6720.9921814088320.into(),
-                        34009.378223556902.into(),
-                        38464.430515104599.into(),
-                        41299.962361391248.into(),
-                        41306.789077727772.into(),
-                        43347.207307893790.into(),
-                        43459.577263575266.into(),
-                        71891.470838700130.into(),
-                        611611.20974369883.into()
+                    0.6450706958270169.into(),
+                    points![
+                        6693.609746285452.into(),
+                        7809.117003941544.into(),
+                        13067.154821046935.into(),
+                        34009.378216241916.into(),
+                        38464.43050900792.into(),
+                        41299.962356445765.into(),
+                        41306.7890728605.into(),
+                        43347.2073002025.into(),
+                        43459.57725673441.into(),
                     ]
                     .into(),
                 ),
                 10 => (
-                    array![
-                        1.1076758244862255e-11.into(),
-                        1.0071428571428570e-6.into(),
-                        4.1119222513284393e-13.into(),
-                        9.9285714285714288e-1.into(),
-                        1.4766645329038703e-15.into(),
-                        998.44720490232578.into(),
-                        2.0767582448622552e-15.into(),
-                        2.0767582448622560e-15.into()
+                    points![
+                        1.0872834933027144e-11.into(),
+                        0.0000010099999999999999.into(),
+                        2.4805774233142293e-13.into(),
+                        0.8728359330271446.into(),
+                        1.3156092167691145e-15.into(),
+                        998.2432815904897.into(),
+                        1.8728349330271445e-15.into(),
+                        1.8728349330271445e-15.into(),
                     ]
                     .into(),
-                    4.4933775515054161e-2.into(),
-                    array![
-                        4588.5096445137724.into(),
-                        4799.4273717325113.into(),
-                        5637.4051964959672.into(),
-                        5995.3329098586710.into(),
-                        6040.3978068111992.into(),
-                        6720.9921814088320.into(),
-                        7536.7021767723654.into(),
-                        8836.9181331446016.into(),
-                        12445.285281662791.into()
+                    0.13534023502415216.into(),
+                    points![
+                        4915.772023125899.into(),
+                        5286.611029775717.into(),
+                        5629.362516610515.into(),
+                        5633.6790243323385.into(),
+                        5975.660221447749.into(),
+                        6693.609746285452.into(),
+                        6829.7901354418955.into(),
+                        7148.030305978018.into(),
+                        7809.117003941544.into(),
                     ]
                     .into(),
                 ),
                 100 => (
-                    array![
-                        2.7357234954316440e-11.into(),
-                        1.0068366344535046e-6.into(),
-                        7.2309978663274626e-13.into(),
-                        6.2667145218936882e-1.into(),
-                        4.5558593814565677e-15.into(),
-                        961.09716936676182.into(),
-                        2.6284269578099862e-15.into(),
-                        6.5265092075968652e-15.into()
+                    points![
+                        2.5167087117547038e-11.into(),
+                        0.0000010087229858111762.into(),
+                        8.556191583588121e-13.into(),
+                        0.8766479923569115.into(),
+                        4.327331074924048e-15.into(),
+                        971.0421991144584.into(),
+                        9.019116079432416e-16.into(),
+                        9.738751795862316e-15.into(),
                     ]
                     .into(),
-                    1.2074437154540389e-4.into(),
-                    array![
-                        3421.8399332620584.into(),
-                        3421.8519432289440.into(),
-                        3422.2531261196850.into(),
-                        3422.4517331839165.into(),
-                        3422.4559518043652.into(),
-                        3422.6615067154057.into(),
-                        3422.7510632163799.into(),
-                        3422.9347906078015.into(),
-                        3422.9487717942866.into()
+                    0.001842855592819689.into(),
+                    points![
+                        3427.4333675476723.into(),
+                        3431.90194507665.into(),
+                        3433.3658333895814.into(),
+                        3433.7554576476236.into(),
+                        3436.799060671457.into(),
+                        3437.1115994720076.into(),
+                        3437.2945718089936.into(),
+                        3437.455147696533.into(),
+                        3437.534971003855.into(),
                     ]
                     .into(),
                 ),
-                _ => (Points1::zeros(8), 0.0.into(), Points1::zeros(8)),
+                _ => (
+                    points![
+                        2.443667053116687e-11.into(),
+                        0.0000010626637527931161.into(),
+                        3.6018287763345113e-13.into(),
+                        0.05456495878295946.into(),
+                        5.2255440432653495e-15.into(),
+                        957.5352858685299.into(),
+                        5.470158021678219e-16.into(),
+                        8.125145323305879e-15.into(),
+                    ]
+                    .into(),
+                    0.010575273507909292.into(),
+                    points![
+                        3361.1620313115864.into(),
+                        3361.5727693312747.into(),
+                        3363.067546747183.into(),
+                        3365.5530519949225.into(),
+                        3370.164235508966.into(),
+                        3378.0944129734726.into(),
+                        3388.7118979903626.into(),
+                        3396.896188339177.into(),
+                        3398.1457589470115.into(),
+                    ]
+                    .into(),
+                ),
             }
         }
 
@@ -1475,110 +1506,135 @@ mod minimize_neldermead_tests {
             // (x, tol, res)
             match iters {
                 1 => (
-                    array![
-                        1.0883883476483184e-11.into(),
-                        0.04519417382415922.into(),
-                        2.7677669529663682e-13.into(),
-                        0.04419517382415922.into(),
-                        1.1767766952966369e-15.into(),
-                        1000.0441941738242.into(),
-                        1.1767766952966369e-15.into(),
-                        1.1767766952966369e-15.into()
+                    points![
+                        1.0397747564417433e-11.into(),
+                        0.000001025.into(),
+                        4.977475644174329e-13.into(),
+                        0.39774856441743295.into(),
+                        1.397747564417433e-15.into(),
+                        1000.3977475644174.into(),
+                        1.397747564417433e-15.into(),
+                        1.397747564417433e-15.into(),
                     ]
                     .into(),
-                    1.7892918605298145.into(),
-                    array![
-                        34009.378223556902.into(),
-                        38464.430515104599.into(),
-                        41299.962361391248.into(),
-                        41306.789077727772.into(),
-                        43347.207307893790.into(),
-                        43459.577263575266.into(),
-                        71891.470838700130.into(),
-                        611611.20974369883.into(),
-                        2345668.1203726004.into()
+                    0.1538341412436294.into(),
+                    points![
+                        6693.609746285452.into(),
+                        7809.117003941544.into(),
+                        34009.378216241916.into(),
+                        38464.43050900792.into(),
+                        41299.962356445765.into(),
+                        41306.7890728605.into(),
+                        43347.2073002025.into(),
+                        43459.57725673441.into(),
+                        71891.47083411746.into(),
                     ]
                     .into(),
                 ),
                 2 => (
-                    array![
-                        1.0535854357617935e-11.into(),
-                        1.0166666666666665e-6.into(),
-                        6.3585435761793050e-13.into(),
-                        5.3585535761793079e-1.into(),
-                        1.5358543576179309e-15.into(),
-                        1000.5358543576186.into(),
-                        1.5358543576179309e-15.into(),
-                        1.5358543576179318e-15.into()
+                    points![
+                        1.0397747564417433e-11.into(),
+                        0.000001025.into(),
+                        4.977475644174329e-13.into(),
+                        0.39774856441743295.into(),
+                        1.397747564417433e-15.into(),
+                        1000.3977475644174.into(),
+                        1.397747564417433e-15.into(),
+                        1.397747564417433e-15.into(),
                     ]
                     .into(),
-                    1.3399527561782816.into(),
-                    array![
-                        6720.9921814088320.into(),
-                        34009.378223556902.into(),
-                        38464.430515104599.into(),
-                        41299.962361391248.into(),
-                        41306.789077727772.into(),
-                        43347.207307893790.into(),
-                        43459.577263575266.into(),
-                        71891.470838700130.into(),
-                        611611.20974369883.into()
+                    0.6450706958270169.into(),
+                    points![
+                        6693.609746285452.into(),
+                        7809.117003941544.into(),
+                        13067.154821046935.into(),
+                        34009.378216241916.into(),
+                        38464.43050900792.into(),
+                        41299.962356445765.into(),
+                        41306.7890728605.into(),
+                        43347.2073002025.into(),
+                        43459.57725673441.into(),
                     ]
                     .into(),
                 ),
                 10 => (
-                    array![
-                        1.1076758244862255e-11.into(),
-                        1.0071428571428570e-6.into(),
-                        4.1119222513284393e-13.into(),
-                        9.9285714285714288e-1.into(),
-                        1.4766645329038703e-15.into(),
-                        998.44720490232578.into(),
-                        2.0767582448622552e-15.into(),
-                        2.0767582448622560e-15.into()
+                    points![
+                        1.0872834933027144e-11.into(),
+                        0.0000010099999999999999.into(),
+                        2.4805774233142293e-13.into(),
+                        0.8728359330271446.into(),
+                        1.3156092167691145e-15.into(),
+                        998.2432815904897.into(),
+                        1.8728349330271445e-15.into(),
+                        1.8728349330271445e-15.into(),
                     ]
                     .into(),
-                    4.4933775515054161e-2.into(),
-                    array![
-                        4588.5096445137724.into(),
-                        4799.4273717325113.into(),
-                        5637.4051964959672.into(),
-                        5995.3329098586710.into(),
-                        6040.3978068111992.into(),
-                        6720.9921814088320.into(),
-                        7536.7021767723654.into(),
-                        8836.9181331446016.into(),
-                        12445.285281662791.into()
+                    0.13534023502415216.into(),
+                    points![
+                        4915.772023125899.into(),
+                        5286.611029775717.into(),
+                        5629.362516610515.into(),
+                        5633.6790243323385.into(),
+                        5975.660221447749.into(),
+                        6693.609746285452.into(),
+                        6829.7901354418955.into(),
+                        7148.030305978018.into(),
+                        7809.117003941544.into(),
                     ]
                     .into(),
                 ),
                 100 => (
-                    array![
-                        2.7357234954316440e-11.into(),
-                        1.0068366344535046e-6.into(),
-                        7.2309978663274626e-13.into(),
-                        6.2667145218936882e-1.into(),
-                        4.5558593814565677e-15.into(),
-                        961.09716936676182.into(),
-                        2.6284269578099862e-15.into(),
-                        6.5265092075968652e-15.into()
+                    points![
+                        2.5167087117547038e-11.into(),
+                        0.0000010087229858111762.into(),
+                        8.556191583588121e-13.into(),
+                        0.8766479923569115.into(),
+                        4.327331074924048e-15.into(),
+                        971.0421991144584.into(),
+                        9.019116079432416e-16.into(),
+                        9.738751795862316e-15.into(),
                     ]
                     .into(),
-                    1.2074437154540389e-4.into(),
-                    array![
-                        3421.8399332620584.into(),
-                        3421.8519432289440.into(),
-                        3422.2531261196850.into(),
-                        3422.4517331839165.into(),
-                        3422.4559518043652.into(),
-                        3422.6615067154057.into(),
-                        3422.7510632163799.into(),
-                        3422.9347906078015.into(),
-                        3422.9487717942866.into()
+                    0.001842855592819689.into(),
+                    points![
+                        3427.4333675476723.into(),
+                        3431.90194507665.into(),
+                        3433.3658333895814.into(),
+                        3433.7554576476236.into(),
+                        3436.799060671457.into(),
+                        3437.1115994720076.into(),
+                        3437.2945718089936.into(),
+                        3437.455147696533.into(),
+                        3437.534971003855.into(),
                     ]
                     .into(),
                 ),
-                _ => (Points1::zeros(8), 0.0.into(), Points1::zeros(8)),
+                _ => (
+                    points![
+                        2.443667053116687e-11.into(),
+                        0.0000010626637527931161.into(),
+                        3.6018287763345113e-13.into(),
+                        0.05456495878295946.into(),
+                        5.2255440432653495e-15.into(),
+                        957.5352858685299.into(),
+                        5.470158021678219e-16.into(),
+                        8.125145323305879e-15.into(),
+                    ]
+                    .into(),
+                    0.010575273507909292.into(),
+                    points![
+                        3361.1620313115864.into(),
+                        3361.5727693312747.into(),
+                        3363.067546747183.into(),
+                        3365.5530519949225.into(),
+                        3370.164235508966.into(),
+                        3378.0944129734726.into(),
+                        3388.7118979903626.into(),
+                        3396.896188339177.into(),
+                        3398.1457589470115.into(),
+                    ]
+                    .into(),
+                ),
             }
         }
 
@@ -1590,18 +1646,17 @@ mod minimize_neldermead_tests {
             let mut minimizer = get_minimizer();
             let test = minimizer.minimize(&options).unwrap();
 
-            println!("\n\nres: {:?}\nx: {:?}\n\n", test.res, test.xmin());
-            let margin = MARGIN;
+            println!(
+                "\n\nres: {:?}\nx: {:?}\ntol: {}\n\n",
+                test.res,
+                test.xmin(),
+                test.tol
+            );
+            let margin = MARGIN.into();
             comp_pts_ix1(&exemplar_x, &test.xmin(), margin, "minimize(x)");
             comp_pts_ix1(&exemplar_res, &test.res, margin, "minimize(res_all)");
-            comp_num(&exemplar_res[0], &test.fmin(), margin, "minimize(res)", "");
-            comp_num(
-                &exemplar_tol,
-                &test.tolerance(),
-                margin,
-                "minimize(tol)",
-                "",
-            );
+            exemplar_res[0].assert_approx_eq(test.fmin(), margin, "minimize(res)", "");
+            exemplar_tol.assert_approx_eq(test.tolerance(), margin, "minimize(tol)", "");
         }
 
         #[test]
@@ -1612,18 +1667,17 @@ mod minimize_neldermead_tests {
             let mut minimizer = get_minimizer();
             let test = minimizer.minimize(&options).unwrap();
 
-            println!("\n\nres: {:?}\nx: {:?}\n\n", test.res, test.xmin());
-            let margin = MARGIN;
+            println!(
+                "\n\nres: {:?}\nx: {:?}\ntol: {}\n\n",
+                test.res,
+                test.xmin(),
+                test.tol
+            );
+            let margin = MARGIN.into();
             comp_pts_ix1(&exemplar_x, &test.xmin(), margin, "minimize(x)");
             comp_pts_ix1(&exemplar_res, &test.res, margin, "minimize(res_all)");
-            comp_num(&exemplar_res[0], &test.fmin(), margin, "minimize(res)", "");
-            comp_num(
-                &exemplar_tol,
-                &test.tolerance(),
-                margin,
-                "minimize(tol)",
-                "",
-            );
+            exemplar_res[0].assert_approx_eq(test.fmin(), margin, "minimize(res)", "");
+            exemplar_tol.assert_approx_eq(test.tolerance(), margin, "minimize(tol)", "");
         }
 
         #[test]
@@ -1634,18 +1688,17 @@ mod minimize_neldermead_tests {
             let mut minimizer = get_minimizer();
             let test = minimizer.minimize(&options).unwrap();
 
-            println!("\n\nres: {:?}\nx: {:?}\n\n", test.res, test.xmin());
-            let margin = MARGIN;
+            println!(
+                "\n\nres: {:?}\nx: {:?}\ntol: {}\n\n",
+                test.res,
+                test.xmin(),
+                test.tol
+            );
+            let margin = MARGIN.into();
             comp_pts_ix1(&exemplar_x, &test.xmin(), margin, "minimize(x)");
             comp_pts_ix1(&exemplar_res, &test.res, margin, "minimize(res_all)");
-            comp_num(&exemplar_res[0], &test.fmin(), margin, "minimize(res)", "");
-            comp_num(
-                &exemplar_tol,
-                &test.tolerance(),
-                margin,
-                "minimize(tol)",
-                "",
-            );
+            exemplar_res[0].assert_approx_eq(test.fmin(), margin, "minimize(res)", "");
+            exemplar_tol.assert_approx_eq(test.tolerance(), margin, "minimize(tol)", "");
         }
 
         #[test]
@@ -1656,29 +1709,69 @@ mod minimize_neldermead_tests {
             let mut minimizer = get_minimizer();
             let test = minimizer.minimize(&options).unwrap();
 
-            println!("\n\nres: {:?}\nx: {:?}\n\n", test.res, test.xmin());
-            let margin = MARGIN;
+            println!(
+                "\n\nres: {:?}\nx: {:?}\ntol: {}\n\n",
+                test.res,
+                test.xmin(),
+                test.tol
+            );
+            let margin = MARGIN.into();
             comp_pts_ix1(&exemplar_x, &test.xmin(), margin, "minimize(x)");
             comp_pts_ix1(&exemplar_res, &test.res, margin, "minimize(res_all)");
-            comp_num(&exemplar_res[0], &test.fmin(), margin, "minimize(res)", "");
-            comp_num(
-                &exemplar_tol,
-                &test.tolerance(),
-                margin,
-                "minimize(tol)",
-                "",
+            exemplar_res[0].assert_approx_eq(test.fmin(), margin, "minimize(res)", "");
+            exemplar_tol.assert_approx_eq(test.tolerance(), margin, "minimize(tol)", "");
+        }
+
+        #[test]
+        fn neldermead_bounded_iter500_() {
+            let iters = 500;
+            let (exemplar_x, exemplar_tol, exemplar_res) = get_exemplar(iters);
+            let options = get_options(iters);
+            let mut minimizer = get_minimizer();
+            let test = minimizer.minimize(&options).unwrap();
+
+            println!(
+                "\n\nres: {:?}\nx: {:?}\ntol: {}\n\n",
+                test.res,
+                test.xmin(),
+                test.tol
+            );
+            let margin = MARGIN.into();
+            comp_pts_ix1(&exemplar_x, &test.xmin(), margin, "minimize(x)");
+            comp_pts_ix1(&exemplar_res, &test.res, margin, "minimize(res_all)");
+            exemplar_res[0].assert_approx_eq(test.fmin(), margin, "minimize(res)", "");
+            exemplar_tol.assert_approx_eq(test.tolerance(), margin, "minimize(tol)", "");
+        }
+
+        #[test]
+        fn neldermead_bounded_restart_iter500_() {
+            let iters = 500;
+            let (_, _, exemplar_res) = get_exemplar(iters);
+            let mut options = get_options(iters);
+            options.set_random_restart(true);
+            options.set_verbosity(2);
+            let mut minimizer = get_minimizer();
+            let test = minimizer.minimize(&options).unwrap();
+
+            println!(
+                "\n\nf(x) old:\t{}\nf(x) new:\t{}\n\n",
+                exemplar_res[0],
+                test.fmin(),
+            );
+            assert!(
+                test.fmin() < exemplar_res[0],
+                "optimization should be better than standard"
             );
         }
 
         #[test]
-        fn neldermead_bounded_restart_iter100() {
-            let iters = 100;
+        fn neldermead_bounded_adaptive_iter500_() {
+            let iters = 500;
             let (_, _, exemplar_res) = get_exemplar(iters);
             let mut options = get_options(iters);
-            options.set_random_restart(true);
             options.set_adaptive_simplex(true);
-            options.enable_anti_stagnation(Some(3), Some(10), Some(0.1.into()));
-            options.set_verbosity(1);
+            options.enable_anti_stagnation(Some(3), Some(50), Some(0.1.into()));
+            options.set_verbosity(2);
             let mut minimizer = get_minimizer();
             let test = minimizer.minimize(&options).unwrap();
 
@@ -1696,8 +1789,9 @@ mod minimize_neldermead_tests {
 
     mod unbounded_tests {
         use super::*;
+        use twofloat::TwoFloat;
 
-        fn get_options(iters: usize) -> NelderMeadOptions<MyFloat> {
+        fn get_options(iters: usize) -> NelderMeadOptions<TwoFloat> {
             let (x, scale, _, _) = get_init();
             NelderMeadOptions::new(
                 &x,
@@ -1715,11 +1809,13 @@ mod minimize_neldermead_tests {
             )
         }
 
-        fn get_exemplar(iters: usize) -> (Points1<MyFloat>, MyFloat, MyFloat, Points2<MyFloat>) {
+        fn get_exemplar(
+            iters: usize,
+        ) -> (Points1<TwoFloat>, TwoFloat, TwoFloat, Points2<TwoFloat>) {
             // (x, tol, res[0], simplex)
             match iters {
                 1 => (
-                    array![
+                    points![
                         1.0e-11.into(),
                         1.0e-03.into(),
                         1.0e-13.into(),
@@ -1732,7 +1828,7 @@ mod minimize_neldermead_tests {
                     .into(),
                     1.9726210586239914.into(),
                     5736.50737797145.into(),
-                    array![
+                    points![
                         [
                             1.0000000000000000e+01.into(),
                             1.0000000000000000e-03.into(),
@@ -1827,7 +1923,7 @@ mod minimize_neldermead_tests {
                     .into(),
                 ),
                 2 => (
-                    array![
+                    points![
                         1.0e-11.into(),
                         1.0e-03.into(),
                         1.0e-13.into(),
@@ -1843,7 +1939,7 @@ mod minimize_neldermead_tests {
                     Points2::zeros((9, 8)),
                 ),
                 5 => (
-                    array![
+                    points![
                         1.0e-11.into(),
                         1.0e-03.into(),
                         1.0e-13.into(),
@@ -1859,7 +1955,7 @@ mod minimize_neldermead_tests {
                     Points2::zeros((9, 8)),
                 ),
                 6 => (
-                    array![
+                    points![
                         1.0298008564702946e-11.into(),
                         1.1355312091732621e-2.into(),
                         (-5.1011146690169039e-14).into(),
@@ -1875,7 +1971,7 @@ mod minimize_neldermead_tests {
                     Points2::zeros((9, 8)),
                 ),
                 10 => (
-                    array![
+                    points![
                         1.0496148654572788e-11.into(),
                         0.0028955966586259665.into(),
                         (-2.5331914829451519e-14).into(),
@@ -1891,7 +1987,7 @@ mod minimize_neldermead_tests {
                     Points2::zeros((9, 8)),
                 ),
                 100 => (
-                    array![
+                    points![
                         1.6110247811984210e-11.into(),
                         0.010202461287747289.into(),
                         1.2618495970192951e-12.into(),
@@ -1906,10 +2002,52 @@ mod minimize_neldermead_tests {
                     765.6358932973524.into(),
                     Points2::zeros((9, 8)),
                 ),
+                250 => (
+                    points![
+                        2.3673008352168678e-11.into(),
+                        0.015667210212010826.into(),
+                        1.6809659627671983e-12.into(),
+                        13.87040276702923.into(),
+                        (-9.534779908545755e-15).into(),
+                        1004.9055172073073.into(),
+                        (-4.987509270661455e-15).into(),
+                        1.4514001820068386e-14.into(),
+                    ]
+                    .into(),
+                    1.6882604906644255e-4.into(),
+                    526.6718377421889.into(),
+                    Points2::zeros((9, 8)),
+                ),
+                500 => (
+                    points![
+                        2.6369538586665687e-11.into(),
+                        0.015844873000396758.into(),
+                        6.047507777194928e-13.into(),
+                        4.412157376968129.into(),
+                        (-2.0319169742040594e-13).into(),
+                        1017.2675423016467.into(),
+                        (-2.614447591577417e-15).into(),
+                        1.197065832552547e-14.into(),
+                    ]
+                    .into(),
+                    2.0764097706015266e-4.into(),
+                    517.3846786227955.into(),
+                    Points2::zeros((9, 8)),
+                ),
                 _ => (
-                    Points1::zeros(8),
-                    0.0.into(),
-                    0.0.into(),
+                    points![
+                        2.6019308272971162e-11.into(),
+                        0.01577972729899084.into(),
+                        5.838546791961626e-13.into(),
+                        4.416616135893648.into(),
+                        (-1.9944900880975634e-14).into(),
+                        1016.5594193549404.into(),
+                        (-2.4944085750251017e-15).into(),
+                        1.1851300112673222e-14.into(),
+                    ]
+                    .into(),
+                    3.908572757607647e-6.into(),
+                    517.1332374755295.into(),
                     Points2::zeros((9, 8)),
                 ),
             }
@@ -1937,7 +2075,7 @@ mod minimize_neldermead_tests {
             // (x, tol, res)
             match iters {
                 1 => (
-                    array![
+                    points![
                         1.0e-11.into(),
                         1.0e-03.into(),
                         1.0e-13.into(),
@@ -1950,7 +2088,7 @@ mod minimize_neldermead_tests {
                     .into(),
                     1.9726210586239914.into(),
                     5736.50737797145.into(),
-                    array![
+                    points![
                         [
                             1.0000000000000000e+01.into(),
                             1.0000000000000000e-03.into(),
@@ -2045,7 +2183,7 @@ mod minimize_neldermead_tests {
                     .into(),
                 ),
                 2 => (
-                    array![
+                    points![
                         1.0e-11.into(),
                         1.0e-03.into(),
                         1.0e-13.into(),
@@ -2061,7 +2199,7 @@ mod minimize_neldermead_tests {
                     Points2::zeros((9, 8)),
                 ),
                 5 => (
-                    array![
+                    points![
                         1.0e-11.into(),
                         1.0e-03.into(),
                         1.0e-13.into(),
@@ -2077,7 +2215,7 @@ mod minimize_neldermead_tests {
                     Points2::zeros((9, 8)),
                 ),
                 6 => (
-                    array![
+                    points![
                         1.0298008564702946e-11.into(),
                         1.1355312091732621e-2.into(),
                         (-5.1011146690169039e-14).into(),
@@ -2093,7 +2231,7 @@ mod minimize_neldermead_tests {
                     Points2::zeros((9, 8)),
                 ),
                 10 => (
-                    array![
+                    points![
                         1.0496148654572788e-11.into(),
                         0.0028955966586259665.into(),
                         (-2.5331914829451519e-14).into(),
@@ -2109,7 +2247,7 @@ mod minimize_neldermead_tests {
                     Points2::zeros((9, 8)),
                 ),
                 100 => (
-                    array![
+                    points![
                         1.6110247811984210e-11.into(),
                         0.010202461287747289.into(),
                         1.2618495970192951e-12.into(),
@@ -2124,10 +2262,52 @@ mod minimize_neldermead_tests {
                     765.6358932973524.into(),
                     Points2::zeros((9, 8)),
                 ),
+                250 => (
+                    points![
+                        2.3673008352168678e-11.into(),
+                        0.015667210212010826.into(),
+                        1.6809659627671983e-12.into(),
+                        13.87040276702923.into(),
+                        (-9.534779908545755e-15).into(),
+                        1004.9055172073073.into(),
+                        (-4.987509270661455e-15).into(),
+                        1.4514001820068386e-14.into(),
+                    ]
+                    .into(),
+                    1.6882604906644255e-4.into(),
+                    526.6718377421889.into(),
+                    Points2::zeros((9, 8)),
+                ),
+                500 => (
+                    points![
+                        2.6369538586665687e-11.into(),
+                        0.015844873000396758.into(),
+                        6.047507777194928e-13.into(),
+                        4.412157376968129.into(),
+                        (-2.0319169742040594e-13).into(),
+                        1017.2675423016467.into(),
+                        (-2.614447591577417e-15).into(),
+                        1.197065832552547e-14.into(),
+                    ]
+                    .into(),
+                    2.0764097706015266e-4.into(),
+                    517.3846786227955.into(),
+                    Points2::zeros((9, 8)),
+                ),
                 _ => (
-                    Points1::zeros(8),
-                    0.0.into(),
-                    0.0.into(),
+                    points![
+                        2.6019308272971162e-11.into(),
+                        0.01577972729899084.into(),
+                        5.838546791961626e-13.into(),
+                        4.416616135893648.into(),
+                        (-1.9944900880975634e-14).into(),
+                        1016.5594193549404.into(),
+                        (-2.4944085750251017e-15).into(),
+                        1.1851300112673222e-14.into(),
+                    ]
+                    .into(),
+                    3.908572757607647e-6.into(),
+                    517.1332374755295.into(),
                     Points2::zeros((9, 8)),
                 ),
             }
@@ -2141,8 +2321,13 @@ mod minimize_neldermead_tests {
             let mut minimizer = get_minimizer();
             let test = minimizer.minimize(&options).unwrap();
 
-            println!("\n\nres: {:?}\nx: {:?}\n\n", test.res, test.xmin());
-            let margin = MARGIN;
+            println!(
+                "\n\nres: {:?}\nx: {:?}\ntol: {}\n\n",
+                test.res,
+                test.xmin(),
+                test.tol
+            );
+            let margin = MARGIN.into();
             comp_pts_ix2(
                 &exemplar_simplex,
                 &test.simplex,
@@ -2150,14 +2335,8 @@ mod minimize_neldermead_tests {
                 "minimize(simplex)",
             );
             comp_pts_ix1(&exemplar_x, &test.xmin(), margin, "minimize(x)");
-            comp_num(&exemplar_res, &test.fmin(), margin, "minimize(res)", "");
-            comp_num(
-                &exemplar_tol,
-                &test.tolerance(),
-                margin,
-                "minimize(tol)",
-                "",
-            );
+            exemplar_res.assert_approx_eq(test.fmin(), margin, "minimize(res)", "");
+            exemplar_tol.assert_approx_eq(test.tolerance(), margin, "minimize(tol)", "");
         }
 
         #[test]
@@ -2168,17 +2347,16 @@ mod minimize_neldermead_tests {
             let mut minimizer = get_minimizer();
             let test = minimizer.minimize(&options).unwrap();
 
-            println!("\n\nres: {:?}\nx: {:?}\n\n", test.res, test.xmin());
-            let margin = MARGIN;
-            comp_pts_ix1(&exemplar_x, &test.xmin(), margin, "minimize(x)");
-            comp_num(&exemplar_res, &test.fmin(), margin, "minimize(res)", "");
-            comp_num(
-                &exemplar_tol,
-                &test.tolerance(),
-                margin,
-                "minimize(tol)",
-                "",
+            println!(
+                "\n\nres: {:?}\nx: {:?}\ntol: {}\n\n",
+                test.res,
+                test.xmin(),
+                test.tol
             );
+            let margin = MARGIN.into();
+            comp_pts_ix1(&exemplar_x, &test.xmin(), margin, "minimize(x)");
+            exemplar_res.assert_approx_eq(test.fmin(), margin, "minimize(res)", "");
+            exemplar_tol.assert_approx_eq(test.tolerance(), margin, "minimize(tol)", "");
         }
 
         #[test]
@@ -2189,17 +2367,16 @@ mod minimize_neldermead_tests {
             let mut minimizer = get_minimizer();
             let test = minimizer.minimize(&options).unwrap();
 
-            println!("\n\nres: {:?}\nx: {:?}\n\n", test.res, test.xmin());
-            let margin = MARGIN;
-            comp_pts_ix1(&exemplar_x, &test.xmin(), margin, "minimize(x)");
-            comp_num(&exemplar_res, &test.fmin(), margin, "minimize(res)", "");
-            comp_num(
-                &exemplar_tol,
-                &test.tolerance(),
-                margin,
-                "minimize(tol)",
-                "",
+            println!(
+                "\n\nres: {:?}\nx: {:?}\ntol: {}\n\n",
+                test.res,
+                test.xmin(),
+                test.tol
             );
+            let margin = MARGIN.into();
+            comp_pts_ix1(&exemplar_x, &test.xmin(), margin, "minimize(x)");
+            exemplar_res.assert_approx_eq(test.fmin(), margin, "minimize(res)", "");
+            exemplar_tol.assert_approx_eq(test.tolerance(), margin, "minimize(tol)", "");
         }
 
         #[test]
@@ -2210,17 +2387,16 @@ mod minimize_neldermead_tests {
             let mut minimizer = get_minimizer();
             let test = minimizer.minimize(&options).unwrap();
 
-            println!("\n\nres: {:?}\nx: {:?}\n\n", test.res, test.xmin());
-            let margin = MARGIN;
-            comp_pts_ix1(&exemplar_x, &test.xmin(), margin, "minimize(x)");
-            comp_num(&exemplar_res, &test.fmin(), margin, "minimize(res)", "");
-            comp_num(
-                &exemplar_tol,
-                &test.tolerance(),
-                margin,
-                "minimize(tol)",
-                "",
+            println!(
+                "\n\nres: {:?}\nx: {:?}\ntol: {}\n\n",
+                test.res,
+                test.xmin(),
+                test.tol
             );
+            let margin = MARGIN.into();
+            comp_pts_ix1(&exemplar_x, &test.xmin(), margin, "minimize(x)");
+            exemplar_res.assert_approx_eq(test.fmin(), margin, "minimize(res)", "");
+            exemplar_tol.assert_approx_eq(test.tolerance(), margin, "minimize(tol)", "");
         }
 
         #[test]
@@ -2231,17 +2407,16 @@ mod minimize_neldermead_tests {
             let mut minimizer = get_minimizer();
             let test = minimizer.minimize(&options).unwrap();
 
-            println!("\n\nres: {:?}\nx: {:?}\n\n", test.res, test.xmin());
-            let margin = MARGIN;
-            comp_pts_ix1(&exemplar_x, &test.xmin(), margin, "minimize(x)");
-            comp_num(&exemplar_res, &test.fmin(), margin, "minimize(res)", "");
-            comp_num(
-                &exemplar_tol,
-                &test.tolerance(),
-                margin,
-                "minimize(tol)",
-                "",
+            println!(
+                "\n\nres: {:?}\nx: {:?}\ntol: {}\n\n",
+                test.res,
+                test.xmin(),
+                test.tol
             );
+            let margin = MARGIN.into();
+            comp_pts_ix1(&exemplar_x, &test.xmin(), margin, "minimize(x)");
+            exemplar_res.assert_approx_eq(test.fmin(), margin, "minimize(res)", "");
+            exemplar_tol.assert_approx_eq(test.tolerance(), margin, "minimize(tol)", "");
         }
 
         #[test]
@@ -2252,17 +2427,36 @@ mod minimize_neldermead_tests {
             let mut minimizer = get_minimizer();
             let test = minimizer.minimize(&options).unwrap();
 
-            println!("\n\nres: {:?}\nx: {:?}\n\n", test.res, test.xmin());
-            let margin = MARGIN;
-            comp_pts_ix1(&exemplar_x, &test.xmin(), margin, "minimize(x)");
-            comp_num(&exemplar_res, &test.fmin(), margin, "minimize(res)", "");
-            comp_num(
-                &exemplar_tol,
-                &test.tolerance(),
-                margin,
-                "minimize(tol)",
-                "",
+            println!(
+                "\n\nres: {:?}\nx: {:?}\ntol: {}\n\n",
+                test.res,
+                test.xmin(),
+                test.tol
             );
+            let margin = MARGIN.into();
+            comp_pts_ix1(&exemplar_x, &test.xmin(), margin, "minimize(x)");
+            exemplar_res.assert_approx_eq(test.fmin(), margin, "minimize(res)", "");
+            exemplar_tol.assert_approx_eq(test.tolerance(), margin, "minimize(tol)", "");
+        }
+
+        #[test]
+        fn neldermead_unbounded_iter250_() {
+            let iters = 250;
+            let (exemplar_x, exemplar_tol, exemplar_res, _) = get_exemplar(iters);
+            let options = get_options(iters);
+            let mut minimizer = get_minimizer();
+            let test = minimizer.minimize(&options).unwrap();
+
+            println!(
+                "\n\nres: {:?}\nx: {:?}\ntol: {}\n\n",
+                test.res,
+                test.xmin(),
+                test.tol
+            );
+            let margin = MARGIN.into();
+            comp_pts_ix1(&exemplar_x, &test.xmin(), margin, "minimize(x)");
+            exemplar_res.assert_approx_eq(test.fmin(), margin, "minimize(res)", "");
+            exemplar_tol.assert_approx_eq(test.tolerance(), margin, "minimize(tol)", "");
         }
 
         #[test]
@@ -2271,9 +2465,161 @@ mod minimize_neldermead_tests {
             let (_, _, exemplar_res, _) = get_exemplar(iters);
             let mut options = get_options(iters);
             options.set_random_restart(true);
+            options.set_verbosity(2);
+            let mut minimizer = get_minimizer();
+            let test = minimizer.minimize(&options).unwrap();
+
+            println!(
+                "\n\nf(x) old:\t{}\nf(x) new:\t{}\n\n",
+                exemplar_res,
+                test.fmin(),
+            );
+            test.fmin()
+                .assert_approx_ge(exemplar_res, NumMargin::default(), "restart_iter100", "");
+        }
+
+        #[test]
+        fn neldermead_unbounded_adaptive_iter100_() {
+            let iters = 100;
+            let (_, _, exemplar_res, _) = get_exemplar(iters);
+            let mut options = get_options(iters);
             options.set_adaptive_simplex(true);
-            options.enable_anti_stagnation(Some(3), Some(10), Some(0.1.into()));
-            options.set_verbosity(1);
+            options.enable_anti_stagnation(Some(3), Some(50), Some(0.1.into()));
+            options.set_verbosity(2);
+            let mut minimizer = get_minimizer();
+            let test = minimizer.minimize(&options).unwrap();
+
+            println!(
+                "\n\nf(x) old:\t{}\nf(x) new:\t{}\n\n",
+                exemplar_res,
+                test.fmin(),
+            );
+            exemplar_res.assert_approx_eq(
+                test.fmin(),
+                MARGIN_LOOSE.into(),
+                "unbounded_adaptive",
+                "100",
+            );
+        }
+
+        #[test]
+        #[ignore]
+        fn neldermead_unbounded_iter500_() {
+            let iters = 500;
+            let (exemplar_x, exemplar_tol, exemplar_res, _) = get_exemplar(iters);
+            let options = get_options(iters);
+            let mut minimizer = get_minimizer();
+            let test = minimizer.minimize(&options).unwrap();
+
+            println!(
+                "\n\nres: {:?}\nx: {:?}\ntol: {}\n\n",
+                test.res,
+                test.xmin(),
+                test.tol
+            );
+            let margin = MARGIN.into();
+            comp_pts_ix1(&exemplar_x, &test.xmin(), margin, "minimize(x)");
+            exemplar_res.assert_approx_eq(test.fmin(), margin, "minimize(res)", "");
+            exemplar_tol.assert_approx_eq(test.tolerance(), margin, "minimize(tol)", "");
+        }
+
+        #[test]
+        #[ignore]
+        fn neldermead_unbounded_restart_iter500_() {
+            let iters = 500;
+            let (_, _, exemplar_res, _) = get_exemplar(iters);
+            let mut options = get_options(iters);
+            options.set_random_restart(true);
+            options.set_verbosity(2);
+            let mut minimizer = get_minimizer();
+            let test = minimizer.minimize(&options).unwrap();
+
+            println!(
+                "\n\nf(x) old:\t{}\nf(x) new:\t{}\n\n",
+                exemplar_res,
+                test.fmin(),
+            );
+            assert!(
+                test.fmin() < exemplar_res,
+                "optimization should be better than standard"
+            );
+        }
+
+        #[test]
+        #[ignore]
+        fn neldermead_unbounded_adaptive_iter500_() {
+            let iters = 500;
+            let (_, _, exemplar_res, _) = get_exemplar(iters);
+            let mut options = get_options(iters);
+            options.set_adaptive_simplex(true);
+            options.enable_anti_stagnation(Some(3), Some(50), Some(0.1.into()));
+            options.set_verbosity(2);
+            let mut minimizer = get_minimizer();
+            let test = minimizer.minimize(&options).unwrap();
+
+            println!(
+                "\n\nf(x) old:\t{}\nf(x) new:\t{}\n\n",
+                exemplar_res,
+                test.fmin(),
+            );
+            assert!(
+                test.fmin() < exemplar_res,
+                "optimization should be better than standard"
+            );
+        }
+
+        #[test]
+        #[ignore]
+        fn neldermead_unbounded_iter1000_() {
+            let iters = 1000;
+            let (exemplar_x, exemplar_tol, exemplar_res, _) = get_exemplar(iters);
+            let options = get_options(iters);
+            let mut minimizer = get_minimizer();
+            let test = minimizer.minimize(&options).unwrap();
+
+            println!(
+                "\n\nres: {:?}\nx: {:?}\ntol: {}\n\n",
+                test.res,
+                test.xmin(),
+                test.tol
+            );
+            let margin = MARGIN.into();
+            comp_pts_ix1(&exemplar_x, &test.xmin(), margin, "minimize(x)");
+            exemplar_res.assert_approx_eq(test.fmin(), margin, "minimize(res)", "");
+            exemplar_tol.assert_approx_eq(test.tolerance(), margin, "minimize(tol)", "");
+        }
+
+        #[test]
+        #[ignore]
+        fn neldermead_unbounded_restart_iter1000_() {
+            let iters = 1000;
+            let (_, _, exemplar_res, _) = get_exemplar(iters);
+            let mut options = get_options(iters);
+            options.set_random_restart(true);
+            options.set_verbosity(2);
+            let mut minimizer = get_minimizer();
+            let test = minimizer.minimize(&options).unwrap();
+
+            println!(
+                "\n\nf(x) old:\t{}\nf(x) new:\t{}\n\n",
+                exemplar_res,
+                test.fmin(),
+            );
+            assert!(
+                test.fmin() < exemplar_res,
+                "optimization should be better than standard"
+            );
+        }
+
+        #[test]
+        #[ignore]
+        fn neldermead_unbounded_adaptive_iter1000_() {
+            let iters = 1000;
+            let (_, _, exemplar_res, _) = get_exemplar(iters);
+            let mut options = get_options(iters);
+            options.set_adaptive_simplex(true);
+            options.enable_anti_stagnation(Some(3), Some(50), Some(0.1.into()));
+            options.set_verbosity(2);
             let mut minimizer = get_minimizer();
             let test = minimizer.minimize(&options).unwrap();
 

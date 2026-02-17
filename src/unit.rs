@@ -1,4 +1,4 @@
-use crate::{num::RFFloat, scale::Scale};
+use crate::{num::RealScalar, scale::Scale};
 use ndarray::Array1;
 use serde::Serialize;
 use std::{fmt, str::FromStr};
@@ -96,95 +96,167 @@ impl fmt::Display for Unit {
     }
 }
 
-pub trait Unitized<T: UnitVal = f64> {
-    fn val_scaled(&self) -> T;
-    fn unitval(&self) -> UnitValue<T>;
-    fn scale(&self) -> Scale;
-    fn unit(&self) -> Unit;
-    fn set_unitval(&mut self, val: UnitValue<T>);
-    fn set_val_scaled(&mut self, val: T);
-    fn set_scale(&mut self, scale: Scale);
-    fn set_unit(&mut self, unit: Unit);
-}
+// pub trait Unitized<T>
+// where
+//     T: RealScalar,
+// {
+//     // fn val_scaled(&self) -> T;
+//     // fn unitval(&self) -> Self;
+//     // fn scale(&self) -> Scale;
+//     // fn unit(&self) -> Unit;
+//     // fn set_unitval(&mut self, val: Self);
+//     // fn set_val_scaled(&mut self, val: T);
+//     // fn set_scale(&mut self, scale: Scale);
+//     // fn set_unit(&mut self, unit: Unit);
+// }
 
 /// Trait for types that can be used as values in UnitValue.
-/// This allows both scalar values (f64) and array values (Array1<f64>).
-pub trait UnitVal: Clone + serde::Serialize {
-    /// The zero value for this type
-    fn zero_value() -> Self;
+/// This allows both scalar values (f64, TwoFloat) and array values (Array1<f64>, Array1<TwoFloat>).
+pub trait UnitValue: Clone + Default {
+    type Scalar: RealScalar;
+    type Value: Clone;
 
+    fn new(val: &Self::Value, scale: Scale, unit: Unit) -> Self;
+    fn new_scaled(val: &Self::Value, scale: Scale, unit: Unit) -> Self;
+    fn npts(&self) -> usize;
+    fn val_ref(&self) -> &Self::Value;
+    fn val_scaled(&self) -> Self::Value;
+
+    fn zero_value() -> Self::Value;
     /// Apply scaling (divide by multiplier)
-    fn scale(&self, multiplier: f64) -> Self;
-
+    fn scale_val(val: &Self::Value, multiplier: Self::Scalar) -> Self::Value;
     /// Apply unscaling (multiply by multiplier)
-    fn unscale(&self, multiplier: f64) -> Self;
+    fn unscale_val(val: &Self::Value, multiplier: Self::Scalar) -> Self::Value;
 }
 
-impl UnitVal for f64 {
-    fn zero_value() -> Self {
-        0.0
-    }
+impl<T: RealScalar> UnitValue for ScalarUnitValue<T> {
+    type Scalar = T;
+    type Value = T;
 
-    fn scale(&self, multiplier: f64) -> Self {
-        self / multiplier
-    }
-
-    fn unscale(&self, multiplier: f64) -> Self {
-        self * multiplier
-    }
-}
-
-impl<T> UnitVal for Array1<T>
-where
-    T: RFFloat + Serialize,
-{
-    fn zero_value() -> Self {
-        Array1::zeros(0)
-    }
-
-    fn scale(&self, multiplier: f64) -> Self {
-        self / multiplier
-    }
-
-    fn unscale(&self, multiplier: f64) -> Self {
-        self * multiplier
-    }
-}
-
-/// Encapsulation of a value with scale. Value is stored unscaled.
-/// Generic over the value type T, which can be a scalar (f64) or an array (Array1<f64>).
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct UnitValue<T: UnitVal = f64> {
-    val: T,
-    scale: Scale,
-    unit: Unit,
-}
-
-// Implement Copy for UnitValue<f64> to maintain backward compatibility
-impl Copy for UnitValue<f64> {}
-
-impl<T: UnitVal> UnitValue<T> {
-    pub fn new(val: T, scale: Scale, unit: Unit) -> Self {
-        UnitValue { val, scale, unit }
-    }
-
-    pub fn new_scaled(val: T, scale: Scale, unit: Unit) -> Self {
-        UnitValue {
-            val: val.unscale(scale.multiplier()),
+    fn new(val: &T, scale: Scale, unit: Unit) -> Self {
+        Self {
+            val: *val,
             scale,
             unit,
         }
     }
 
-    /// Retrieve value unscaled (as reference)
-    pub fn val_ref(&self) -> &T {
+    fn new_scaled(val: &T, scale: Scale, unit: Unit) -> Self {
+        Self {
+            val: scale.unscale(*val),
+            scale,
+            unit,
+        }
+    }
+
+    fn npts(&self) -> usize {
+        1
+    }
+
+    fn val_ref(&self) -> &T {
         &self.val
     }
 
-    /// Retrieve value in scaled scale
-    pub fn val_scaled(&self) -> T {
-        self.val.scale(self.scale.multiplier())
+    fn val_scaled(&self) -> T {
+        self.scale.scale(self.val)
     }
+
+    fn zero_value() -> Self::Value {
+        Self::Value::zero()
+    }
+
+    fn scale_val(val: &Self::Value, multiplier: T) -> Self::Value {
+        *val / multiplier
+    }
+
+    fn unscale_val(val: &Self::Value, multiplier: T) -> Self::Value {
+        *val * multiplier
+    }
+}
+
+impl<T: RealScalar> UnitValue for ArrayUnitValue<T> {
+    type Scalar = T;
+    type Value = Array1<T>;
+
+    fn new(val: &Array1<T>, scale: Scale, unit: Unit) -> Self {
+        Self {
+            val: val.clone(),
+            scale,
+            unit,
+        }
+    }
+
+    fn new_scaled(val: &Array1<T>, scale: Scale, unit: Unit) -> Self {
+        Self {
+            val: scale.unscale_array(val),
+            scale,
+            unit,
+        }
+    }
+
+    fn npts(&self) -> usize {
+        self.val.len()
+    }
+
+    fn val_ref(&self) -> &Array1<T> {
+        &self.val
+    }
+
+    fn val_scaled(&self) -> Array1<T> {
+        self.scale.scale_array(&self.val)
+    }
+
+    fn zero_value() -> Self::Value {
+        Array1::zeros(0)
+    }
+    fn scale_val(val: &Self::Value, multiplier: T) -> Self::Value {
+        val.map(|&x| x / multiplier)
+    }
+
+    fn unscale_val(val: &Self::Value, multiplier: T) -> Self::Value {
+        val.map(|&x| x * multiplier)
+    }
+}
+
+/// Encapsulation of a value with scale. Value is stored unscaled.
+#[derive(Copy, Clone, Debug, Default, PartialEq, Serialize)]
+pub struct ScalarUnitValue<T: RealScalar> {
+    pub(crate) val: T,
+    pub(crate) scale: Scale,
+    pub(crate) unit: Unit,
+}
+
+impl<T: RealScalar> ScalarUnitValue<T> {
+    pub fn new(val: T, scale: Scale, unit: Unit) -> Self {
+        ScalarUnitValue { val, scale, unit }
+    }
+
+    pub fn new_scaled(val: T, scale: Scale, unit: Unit) -> Self {
+        ScalarUnitValue {
+            val: scale.unscale(val),
+            scale,
+            unit,
+        }
+    }
+
+    pub fn builder() -> UnitValBuilder<Self> {
+        UnitValBuilder::new()
+    }
+
+    /// Retrieve value unscaled
+    pub fn val(&self) -> T {
+        self.val
+    }
+
+    // /// Retrieve value unscaled (as reference)
+    // pub fn val_ref(&self) -> &T {
+    //     &self.val
+    // }
+
+    // /// Retrieve value in scaled scale
+    // pub fn val_scaled(&self) -> T {
+    //     self.val.scale(self.scale.multiplier())
+    // }
 
     /// Retrieve scale
     pub fn scale(&self) -> Scale {
@@ -197,48 +269,184 @@ impl<T: UnitVal> UnitValue<T> {
     }
 
     /// Set value unscaled
-    pub fn set_val(&mut self, val: T) -> &Self {
+    pub fn set_val(&self, val: T) -> Self {
+        let mut out = self.clone();
+        out.val = val;
+        out
+    }
+
+    /// Set value unscaled
+    pub fn set_val_inplace(&mut self, val: T) {
         self.val = val;
-        self
+    }
+
+    pub fn set_val_pt_inplace(&mut self, val: T) {
+        self.set_val_inplace(val);
     }
 
     /// Set value in scaled scale
-    pub fn set_val_scaled(&mut self, val: T) -> &Self {
-        self.val = val.unscale(self.scale.multiplier());
-        self
+    pub fn set_val_scaled(&self, val: T) -> Self {
+        let mut out = self.clone();
+        out.val = self.scale.unscale(val);
+        out
+    }
+
+    /// Set value in scaled scale
+    pub fn set_val_scaled_inplace(&mut self, val: T) {
+        self.val = self.scale.unscale(val);
+    }
+
+    pub fn set_val_pt_scaled_inplace(&mut self, val: T) {
+        self.set_val_scaled_inplace(val);
     }
 
     /// Set scale
-    pub fn set_scale(&mut self, scale: Scale) -> &Self {
+    pub fn set_scale(&mut self, scale: Scale) {
         self.scale = scale;
-        self
+    }
+
+    /// Set scale
+    pub fn set_scale_str(&mut self, scale: &str) {
+        self.scale = Scale::from_str(scale).unwrap();
     }
 
     /// Set unit
-    pub fn set_unit(&mut self, unit: Unit) -> &Self {
+    pub fn set_unit(&mut self, unit: Unit) {
         self.unit = unit;
-        self
+    }
+
+    /// Set scale
+    pub fn set_unit_str(&mut self, unit: &str) {
+        self.unit = Unit::from_str(unit).unwrap();
     }
 }
 
-/// Specialized implementation for UnitValue<f64> to maintain backward compatibility.
-/// Returns f64 by value (since it's Copy) instead of by reference.
-impl UnitValue<f64> {
-    /// Retrieve value unscaled
-    pub fn val(&self) -> f64 {
-        self.val
-    }
+// impl<T: RealScalar> Default for ScalarUnitValue<T> {
+//     fn default() -> Self {
+//         ScalarUnitValue {
+//             val: T::zero(),
+//             scale: Scale::Base,
+//             unit: Unit::None,
+//         }
+//     }
+// }
+
+/// Encapsulation of a value with scale. Value is stored unscaled.
+#[derive(Clone, Debug, Default, PartialEq, Serialize)]
+pub struct ArrayUnitValue<T: RealScalar> {
+    pub(crate) val: Array1<T>,
+    pub(crate) scale: Scale,
+    pub(crate) unit: Unit,
 }
 
-impl<T: UnitVal> Default for UnitValue<T> {
-    fn default() -> Self {
-        UnitValue {
-            val: T::zero_value(),
-            scale: Scale::Base,
-            unit: Unit::None,
+impl<T: RealScalar> ArrayUnitValue<T> {
+    pub fn new(val: &Array1<T>, scale: Scale, unit: Unit) -> Self {
+        ArrayUnitValue {
+            val: val.clone(),
+            scale,
+            unit,
         }
     }
+
+    pub fn new_scaled(val: &Array1<T>, scale: Scale, unit: Unit) -> Self {
+        ArrayUnitValue {
+            val: scale.unscale_array(val),
+            scale,
+            unit,
+        }
+    }
+
+    pub fn builder() -> UnitValBuilder<Self> {
+        UnitValBuilder::new()
+    }
+
+    /// Retrieve value unscaled
+    pub fn val(&self) -> Array1<T> {
+        self.val.clone()
+    }
+
+    // /// Retrieve value unscaled (as reference)
+    // pub fn val_ref(&self) -> &Array1<T> {
+    //     &self.val
+    // }
+
+    // /// Retrieve value in scaled scale
+    // pub fn val_scaled(&self) -> Array1<T> {
+    //     self.val.scale(self.scale.multiplier())
+    // }
+
+    /// Retrieve scale
+    pub fn scale(&self) -> Scale {
+        self.scale
+    }
+
+    /// Retrieve unit
+    pub fn unit(&self) -> Unit {
+        self.unit
+    }
+
+    /// Set value unscaled
+    pub fn set_val(&self, val: &Array1<T>) -> Self {
+        let mut out = self.clone();
+        out.val = val.clone();
+        out
+    }
+
+    /// Set value unscaled
+    pub fn set_val_inplace(&mut self, val: &Array1<T>) {
+        self.val = val.clone();
+    }
+
+    pub fn set_val_pt_inplace(&mut self, val: T, pt: usize) {
+        self.val[pt] = val;
+    }
+
+    /// Set value in scaled scale
+    pub fn set_val_scaled(&self, val: &Array1<T>) -> Self {
+        let mut out = self.clone();
+        out.val = self.scale.unscale_array(val);
+        out
+    }
+
+    /// Set value in scaled scale
+    pub fn set_val_scaled_inplace(&mut self, val: &Array1<T>) {
+        self.val = self.scale.unscale_array(val);
+    }
+
+    pub fn set_val_pt_scaled_inplace(&mut self, val: T, pt: usize) {
+        self.val[pt] = self.scale.unscale(val);
+    }
+
+    /// Set scale
+    pub fn set_scale(&mut self, scale: Scale) {
+        self.scale = scale;
+    }
+
+    /// Set scale
+    pub fn set_scale_str(&mut self, scale: &str) {
+        self.scale = Scale::from_str(scale).unwrap();
+    }
+
+    /// Set unit
+    pub fn set_unit(&mut self, unit: Unit) {
+        self.unit = unit;
+    }
+
+    /// Set scale
+    pub fn set_unit_str(&mut self, unit: &str) {
+        self.unit = Unit::from_str(unit).unwrap();
+    }
 }
+
+// impl<T: RealScalar> Default for ArrayUnitValue<T> {
+//     fn default() -> Self {
+//         ArrayUnitValue {
+//             val: Array1::zeros(0),
+//             scale: Scale::Base,
+//             unit: Unit::None,
+//         }
+//     }
+// }
 
 /// Builder design pattern for UnitValue.
 ///
@@ -246,36 +454,27 @@ impl<T: UnitVal> Default for UnitValue<T> {
 /// ```
 /// use rfkit::prelude::*;
 ///
-/// let unitval = UnitValBuilder::new().val_scaled(1.2, Scale::Pico).build();
+/// let sunitval = ScalarUnitValue::builder().val_scaled(1.2, Scale::Pico).build().unwrap();
+/// let aunitval = ArrayUnitValue::builder().val_scaled(array![1.2, 1.5], Scale::Pico).build().unwrap();
 /// ```
-pub struct UnitValBuilder<T: UnitVal = f64> {
-    val: T,
-    scale: Scale,
-    unit: Unit,
+pub struct UnitValBuilder<T: UnitValue> {
+    pub(crate) val: Option<T::Value>,
+    pub(crate) scale: Scale,
+    pub(crate) unit: Unit,
 }
 
-impl<T: UnitVal> Default for UnitValBuilder<T> {
-    fn default() -> Self {
-        UnitValBuilder {
-            val: T::zero_value(),
-            scale: Scale::Base,
-            unit: Unit::None,
-        }
-    }
-}
-
-impl<T: UnitVal> UnitValBuilder<T> {
+impl<T: UnitValue> UnitValBuilder<T> {
     pub fn new() -> Self {
         Self::default()
     }
 
-    pub fn val(mut self, val: T) -> Self {
-        self.val = val;
+    pub fn val(mut self, val: &T::Value) -> Self {
+        self.val = Some(val.clone());
         self
     }
 
-    pub fn val_scaled(mut self, val: T, scale: Scale) -> Self {
-        self.val = val.unscale(scale.multiplier());
+    pub fn val_scaled(mut self, val: &T::Value, scale: Scale) -> Self {
+        self.val = Some(T::unscale_val(val, scale.multiplier()));
         self.scale = scale;
         self
     }
@@ -300,20 +499,28 @@ impl<T: UnitVal> UnitValBuilder<T> {
         self
     }
 
-    pub fn build(self) -> UnitValue<T> {
-        UnitValue {
-            val: self.val,
-            scale: self.scale,
-            unit: self.unit,
+    pub fn build(self) -> Result<T, String> {
+        let val = self.val.ok_or("value is required")?;
+        Ok(T::new(&val, self.scale, self.unit))
+    }
+}
+
+impl<T: UnitValue> Default for UnitValBuilder<T> {
+    fn default() -> Self {
+        UnitValBuilder {
+            val: None,
+            scale: Scale::Base,
+            unit: Unit::None,
         }
     }
 }
 
 #[cfg(test)]
-mod unit_test {
+mod unit_tests {
     use super::*;
-    use crate::util::comp_f64;
-    use float_cmp::F64Margin;
+    use crate::util::{ApproxEq, NumMargin};
+    use ndarray::array;
+    use std::str::FromStr;
 
     #[test]
     fn test_parse_unit() {
@@ -429,72 +636,115 @@ mod unit_test {
     }
 
     #[test]
-    fn test_unitval() {
+    fn test_scalarunitvalue() {
         let val: f64 = 10.34e-12;
         let val_scaled: f64 = 10.34;
         let scale = Scale::Pico;
         let unit = Unit::Farad;
-        let mut unitval = UnitValue::new(val, scale, unit);
+        let mut unitval = ScalarUnitValue::new(val, scale, unit);
         let val2: f64 = 4.74e-15;
         let scale2 = Scale::Femto;
 
-        comp_f64(&unitval.val(), &val, F64Margin::default(), "val()", "");
-        comp_f64(
-            &unitval.val_scaled(),
+        unitval
+            .val()
+            .assert_approx_eq(&val, NumMargin::default(), "val()", "");
+        unitval.val_scaled().assert_approx_eq(
             &val_scaled,
-            F64Margin::default(),
+            NumMargin::default(),
             "val_scaled()",
             "",
         );
         assert_eq!(&unitval.scale(), &scale);
 
-        unitval.set_val(val2); // {val2, scale}
-        comp_f64(&unitval.val(), &val2, F64Margin::default(), "set_val()", "");
+        unitval.set_val_inplace(val2); // {val2, scale}
+        unitval
+            .val()
+            .assert_approx_eq(&val2, NumMargin::default(), "set_val()", "");
         assert_eq!(&unitval.scale(), &scale);
 
-        unitval.set_val_scaled(val_scaled); // {val, scale}
-        comp_f64(
-            &unitval.val(),
-            &val,
-            F64Margin::default(),
-            "set_val_scaled()",
-            "",
-        );
+        unitval.set_val_scaled_inplace(val_scaled); // {val, scale}
+        unitval
+            .val()
+            .assert_approx_eq(&val, NumMargin::default(), "set_val_scaled()", "");
         assert_eq!(&unitval.scale(), &scale);
 
         unitval.set_scale(scale2); // {val, scale2}
-        comp_f64(&unitval.val(), &val, F64Margin::default(), "set_unit()", "");
+        unitval
+            .val()
+            .assert_approx_eq(&val, NumMargin::default(), "set_unit()", "");
         assert_eq!(&unitval.scale(), &scale2);
     }
 
     #[test]
-    fn test_unitvalbuilder() {
+    fn test_arrayunitvalue() {
+        let val = array![10.34e-12, 10.65e-12];
+        let val_scaled = array![10.34, 10.65];
+        let scale = Scale::Pico;
+        let unit = Unit::Farad;
+        let mut unitval = ArrayUnitValue::new(&val, scale, unit);
+        let val2 = array![4.74e-15, 6.45e-15];
+        let scale2 = Scale::Femto;
+
+        unitval
+            .val()
+            .assert_approx_eq(&val, NumMargin::default(), "val()", "");
+        unitval.val_scaled().assert_approx_eq(
+            &val_scaled,
+            NumMargin::default(),
+            "val_scaled()",
+            "",
+        );
+        assert_eq!(&unitval.scale(), &scale);
+
+        unitval.set_val_inplace(&val2); // {val2, scale}
+        unitval
+            .val()
+            .assert_approx_eq(&val2, NumMargin::default(), "set_val()", "");
+        assert_eq!(&unitval.scale(), &scale);
+
+        unitval.set_val_scaled_inplace(&val_scaled); // {val, scale}
+        unitval
+            .val()
+            .assert_approx_eq(&val, NumMargin::default(), "set_val_scaled()", "");
+        assert_eq!(&unitval.scale(), &scale);
+
+        unitval.set_scale(scale2); // {val, scale2}
+        unitval
+            .val()
+            .assert_approx_eq(&val, NumMargin::default(), "set_unit()", "");
+        assert_eq!(&unitval.scale(), &scale2);
+    }
+
+    #[test]
+    fn test_unitvalbuilder_scalar() {
         let val: f64 = 10.34e-12;
         let val_scaled: f64 = 10.34;
         let scale = Scale::Pico;
         let unit = Unit::Second;
 
-        let unitval = UnitValBuilder::new()
-            .val(val)
+        let unitval = ScalarUnitValue::builder()
+            .val(&val)
             .scale(scale)
             .unit(unit)
-            .build();
+            .build()
+            .unwrap();
         assert_eq!(
             unitval,
-            UnitValue {
+            ScalarUnitValue {
                 val: val,
                 scale: scale,
                 unit: unit,
             }
         );
 
-        let unitval2 = UnitValBuilder::new()
-            .val_scaled(val_scaled, scale)
+        let unitval2 = ScalarUnitValue::builder()
+            .val_scaled(&val_scaled, scale)
             .unit(unit)
-            .build();
+            .build()
+            .unwrap();
         assert_eq!(
             unitval2,
-            UnitValue {
+            ScalarUnitValue {
                 val: val,
                 scale: scale,
                 unit: unit,
@@ -506,31 +756,86 @@ mod unit_test {
         let scale = Scale::Giga;
         let unit = Unit::Hz;
 
-        let unitval = UnitValBuilder::new()
-            .val(val)
+        let unitval = ScalarUnitValue::builder()
+            .val(&val)
             .scale(scale)
             .unit(unit)
-            .build();
+            .build()
+            .unwrap();
         assert_eq!(
             unitval,
-            UnitValue {
+            ScalarUnitValue {
                 val: val,
                 scale: scale,
                 unit: unit,
             }
         );
 
-        let unitval2 = UnitValBuilder::new()
-            .val_scaled(val_scaled, scale)
+        let unitval2 = ScalarUnitValue::builder()
+            .val_scaled(&val_scaled, scale)
             .unit(unit)
-            .build();
+            .build()
+            .unwrap();
         assert_eq!(
             unitval2,
-            UnitValue {
+            ScalarUnitValue {
                 val: val,
                 scale: scale,
                 unit: unit,
             }
         );
+    }
+
+    #[test]
+    fn test_unitvalbuilder_array() {
+        let val = array![10.34e-12, 10.65e-12];
+        let val_scaled = array![10.34, 10.65];
+        let scale = Scale::Pico;
+        let unit = Unit::Second;
+        let exemplar = ArrayUnitValue {
+            val: val.clone(),
+            scale: scale,
+            unit: unit,
+        };
+
+        let unitval = ArrayUnitValue::builder()
+            .val(&val)
+            .scale(scale)
+            .unit(unit)
+            .build()
+            .unwrap();
+        assert_eq!(unitval, exemplar);
+
+        let unitval2 = ArrayUnitValue::builder()
+            .val_scaled(&val_scaled, scale)
+            .unit(unit)
+            .build()
+            .unwrap();
+        assert_eq!(unitval2, exemplar);
+
+        let val = array![1.34e9, 5.51e9];
+        let val_scaled = array![1.34, 5.51];
+        let scale = Scale::Giga;
+        let unit = Unit::Hz;
+        let exemplar = ArrayUnitValue {
+            val: val.clone(),
+            scale: scale,
+            unit: unit,
+        };
+
+        let unitval = ArrayUnitValue::builder()
+            .val(&val)
+            .scale(scale)
+            .unit(unit)
+            .build()
+            .unwrap();
+        assert_eq!(unitval, exemplar);
+
+        let unitval2 = ArrayUnitValue::builder()
+            .val_scaled(&val_scaled, scale)
+            .unit(unit)
+            .build()
+            .unwrap();
+        assert_eq!(unitval2, exemplar);
     }
 }

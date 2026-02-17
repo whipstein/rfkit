@@ -1,13 +1,17 @@
 #![allow(dead_code)]
 #![allow(unused_assignments)]
-use crate::{error::MinimizerError, minimize::ObjFn, num::RFFloat};
+use crate::{
+    error::MinimizerError,
+    minimize::ObjFn,
+    num::{Abs, RealScalar},
+};
 use std::fmt;
 
 /// Result of minimum bracketing
 #[derive(Debug, Clone)]
 pub struct BracketResult<T>
 where
-    T: RFFloat,
+    T: RealScalar,
 {
     a: T,  // Left bracket point
     b: T,  // Middle point (should have lowest function value)
@@ -23,8 +27,7 @@ where
 
 impl<T> BracketResult<T>
 where
-    T: RFFloat,
-    for<'a, 'b> &'a T: std::ops::Sub<&'b T, Output = T>,
+    T: RealScalar,
 {
     /// Check if the bracket is valid (fb < fa and fb < fc)
     pub fn is_valid(&self) -> bool {
@@ -32,27 +35,27 @@ where
     }
 
     pub fn a(&self) -> T {
-        self.a.clone()
+        self.a
     }
 
     pub fn b(&self) -> T {
-        self.b.clone()
+        self.b
     }
 
     pub fn c(&self) -> T {
-        self.c.clone()
+        self.c
     }
 
     pub fn fa(&self) -> T {
-        self.fa.clone()
+        self.fa
     }
 
     pub fn fb(&self) -> T {
-        self.fb.clone()
+        self.fb
     }
 
     pub fn fc(&self) -> T {
-        self.fc.clone()
+        self.fc
     }
 
     pub fn iters(&self) -> usize {
@@ -64,26 +67,26 @@ where
     }
 
     pub fn bracket_width(&self) -> T {
-        self.bracket_width.clone()
+        self.bracket_width
     }
 
     pub fn ratio(&self) -> T {
-        self.expansion_ratio.clone()
+        self.expansion_ratio
     }
 
     /// Get the width of the bracket
     pub fn width(&self) -> T {
-        (&self.c - &self.a).abs()
+        (self.c - self.a).abs()
     }
 
     /// Get the best point in the bracket
     pub fn best_point(&self) -> T {
-        self.b.clone()
+        self.b
     }
 
     /// Get the best function value
     pub fn best_value(&self) -> T {
-        self.fb.clone()
+        self.fb
     }
 }
 
@@ -98,14 +101,14 @@ pub struct BracketOptions<T> {
 
 impl<T> Default for BracketOptions<T>
 where
-    T: RFFloat,
+    T: RealScalar,
 {
     fn default() -> Self {
         Self {
-            initial_step: T::from_f64(1.0),
+            initial_step: <T as From<f64>>::from(1.0),
             max_iters: 100,
-            tol: T::from_f64(1e-12),
-            max_expansion_factor: T::from_f64(1000.0),
+            tol: <T as From<f64>>::from(1e-12),
+            max_expansion_factor: <T as From<f64>>::from(1000.0),
         }
     }
 }
@@ -143,27 +146,7 @@ where
 
 impl<T> Bracket<T>
 where
-    T: RFFloat,
-    for<'a, 'b> &'a T: std::ops::Add<&'b T, Output = T>,
-    for<'a, 'b> &'a T: std::ops::Sub<&'b T, Output = T>,
-    for<'a, 'b> &'a T: std::ops::Mul<&'b T, Output = T>,
-    for<'a, 'b> &'a T: std::ops::Div<&'b T, Output = T>,
-    for<'a> &'a T: std::ops::Add<T, Output = T>,
-    for<'a> &'a T: std::ops::Sub<T, Output = T>,
-    for<'a> &'a T: std::ops::Mul<T, Output = T>,
-    for<'a> &'a T: std::ops::Div<T, Output = T>,
-    for<'a> &'a T: std::ops::Add<f64, Output = T>,
-    for<'a> &'a T: std::ops::Sub<f64, Output = T>,
-    for<'a> &'a T: std::ops::Mul<f64, Output = T>,
-    for<'a> &'a T: std::ops::Div<f64, Output = T>,
-    f64: std::ops::Add<T, Output = T>,
-    f64: std::ops::Sub<T, Output = T>,
-    f64: std::ops::Mul<T, Output = T>,
-    f64: std::ops::Div<T, Output = T>,
-    for<'a> f64: std::ops::Add<&'a T, Output = T>,
-    for<'a> f64: std::ops::Sub<&'a T, Output = T>,
-    for<'a> f64: std::ops::Mul<&'a T, Output = T>,
-    for<'a> f64: std::ops::Div<&'a T, Output = T>,
+    T: RealScalar,
 {
     /// Golden ratio constant for bracket expansion
     pub const GOLDEN_RATIO_F64: f64 = 1.618033988749895;
@@ -190,7 +173,7 @@ where
     pub fn new_boxed(f: Box<dyn ObjFn<T>>) -> Self {
         Bracket {
             a: (-1.0).into(),
-            b: T::from_f64(1.0),
+            b: <T as From<f64>>::from(1.0),
             c: 2.0.into(),
             fa: T::zero(),
             fb: T::zero(),
@@ -204,13 +187,13 @@ where
     /// Bracket a minimum starting from two initial points
     pub fn bracket_minimum(
         &mut self,
-        a: &T,
-        b: &T,
+        a: T,
+        b: T,
         max_iters: Option<usize>,
     ) -> Result<BracketResult<T>, MinimizerError> {
-        let golden_ratio = Self::GOLDEN_RATIO_F64;
-        let limit = Self::LIMIT_F64;
-        let tiny = Self::TINY_F64;
+        let golden_ratio: T = Self::GOLDEN_RATIO_F64.into();
+        let limit: T = Self::LIMIT_F64.into();
+        let tiny: T = Self::TINY_F64.into();
 
         self.converged = false;
         let max_iter = max_iters.unwrap_or(100);
@@ -220,8 +203,8 @@ where
             return Err(MinimizerError::InvalidInitialPoints);
         }
 
-        let mut ax = a.clone();
-        let mut bx = b.clone();
+        let mut ax = a;
+        let mut bx = b;
 
         // Ensure a < b for consistency
         if ax > bx {
@@ -244,7 +227,7 @@ where
         }
 
         // First guess for c using golden ratio
-        let mut c = &bx + golden_ratio * (&bx - &ax);
+        let mut c = bx + golden_ratio * (bx - ax);
         let mut fc = self.f.call_scalar(&c);
         function_evaluations += 1;
 
@@ -259,13 +242,13 @@ where
             self.iters += 1;
 
             // Compute the parabolic extrapolation point
-            let r = (&bx - &ax) * (&fb - &fc);
-            let q = (&bx - &c) * (&fb - &fa);
-            let q_minus_r = &q - &r;
+            let r = (bx - ax) * (fb - fc);
+            let q = (bx - c) * (fb - fa);
+            let q_minus_r = q - r;
 
-            let denom = 2.0
-                * if q_minus_r != 0.0 {
-                    q_minus_r.abs().max(&tiny.into())
+            let denom = 2.0.into()
+                * if q_minus_r != 0.0.into() {
+                    q_minus_r.abs().max(tiny.into())
                         * if q_minus_r > 0.0.into() {
                             <f64 as Into<T>>::into(1.0)
                         } else {
@@ -275,10 +258,10 @@ where
                     tiny.into()
                 };
 
-            let u = &bx - ((&bx - &c) * &q - (&bx - &ax) * &r) / &denom;
-            let ulim = &bx + limit * (&c - &bx);
+            let u = bx - ((bx - c) * q - (bx - ax) * r) / denom;
+            let ulim = bx + limit * (c - bx);
 
-            let (new_point, new_value) = if (&bx - &u) * (&u - &c) > 0.0.into() {
+            let (new_point, new_value) = if (bx - u) * (u - c) > 0.0.into() {
                 // Parabolic u is between b and c: try it
                 let fu = self.f.call_scalar(&u);
                 function_evaluations += 1;
@@ -289,54 +272,46 @@ where
 
                 if fu < fc {
                     // Got a minimum between b and c
-                    (self.a, self.c) = if ax <= c {
-                        (ax.clone(), c.clone())
-                    } else {
-                        (c.clone(), ax.clone())
-                    };
-                    self.b = u.clone();
-                    self.fa = fa.clone();
-                    self.fb = fu.clone();
-                    self.fc = fc.clone();
+                    (self.a, self.c) = if ax <= c { (ax, c) } else { (c, ax) };
+                    self.b = u;
+                    self.fa = fa;
+                    self.fb = fu;
+                    self.fc = fc;
                     return Ok(BracketResult {
-                        a: self.a.clone(),
-                        b: self.b.clone(),
-                        c: self.c.clone(),
-                        fa: self.fa.clone(),
-                        fb: self.fb.clone(),
-                        fc: self.fc.clone(),
+                        a: self.a,
+                        b: self.b,
+                        c: self.c,
+                        fa: self.fa,
+                        fb: self.fb,
+                        fc: self.fc,
                         iterations: self.iters,
                         function_evaluations,
-                        bracket_width: (&c - &ax).abs(),
-                        expansion_ratio: if (&bx - &ax).abs() > 0.0.into() {
-                            (&c - &ax).abs() / (&bx - &ax).abs()
+                        bracket_width: (c - ax).abs(),
+                        expansion_ratio: if (bx - ax).abs() > 0.0.into() {
+                            (c - ax).abs() / (bx - ax).abs()
                         } else {
                             1.0.into()
                         },
                     });
                 } else if fu > fb {
                     // Got a minimum between a and u
-                    (self.a, self.c) = if ax <= c {
-                        (ax.clone(), u.clone())
-                    } else {
-                        (u.clone(), ax.clone())
-                    };
-                    self.b = bx.clone();
-                    self.fa = fa.clone();
-                    self.fb = fb.clone();
-                    self.fc = fu.clone();
+                    (self.a, self.c) = if ax <= c { (ax, u) } else { (u, ax) };
+                    self.b = bx;
+                    self.fa = fa;
+                    self.fb = fb;
+                    self.fc = fu;
                     return Ok(BracketResult {
-                        a: self.a.clone(),
-                        b: self.b.clone(),
-                        c: self.c.clone(),
-                        fa: self.fa.clone(),
-                        fb: self.fb.clone(),
-                        fc: self.fc.clone(),
+                        a: self.a,
+                        b: self.b,
+                        c: self.c,
+                        fa: self.fa,
+                        fb: self.fb,
+                        fc: self.fc,
                         iterations: self.iters,
                         function_evaluations,
-                        bracket_width: (&u - &ax).abs(),
-                        expansion_ratio: if (&bx - &ax).abs() > 0.0.into() {
-                            (&u - &ax).abs() / (&bx - &ax).abs()
+                        bracket_width: (u - ax).abs(),
+                        expansion_ratio: if (bx - ax).abs() > 0.0.into() {
+                            (u - ax).abs() / (bx - ax).abs()
                         } else {
                             1.0.into()
                         },
@@ -344,9 +319,9 @@ where
                 }
 
                 // Parabolic fit didn't help; use golden ratio
-                let new_pt = &c + golden_ratio * (&c - &bx);
-                (new_pt.clone(), self.f.call_scalar(&new_pt))
-            } else if (&c - &u) * (&u - &ulim) > 0.0.into() {
+                let new_pt = c + golden_ratio * (c - bx);
+                (new_pt, self.f.call_scalar(&new_pt))
+            } else if (c - u) * (u - ulim) > 0.0.into() {
                 // Parabolic fit is between c and its allowed limit
                 let fu = self.f.call_scalar(&u);
                 function_evaluations += 1;
@@ -357,18 +332,18 @@ where
 
                 if fu < fc {
                     // Keep expanding
-                    let new_u = &u + golden_ratio * (&u - &c);
-                    (new_u.clone(), self.f.call_scalar(&new_u))
+                    let new_u = u + golden_ratio * (u - c);
+                    (new_u, self.f.call_scalar(&new_u))
                 } else {
-                    (u.clone(), fu.clone())
+                    (u, fu)
                 }
-            } else if (&u - &ulim) * (&ulim - &c) >= 0.0.into() {
+            } else if (u - ulim) * (ulim - c) >= 0.0.into() {
                 // Limit parabolic u to maximum allowed value
-                (ulim.clone(), self.f.call_scalar(&ulim))
+                (ulim, self.f.call_scalar(&ulim))
             } else {
                 // Reject parabolic u, use golden section
-                let new_pt = &c + golden_ratio * (&c - &bx);
-                (new_pt.clone(), self.f.call_scalar(&new_pt))
+                let new_pt = c + golden_ratio * (c - bx);
+                (new_pt, self.f.call_scalar(&new_pt))
             };
 
             function_evaluations += 1;
@@ -378,18 +353,18 @@ where
             }
 
             // Check for numerical overflow
-            let max_val = T::from_f64(1e100);
+            let max_val = <T as From<f64>>::from(1e100);
             if !new_point.is_finite() || new_point.abs() > max_val {
                 return Err(MinimizerError::NumericalOverflow);
             }
 
             // Shift points
-            ax = bx.clone();
-            bx = c.clone();
-            c = new_point.clone();
-            fa = fb.clone();
-            fb = fc.clone();
-            fc = new_value.clone();
+            ax = bx;
+            bx = c;
+            c = new_point;
+            fa = fb;
+            fb = fc;
+            fc = new_value;
         }
 
         if self.iters >= max_iter {
@@ -403,63 +378,45 @@ where
 
         // Ensure proper ordering: a <= b <= c
         let (final_a, final_b, final_c, final_fa, final_fb, final_fc) = if ax <= bx && bx <= c {
-            (
-                ax.clone(),
-                bx.clone(),
-                c.clone(),
-                fa.clone(),
-                fb.clone(),
-                fc.clone(),
-            )
+            (ax, bx, c, fa, fb, fc)
         } else if c <= bx && bx <= ax {
-            (
-                c.clone(),
-                bx.clone(),
-                ax.clone(),
-                fc.clone(),
-                fb.clone(),
-                fa.clone(),
-            )
+            (c, bx, ax, fc, fb, fa)
         } else {
             // Need to sort all three points
-            let mut points = [
-                (ax.clone(), fa.clone()),
-                (bx.clone(), fb.clone()),
-                (c.clone(), fc.clone()),
-            ];
+            let mut points = [(ax, fa), (bx, fb), (c, fc)];
             points.sort_by(|x, y| x.0.partial_cmp(&y.0).unwrap());
             (
-                points[0].0.clone(),
-                points[1].0.clone(),
-                points[2].0.clone(),
-                points[0].1.clone(),
-                points[1].1.clone(),
-                points[2].1.clone(),
+                points[0].0,
+                points[1].0,
+                points[2].0,
+                points[0].1,
+                points[1].1,
+                points[2].1,
             )
         };
 
         (self.a, self.c) = if final_a <= final_c {
-            (final_a.clone(), final_c.clone())
+            (final_a, final_c)
         } else {
-            (final_c.clone(), final_a.clone())
+            (final_c, final_a)
         };
-        self.b = final_b.clone();
-        self.fa = final_fa.clone();
-        self.fb = final_fb.clone();
-        self.fc = final_fc.clone();
+        self.b = final_b;
+        self.fa = final_fa;
+        self.fb = final_fb;
+        self.fc = final_fc;
 
         Ok(BracketResult {
-            a: self.a.clone(),
-            b: self.b.clone(),
-            c: self.c.clone(),
-            fa: self.fa.clone(),
-            fb: self.fb.clone(),
-            fc: self.fc.clone(),
+            a: self.a,
+            b: self.b,
+            c: self.c,
+            fa: self.fa,
+            fb: self.fb,
+            fc: self.fc,
             iterations: self.iters,
             function_evaluations,
-            bracket_width: (&final_c - &final_a).abs(),
-            expansion_ratio: if (&final_b - &final_a).abs() > 0.0.into() {
-                (&final_c - &final_a).abs() / (&final_b - &final_a).abs()
+            bracket_width: (final_c - final_a).abs(),
+            expansion_ratio: if (final_b - final_a).abs() > 0.0.into() {
+                (final_c - final_a).abs() / (final_b - final_a).abs()
             } else {
                 1.0.into()
             },
@@ -469,30 +426,30 @@ where
     /// Bracket a minimum with a specific initial step size
     pub fn bracket_minimum_with_step(
         &mut self,
-        start_point: &T,
-        initial_step: &T,
+        start_point: T,
+        initial_step: T,
         max_iters: Option<usize>,
     ) -> Result<BracketResult<T>, MinimizerError> {
         let zero = T::zero();
-        if *initial_step == zero || !initial_step.is_finite() {
+        if initial_step == zero || !initial_step.is_finite() {
             return Err(MinimizerError::InvalidStepSize);
         }
 
-        let a = start_point.clone();
+        let a = start_point;
         let b = start_point + initial_step;
 
-        self.bracket_minimum(&a, &b, max_iters)
+        self.bracket_minimum(a, b, max_iters)
     }
 
     /// Bracket minimum with automatic direction detection
     pub fn bracket_minimum_auto(
         &mut self,
-        start_point: &T,
-        initial_step: &T,
+        start_point: T,
+        initial_step: T,
         max_iters: Option<usize>,
     ) -> Result<BracketResult<T>, MinimizerError> {
         let zero = T::zero();
-        if *initial_step <= zero || !initial_step.is_finite() {
+        if initial_step <= zero || !initial_step.is_finite() {
             return Err(MinimizerError::InvalidStepSize);
         }
 
@@ -501,8 +458,8 @@ where
             Ok(result) => Ok(result),
             Err(_) => {
                 // Try negative direction
-                let neg_step = -initial_step.clone();
-                self.bracket_minimum_with_step(start_point, &neg_step, max_iters)
+                let neg_step = -initial_step;
+                self.bracket_minimum_with_step(start_point, neg_step, max_iters)
             }
         }
     }
@@ -510,20 +467,27 @@ where
     /// Bracket minimum with adaptive step sizing
     pub fn bracket_minimum_adaptive(
         &mut self,
-        start_point: &T,
+        start_point: T,
         initial_step: Option<T>,
         max_iters: Option<usize>,
     ) -> Result<BracketResult<T>, MinimizerError> {
         let step = initial_step.unwrap_or(T::one());
-        let step_factors = [1.0, 0.1, 10.0, 0.01, 100.0, 0.001];
+        let step_factors: [T; 6] = [
+            1.0.into(),
+            0.1.into(),
+            10.0.into(),
+            0.01.into(),
+            100.0.into(),
+            0.001.into(),
+        ];
 
         for &factor in &step_factors {
-            let current_step = &step * factor;
+            let current_step = step * factor;
 
             // Try both directions
             for &direction in &[1.0, -1.0] {
-                let dir_step = current_step.clone() * T::from_f64(direction);
-                match self.bracket_minimum_with_step(start_point, &dir_step, max_iters) {
+                let dir_step = current_step * direction.into();
+                match self.bracket_minimum_with_step(start_point, dir_step, max_iters) {
                     Ok(result) => return Ok(result),
                     Err(_) => continue,
                 }
@@ -536,13 +500,13 @@ where
     /// Robust bracketing with multiple strategies
     pub fn bracket_minimum_robust(
         &mut self,
-        start_point: &T,
+        start_point: T,
         options: BracketOptions<T>,
     ) -> Result<BracketResult<T>, MinimizerError> {
         // Strategy 1: Try standard bracketing with default step
         if let Ok(result) = self.bracket_minimum_with_step(
             start_point,
-            &options.initial_step,
+            options.initial_step,
             Some(options.max_iters),
         ) {
             return Ok(result);
@@ -551,7 +515,7 @@ where
         // Strategy 2: Try adaptive step sizing
         if let Ok(result) = self.bracket_minimum_adaptive(
             start_point,
-            Some(options.initial_step.clone()),
+            Some(options.initial_step),
             Some(options.max_iters),
         ) {
             return Ok(result);
@@ -563,18 +527,25 @@ where
             return Err(MinimizerError::FunctionEvaluationError);
         }
 
-        let step_multipliers = [0.01, 0.1, 0.5, 1.0, 2.0, 10.0, 100.0];
+        let step_multipliers: [T; 7] = [
+            0.01.into(),
+            0.1.into(),
+            0.5.into(),
+            1.0.into(),
+            2.0.into(),
+            10.0.into(),
+            100.0.into(),
+        ];
 
         for &mult in &step_multipliers {
-            let step = &options.initial_step * mult;
+            let step = options.initial_step * mult;
 
             for &dir in &[1.0, -1.0] {
-                let dir_val = dir;
-                let a = start_point.clone();
-                let b = start_point + dir_val * &step;
-                let c = start_point + dir_val * &step * 2.0;
+                let a = start_point;
+                let b = start_point + dir.into() * step;
+                let c = start_point + dir.into() * step * 2.0.into();
 
-                let fa = f_start.clone();
+                let fa = f_start;
                 let fb = self.f.call_scalar(&b);
                 let fc = self.f.call_scalar(&c);
 
@@ -582,7 +553,7 @@ where
                     // Check if we already have a bracket
                     if (fb < fa && fb < fc) || (fa < fb && fa < fc && fb < fc) {
                         // Try to refine this into a proper bracket
-                        if let Ok(result) = self.bracket_minimum(&a, &b, Some(options.max_iters)) {
+                        if let Ok(result) = self.bracket_minimum(a, b, Some(options.max_iters)) {
                             return Ok(result);
                         }
                     }
@@ -596,8 +567,8 @@ where
     /// Find multiple brackets in a given interval
     pub fn find_multiple_brackets(
         &mut self,
-        start: &T,
-        end: &T,
+        start: T,
+        end: T,
         num_points: usize,
         max_brackets: Option<usize>,
     ) -> Vec<BracketResult<T>> {
@@ -615,9 +586,9 @@ where
             }
 
             let i_t = T::from_usize(i);
-            let x1 = start + &i_t * &dx;
-            let x2 = start + (&i_t + 1.0) * &dx;
-            let x3 = start + (&i_t + 2.0) * &dx;
+            let x1 = start + i_t * dx;
+            let x2 = start + (i_t + 1.0.into()) * dx;
+            let x3 = start + (i_t + 2.0.into()) * dx;
 
             let f1 = self.f.call_scalar(&x1);
             let f2 = self.f.call_scalar(&x2);
@@ -625,12 +596,12 @@ where
 
             if f1.is_finite() && f2.is_finite() && f3.is_finite() && f2 < f1 && f2 < f3 {
                 // Found a potential bracket
-                if let Ok(result) = self.bracket_minimum(&x1, &x2, Some(20)) {
+                if let Ok(result) = self.bracket_minimum(x1, x2, Some(20)) {
                     // Check if this bracket is distinct from existing ones
-                    let dx_2 = &dx * 2.0;
+                    let dx_2 = dx * 2.0.into();
                     let is_distinct = brackets
                         .iter()
-                        .all(|existing: &BracketResult<T>| (&result.b - &existing.b).abs() > dx_2);
+                        .all(|existing: &BracketResult<T>| (result.b - existing.b).abs() > dx_2);
 
                     if is_distinct {
                         brackets.push(result);
@@ -645,7 +616,7 @@ where
     }
 
     /// Convenience function with default parameters
-    pub fn bracket(&mut self, a: &T, b: &T) -> Result<BracketResult<T>, MinimizerError> {
+    pub fn bracket(&mut self, a: T, b: T) -> Result<BracketResult<T>, MinimizerError> {
         self.bracket_minimum(a, b, None)
     }
 }
@@ -710,7 +681,7 @@ mod minimize_bracket_tests {
             let objective = SingleDimFn::new(func);
             let mut bracket = Bracket::new(objective);
 
-            let result = bracket.bracket(&0.0, &1.0).unwrap();
+            let result = bracket.bracket(0.0, 1.0).unwrap();
 
             assert!(result.is_valid());
             assert!(result.a < 2.0 && result.c > 2.0);
@@ -727,7 +698,7 @@ mod minimize_bracket_tests {
             let objective = SingleDimFn::new(func);
             let mut bracket = Bracket::new(objective);
 
-            let result = bracket.bracket(&5.0, &4.0).unwrap();
+            let result = bracket.bracket(5.0, 4.0).unwrap();
 
             assert!(result.is_valid());
             // The bracket should contain the minimum at x=2, but may not necessarily
@@ -748,7 +719,7 @@ mod minimize_bracket_tests {
             let objective = SingleDimFn::new(func);
             let mut bracket = Bracket::new(objective);
 
-            let result = bracket.bracket(&2.0, &2.5).unwrap();
+            let result = bracket.bracket(2.0, 2.5).unwrap();
 
             assert!(result.is_valid());
             assert!((result.b - 3.0).abs() < 1.0); // Minimum near x = 3
@@ -762,7 +733,7 @@ mod minimize_bracket_tests {
             let objective = SingleDimFn::new(func);
             let mut bracket = Bracket::new(objective);
 
-            let result = bracket.bracket_minimum_with_step(&0.0, &1.0, None).unwrap();
+            let result = bracket.bracket_minimum_with_step(0.0, 1.0, None).unwrap();
 
             assert!(result.is_valid());
             assert!(result.a < 5.0 && result.c > 5.0);
@@ -777,7 +748,7 @@ mod minimize_bracket_tests {
             let objective = SingleDimFn::new(func);
             let mut bracket = Bracket::new(objective);
 
-            let result = bracket.bracket_minimum_auto(&0.0, &1.0, None).unwrap();
+            let result = bracket.bracket_minimum_auto(0.0, 1.0, None).unwrap();
 
             assert!(result.is_valid());
             // The bracket should contain the minimum, but we'll be less strict about the exact bounds
@@ -813,7 +784,7 @@ mod minimize_bracket_tests {
             let mut bracket = Bracket::new(objective);
 
             let result = bracket
-                .bracket_minimum_adaptive(&0.0, Some(10.0), None)
+                .bracket_minimum_adaptive(0.0, Some(10.0), None)
                 .unwrap();
 
             assert!(result.is_valid());
@@ -829,7 +800,7 @@ mod minimize_bracket_tests {
             let objective = SingleDimFn::new(func);
             let mut bracket = Bracket::new(objective);
 
-            let result = bracket.bracket_minimum_auto(&0.0, &1.0, None);
+            let result = bracket.bracket_minimum_auto(0.0, 1.0, None);
 
             // Should find a bracket even for this complex function
             assert!(result.is_ok());
@@ -845,7 +816,7 @@ mod minimize_bracket_tests {
             let objective = SingleDimFn::new(func);
             let mut bracket = Bracket::new(objective);
 
-            let brackets = bracket.find_multiple_brackets(&0.0, &(4.0 * PI), 100, Some(3));
+            let brackets = bracket.find_multiple_brackets(0.0, 4.0 * PI, 100, Some(3));
 
             assert!(!brackets.is_empty());
             for bracket in &brackets {
@@ -867,7 +838,7 @@ mod minimize_bracket_tests {
             let mut bracket = Bracket::new(objective);
 
             let options = BracketOptions::default();
-            let result = bracket.bracket_minimum_robust(&5.0, options).unwrap();
+            let result = bracket.bracket_minimum_robust(5.0, options).unwrap();
 
             assert!(result.is_valid());
             // The function has minimum at x=0, so check that our bracket makes sense
@@ -902,7 +873,7 @@ mod minimize_bracket_tests {
             let objective = SingleDimFn::new(func);
             let mut bracket = Bracket::new(objective);
 
-            let result = bracket.bracket(&-1.0, &0.5);
+            let result = bracket.bracket(-1.0, 0.5);
 
             assert!(result.is_err());
         }
@@ -913,7 +884,7 @@ mod minimize_bracket_tests {
             let objective = SingleDimFn::new(func);
             let mut bracket = Bracket::new(objective);
 
-            let result = bracket.bracket(&0.0, &1.0).unwrap();
+            let result = bracket.bracket(0.0, 1.0).unwrap();
 
             assert!(result.width() > 0.0);
             assert!((result.best_point() - 1.5).abs() < 2.0);
@@ -931,7 +902,7 @@ mod minimize_bracket_tests {
             let starts = [(0.0, 1.0), (0.0, 3.0), (2.5, 4.0), (-1.0, 0.0)];
 
             for &(a, b) in &starts {
-                let result = bracket.bracket(&a, &b).unwrap();
+                let result = bracket.bracket(a, b).unwrap();
                 assert!(result.is_valid());
                 assert!(
                     result.a <= 2.0 && result.c >= 2.0,
@@ -956,7 +927,7 @@ mod minimize_bracket_tests {
             let objective = SingleDimFn::new(flat_minimum);
             let mut bracket = Bracket::new(objective);
 
-            let result = bracket.bracket_minimum_adaptive(&0.0, None, None).unwrap();
+            let result = bracket.bracket_minimum_adaptive(0.0, None, None).unwrap();
             assert!(result.is_valid());
             assert!((result.b - 1.0).abs() < 0.1);
 
@@ -965,7 +936,7 @@ mod minimize_bracket_tests {
             let objective = SingleDimFn::new(scale_sensitive);
             let mut bracket = Bracket::new(objective);
 
-            let result = bracket.bracket_minimum_adaptive(&1.0, None, None).unwrap();
+            let result = bracket.bracket_minimum_adaptive(1.0, None, None).unwrap();
             assert!(result.is_valid());
             assert!(result.a <= 0.001 && result.c >= 0.001);
         }
@@ -977,7 +948,7 @@ mod minimize_bracket_tests {
             let objective = SingleDimFn::new(multi_modal);
             let mut bracket = Bracket::new(objective);
 
-            let brackets = bracket.find_multiple_brackets(&0.0, &(4.0 * PI), 200, Some(5));
+            let brackets = bracket.find_multiple_brackets(0.0, 4.0 * PI, 200, Some(5));
 
             assert!(brackets.len() >= 2); // Should find multiple brackets
 
@@ -1411,7 +1382,7 @@ mod minimize_bracket_tests {
                 let func = quadratic(center, 1.0);
                 let mut bracket = Bracket::new(func);
 
-                let result = bracket.bracket(&(center - 2.0), &(center - 1.0)).unwrap();
+                let result = bracket.bracket(center - 2.0, center - 1.0).unwrap();
 
                 assert!(result.is_valid(), "Failed for center {}", center);
                 assert!(is_properly_ordered(&result));
@@ -1435,7 +1406,7 @@ mod minimize_bracket_tests {
                 let mut bracket = Bracket::new(func);
 
                 // Use adaptive bracketing for better success rate
-                let result = bracket.bracket_minimum_adaptive(&-1.0, Some(2.0), None);
+                let result = bracket.bracket_minimum_adaptive(-1.0, Some(2.0), None);
 
                 match result {
                     Ok(res) => {
@@ -1444,7 +1415,7 @@ mod minimize_bracket_tests {
                     }
                     Err(_) => {
                         // Try a different approach for difficult scales
-                        let result2 = bracket.bracket_minimum_auto(&0.0, &1.0, None);
+                        let result2 = bracket.bracket_minimum_auto(0.0, 1.0, None);
                         if let Ok(res) = result2 {
                             assert!(
                                 res.is_valid(),
@@ -1464,7 +1435,7 @@ mod minimize_bracket_tests {
             let func = quadratic(0.0, 1.0);
             let mut bracket = Bracket::new(func);
 
-            let result = bracket.bracket(&1.0, &1.0);
+            let result = bracket.bracket(1.0, 1.0);
             assert!(matches!(result, Err(MinimizerError::InvalidInitialPoints)));
         }
 
@@ -1473,13 +1444,13 @@ mod minimize_bracket_tests {
             let func = quadratic(0.0, 1.0);
             let mut bracket = Bracket::new(func);
 
-            let result = bracket.bracket(&f64::INFINITY, &1.0);
+            let result = bracket.bracket(f64::INFINITY, 1.0);
             assert!(matches!(result, Err(MinimizerError::InvalidInitialPoints)));
 
-            let result = bracket.bracket(&1.0, &f64::NEG_INFINITY);
+            let result = bracket.bracket(1.0, f64::NEG_INFINITY);
             assert!(matches!(result, Err(MinimizerError::InvalidInitialPoints)));
 
-            let result = bracket.bracket(&f64::NAN, &1.0);
+            let result = bracket.bracket(f64::NAN, 1.0);
             assert!(matches!(result, Err(MinimizerError::InvalidInitialPoints)));
         }
 
@@ -1489,8 +1460,8 @@ mod minimize_bracket_tests {
             let mut bracket = Bracket::new(func);
 
             // Test that b > a gets handled properly
-            let result1 = bracket.bracket(&0.0, &1.0).unwrap();
-            let result2 = bracket.bracket(&1.0, &0.0).unwrap();
+            let result1 = bracket.bracket(0.0, 1.0).unwrap();
+            let result2 = bracket.bracket(1.0, 0.0).unwrap();
 
             assert!(result1.is_valid());
             assert!(result2.is_valid());
@@ -1510,9 +1481,7 @@ mod minimize_bracket_tests {
             let step_sizes = [0.01, 0.1, 1.0, 10.0, 100.0];
 
             for &step in &step_sizes {
-                let result = bracket
-                    .bracket_minimum_with_step(&2.0, &step, None)
-                    .unwrap();
+                let result = bracket.bracket_minimum_with_step(2.0, step, None).unwrap();
                 assert!(result.is_valid(), "Failed for step size {}", step);
                 assert!(is_properly_ordered(&result));
                 assert!(result.a <= 0.0 && 0.0 <= result.c);
@@ -1524,9 +1493,7 @@ mod minimize_bracket_tests {
             let func = quadratic(-3.0, 1.0);
             let mut bracket = Bracket::new(func);
 
-            let result = bracket
-                .bracket_minimum_with_step(&0.0, &-1.0, None)
-                .unwrap();
+            let result = bracket.bracket_minimum_with_step(0.0, -1.0, None).unwrap();
             assert!(result.is_valid());
             assert!(is_properly_ordered(&result));
             assert!(result.a <= -3.0 && -3.0 <= result.c);
@@ -1537,7 +1504,7 @@ mod minimize_bracket_tests {
             let func = quadratic(0.0, 1.0);
             let mut bracket = Bracket::new(func);
 
-            let result = bracket.bracket_minimum_with_step(&0.0, &0.0, None);
+            let result = bracket.bracket_minimum_with_step(0.0, 0.0, None);
             assert!(matches!(result, Err(MinimizerError::InvalidStepSize)));
         }
 
@@ -1546,10 +1513,10 @@ mod minimize_bracket_tests {
             let func = quadratic(0.0, 1.0);
             let mut bracket = Bracket::new(func);
 
-            let result = bracket.bracket_minimum_with_step(&0.0, &f64::INFINITY, None);
+            let result = bracket.bracket_minimum_with_step(0.0, f64::INFINITY, None);
             assert!(matches!(result, Err(MinimizerError::InvalidStepSize)));
 
-            let result = bracket.bracket_minimum_with_step(&0.0, &f64::NAN, None);
+            let result = bracket.bracket_minimum_with_step(0.0, f64::NAN, None);
             assert!(matches!(result, Err(MinimizerError::InvalidStepSize)));
         }
     }
@@ -1562,7 +1529,7 @@ mod minimize_bracket_tests {
             let func = quadratic(5.0, 1.0);
             let mut bracket = Bracket::new(func);
 
-            let result = bracket.bracket_minimum_auto(&0.0, &1.0, None).unwrap();
+            let result = bracket.bracket_minimum_auto(0.0, 1.0, None).unwrap();
             assert!(result.is_valid());
             assert!(is_properly_ordered(&result));
             assert!(result.a <= 5.0 && 5.0 <= result.c);
@@ -1573,7 +1540,7 @@ mod minimize_bracket_tests {
             let func = quadratic(-5.0, 1.0);
             let mut bracket = Bracket::new(func);
 
-            let result = bracket.bracket_minimum_auto(&0.0, &1.0, None).unwrap();
+            let result = bracket.bracket_minimum_auto(0.0, 1.0, None).unwrap();
             assert!(result.is_valid());
             assert!(is_properly_ordered(&result));
             assert!(result.a <= -5.0 && -5.0 <= result.c);
@@ -1584,10 +1551,10 @@ mod minimize_bracket_tests {
             let func = quadratic(0.0, 1.0);
             let mut bracket = Bracket::new(func);
 
-            let result = bracket.bracket_minimum_auto(&0.0, &0.0, None);
+            let result = bracket.bracket_minimum_auto(0.0, 0.0, None);
             assert!(matches!(result, Err(MinimizerError::InvalidStepSize)));
 
-            let result = bracket.bracket_minimum_auto(&0.0, &-1.0, None);
+            let result = bracket.bracket_minimum_auto(0.0, -1.0, None);
             assert!(matches!(result, Err(MinimizerError::InvalidStepSize)));
         }
     }
@@ -1603,7 +1570,7 @@ mod minimize_bracket_tests {
             let mut bracket = Bracket::new(objective);
 
             let result = bracket
-                .bracket_minimum_adaptive(&1.0, Some(10.0), None)
+                .bracket_minimum_adaptive(1.0, Some(10.0), None)
                 .unwrap();
             assert!(result.is_valid());
             assert!(result.a <= 0.001 && 0.001 <= result.c);
@@ -1617,7 +1584,7 @@ mod minimize_bracket_tests {
             let mut bracket = Bracket::new(objective);
 
             let result = bracket
-                .bracket_minimum_adaptive(&0.0, Some(1.0), None)
+                .bracket_minimum_adaptive(0.0, Some(1.0), None)
                 .unwrap();
             assert!(result.is_valid());
             assert!(result.a <= 1000.0 && 1000.0 <= result.c);
@@ -1631,9 +1598,7 @@ mod minimize_bracket_tests {
             let start_points = [-100.0, -10.0, -1.0, 0.0, 1.0, 10.0, 100.0];
 
             for &start in &start_points {
-                let result = bracket
-                    .bracket_minimum_adaptive(&start, None, None)
-                    .unwrap();
+                let result = bracket.bracket_minimum_adaptive(start, None, None).unwrap();
                 assert!(result.is_valid(), "Failed for start point {}", start);
                 assert!(is_properly_ordered(&result));
                 assert!(result.a <= 0.0 && 0.0 <= result.c);
@@ -1650,7 +1615,7 @@ mod minimize_bracket_tests {
             let mut bracket = Bracket::new(func);
 
             let options = BracketOptions::default();
-            let result = bracket.bracket_minimum_robust(&5.0, options).unwrap();
+            let result = bracket.bracket_minimum_robust(5.0, options).unwrap();
 
             assert!(result.is_valid());
             assert!(is_properly_ordered(&result));
@@ -1668,7 +1633,7 @@ mod minimize_bracket_tests {
                 max_expansion_factor: 100.0,
             };
 
-            let result = bracket.bracket_minimum_robust(&2.0, options).unwrap();
+            let result = bracket.bracket_minimum_robust(2.0, options).unwrap();
             assert!(result.is_valid());
             assert!(result.iterations <= 50);
         }
@@ -1689,7 +1654,7 @@ mod minimize_bracket_tests {
             let mut bracket = Bracket::new(objective);
 
             let options = BracketOptions::default();
-            let result = bracket.bracket_minimum_robust(&5.0, options).unwrap();
+            let result = bracket.bracket_minimum_robust(5.0, options).unwrap();
 
             assert!(result.is_valid());
             assert!(result.a <= 0.1 && result.c >= -0.1);
@@ -1705,7 +1670,7 @@ mod minimize_bracket_tests {
             let objective = SingleDimFn::new(func);
             let mut bracket = Bracket::new(objective);
 
-            let result = bracket.bracket(&-1.0, &0.5);
+            let result = bracket.bracket(-1.0, 0.5);
             assert!(matches!(
                 result,
                 Err(MinimizerError::FunctionEvaluationError)
@@ -1718,7 +1683,7 @@ mod minimize_bracket_tests {
             let objective = SingleDimFn::new(func);
             let mut bracket = Bracket::new(objective);
 
-            let result = bracket.bracket(&-1.0, &1.0);
+            let result = bracket.bracket(-1.0, 1.0);
             // The function returns infinity at x=0, which might be encountered during bracketing
             // The exact behavior depends on whether the algorithm hits x=0 exactly
             match result {
@@ -1747,7 +1712,7 @@ mod minimize_bracket_tests {
             let mut bracket = Bracket::new(objective);
 
             // Start far from minimum with very few iterations
-            let result = bracket.bracket_minimum(&0.0, &1.0, Some(3));
+            let result = bracket.bracket_minimum(0.0, 1.0, Some(3));
 
             // With such a pathological function and very few iterations,
             // we should get some kind of failure, but the exact type may vary
@@ -1771,7 +1736,7 @@ mod minimize_bracket_tests {
             let mut bracket = Bracket::new(objective);
 
             // Start very far from minimum to trigger overflow
-            let result = bracket.bracket(&1e10, &(1e10 + 1.0));
+            let result = bracket.bracket(1e10, 1e10 + 1.0);
             // Should either succeed or fail gracefully, not panic
             match result {
                 Ok(res) => assert!(res.is_valid()),
@@ -1791,7 +1756,7 @@ mod minimize_bracket_tests {
             let objective = SingleDimFn::new(func);
             let mut bracket = Bracket::new(objective);
 
-            let result = bracket.bracket(&0.0, &1.0);
+            let result = bracket.bracket(0.0, 1.0);
 
             // For a strongly monotonic function, we expect failure, but the exact
             // error type can vary depending on how the algorithm fails
@@ -1815,7 +1780,7 @@ mod minimize_bracket_tests {
             let objective = SingleDimFn::new(func);
             let mut bracket = Bracket::new(objective);
 
-            let result = bracket.bracket_minimum_adaptive(&1.0, Some(1.0), Some(10));
+            let result = bracket.bracket_minimum_adaptive(1.0, Some(1.0), Some(10));
             // Should either succeed or fail gracefully
             match result {
                 Ok(res) => assert!(res.is_valid()),
@@ -1835,12 +1800,12 @@ mod minimize_bracket_tests {
             let mut bracket = Bracket::new(objective);
 
             // Try multiple approaches since polynomial functions can be tricky
-            let result = bracket.bracket_minimum_adaptive(&0.0, Some(1.0), Some(200));
+            let result = bracket.bracket_minimum_adaptive(0.0, Some(1.0), Some(200));
             match result {
                 Ok(res) => assert!(res.is_valid()),
                 Err(_) => {
                     // Try different starting point
-                    let result2 = bracket.bracket_minimum_auto(&2.0, &0.5, Some(200));
+                    let result2 = bracket.bracket_minimum_auto(2.0, 0.5, Some(200));
                     if let Ok(res) = result2 {
                         assert!(res.is_valid());
                     }
@@ -1853,12 +1818,12 @@ mod minimize_bracket_tests {
             let mut bracket = Bracket::new(quartic);
 
             // Try to bracket near one of the minima (±1)
-            let result = bracket.bracket_minimum_auto(&0.5, &0.1, Some(200));
+            let result = bracket.bracket_minimum_auto(0.5, 0.1, Some(200));
             match result {
                 Ok(res) => assert!(res.is_valid()),
                 Err(_) => {
                     // Try the other minimum
-                    let result2 = bracket.bracket_minimum_auto(&-0.5, &0.1, Some(200));
+                    let result2 = bracket.bracket_minimum_auto(-0.5, 0.1, Some(200));
                     match result2 {
                         Ok(res) => assert!(res.is_valid()),
                         Err(_) => {
@@ -1877,7 +1842,7 @@ mod minimize_bracket_tests {
             let objective = SingleDimFn::new(sinx_plus_linear);
             let mut bracket = Bracket::new(objective);
 
-            let result = bracket.bracket_minimum_auto(&-PI, &0.5, None).unwrap();
+            let result = bracket.bracket_minimum_auto(-PI, 0.5, None).unwrap();
             assert!(result.is_valid());
 
             // exp(-x²) has maximum at 0, so -exp(-x²) has minimum
@@ -1885,7 +1850,7 @@ mod minimize_bracket_tests {
             let objective = SingleDimFn::new(neg_gaussian);
             let mut bracket = Bracket::new(objective);
 
-            let result = bracket.bracket_minimum_auto(&1.0, &0.5, None).unwrap();
+            let result = bracket.bracket_minimum_auto(1.0, 0.5, None).unwrap();
             assert!(result.is_valid());
             assert!((result.b).abs() < 1.0); // Should be near x = 0
         }
@@ -1898,7 +1863,7 @@ mod minimize_bracket_tests {
             let mut bracket = Bracket::new(objective);
 
             // Try adaptive bracketing for this tricky function
-            let result = bracket.bracket_minimum_adaptive(&1.0, Some(0.5), None);
+            let result = bracket.bracket_minimum_adaptive(1.0, Some(0.5), None);
             match result {
                 Ok(res) => {
                     assert!(res.is_valid());
@@ -1907,7 +1872,7 @@ mod minimize_bracket_tests {
                 Err(_) => {
                     // Absolute value function is challenging to bracket automatically
                     // Try starting closer to the minimum
-                    let result2 = bracket.bracket_minimum_auto(&0.1, &0.05, None);
+                    let result2 = bracket.bracket_minimum_auto(0.1, 0.05, None);
                     if let Ok(res) = result2 {
                         assert!(res.is_valid());
                         assert!(res.a <= 0.0 && 0.0 <= res.c);
@@ -1926,7 +1891,7 @@ mod minimize_bracket_tests {
             let objective = SingleDimFn::new(piecewise);
             let mut bracket = Bracket::new(objective);
 
-            let result = bracket.bracket_minimum_adaptive(&2.0, Some(0.5), None);
+            let result = bracket.bracket_minimum_adaptive(2.0, Some(0.5), None);
             match result {
                 Ok(res) => {
                     assert!(res.is_valid());
@@ -1948,7 +1913,7 @@ mod minimize_bracket_tests {
             let func = quadratic(0.0, 1.0);
             let mut bracket = Bracket::new(func);
 
-            let brackets = bracket.find_multiple_brackets(&-5.0, &5.0, 50, Some(5));
+            let brackets = bracket.find_multiple_brackets(-5.0, 5.0, 50, Some(5));
 
             // Multiple bracket finding is a complex algorithm that looks for local minima patterns
             // For a simple quadratic, it might or might not find brackets depending on the
@@ -1972,7 +1937,7 @@ mod minimize_bracket_tests {
             let objective = SingleDimFn::new(func);
             let mut bracket = Bracket::new(objective);
 
-            let brackets = bracket.find_multiple_brackets(&(-2.0 * PI), &(2.0 * PI), 200, Some(10));
+            let brackets = bracket.find_multiple_brackets(-2.0 * PI, 2.0 * PI, 200, Some(10));
 
             assert!(brackets.len() >= 1);
 
@@ -1996,14 +1961,14 @@ mod minimize_bracket_tests {
             let mut bracket = Bracket::new(func);
 
             // Test with invalid inputs
-            let brackets = bracket.find_multiple_brackets(&5.0, &0.0, 50, Some(5)); // start > end
+            let brackets = bracket.find_multiple_brackets(5.0, 0.0, 50, Some(5)); // start > end
             assert!(brackets.is_empty());
 
-            let brackets = bracket.find_multiple_brackets(&0.0, &5.0, 2, Some(5)); // too few points
+            let brackets = bracket.find_multiple_brackets(0.0, 5.0, 2, Some(5)); // too few points
             assert!(brackets.is_empty());
 
             // Test with very few points
-            let brackets = bracket.find_multiple_brackets(&-1.0, &1.0, 5, Some(5));
+            let brackets = bracket.find_multiple_brackets(-1.0, 1.0, 5, Some(5));
             // May or may not find brackets with so few points, but shouldn't crash
             for bracket in &brackets {
                 assert!(bracket.is_valid());
@@ -2022,7 +1987,7 @@ mod minimize_bracket_tests {
             let objective = SingleDimFn::new(func);
             let mut bracket = Bracket::new(objective);
 
-            let brackets = bracket.find_multiple_brackets(&0.0, &6.0, 100, Some(10));
+            let brackets = bracket.find_multiple_brackets(0.0, 6.0, 100, Some(10));
 
             // Should find brackets and they should be sorted by function value
             if brackets.len() > 1 {
@@ -2046,7 +2011,7 @@ mod minimize_bracket_tests {
             let func = quadratic(0.0, 1.0);
             let mut bracket = Bracket::new(func);
 
-            let result = bracket.bracket(&0.0, &1.0).unwrap();
+            let result = bracket.bracket(0.0, 1.0).unwrap();
 
             // Should have reasonable number of function evaluations
             assert!(result.function_evaluations > 2); // At least initial + one expansion
@@ -2059,7 +2024,7 @@ mod minimize_bracket_tests {
             let func = quadratic(0.0, 1.0);
             let mut bracket = Bracket::new(func);
 
-            let result = bracket.bracket(&0.0, &1.0).unwrap();
+            let result = bracket.bracket(0.0, 1.0).unwrap();
 
             assert!(result.iterations <= 100); // Default max iterations
         }
@@ -2069,7 +2034,7 @@ mod minimize_bracket_tests {
             let func = quadratic(10.0, 1.0); // Minimum far from start
             let mut bracket = Bracket::new(func);
 
-            let result = bracket.bracket(&0.0, &1.0).unwrap();
+            let result = bracket.bracket(0.0, 1.0).unwrap();
 
             assert!(result.expansion_ratio > 1.0); // Should have expanded
             assert!(result.expansion_ratio.is_finite());
@@ -2084,7 +2049,7 @@ mod minimize_bracket_tests {
             let func = quadratic(0.0, 1.0);
             let mut bracket = Bracket::new(func);
 
-            let result = bracket.bracket(&-2.0, &-1.0).unwrap();
+            let result = bracket.bracket(-2.0, -1.0).unwrap();
 
             assert!(result.bracket_width > 0.0);
             assert!((result.bracket_width - result.width()).abs() < 1e-10);
@@ -2099,7 +2064,7 @@ mod minimize_bracket_tests {
             let mut bracket = Bracket::new(objective);
 
             let result = bracket
-                .bracket_minimum_adaptive(&0.0, Some(0.1), None)
+                .bracket_minimum_adaptive(0.0, Some(0.1), None)
                 .unwrap();
 
             assert!(result.is_valid());
@@ -2118,7 +2083,7 @@ mod minimize_bracket_tests {
             let mut bracket = Bracket::new(func);
 
             // Try to get a successful bracket first
-            let result = bracket.bracket_minimum_adaptive(&1.0, Some(1.0), None);
+            let result = bracket.bracket_minimum_adaptive(1.0, Some(1.0), None);
 
             match result {
                 Ok(_) => {
@@ -2170,7 +2135,7 @@ mod minimize_bracket_tests {
             let objective = SingleDimFn::new(func);
             let mut bracket = Bracket::new(objective);
 
-            let result = bracket.bracket_minimum_adaptive(&1.0, Some(1.0), None);
+            let result = bracket.bracket_minimum_adaptive(1.0, Some(1.0), None);
 
             match result {
                 Ok(res) => {
@@ -2196,7 +2161,7 @@ mod minimize_bracket_tests {
             let objective = SingleDimFn::new(func);
             let mut bracket = Bracket::new(objective);
 
-            let result = bracket.bracket_minimum_auto(&1.0, &0.5, None).unwrap();
+            let result = bracket.bracket_minimum_auto(1.0, 0.5, None).unwrap();
             assert!(result.is_valid());
         }
 
@@ -2213,7 +2178,7 @@ mod minimize_bracket_tests {
             let objective = SingleDimFn::new(func);
             let mut bracket = Bracket::new(objective);
 
-            let result = bracket.bracket_minimum_auto(&3.0, &1.0, None).unwrap();
+            let result = bracket.bracket_minimum_auto(3.0, 1.0, None).unwrap();
             assert!(result.is_valid());
             assert!(result.a <= 1.0 && result.c >= -1.0);
         }
@@ -2225,7 +2190,7 @@ mod minimize_bracket_tests {
             let objective = SingleDimFn::new(func);
             let mut bracket = Bracket::new(objective);
 
-            let result = bracket.bracket_minimum_adaptive(&1.0, Some(0.1), None);
+            let result = bracket.bracket_minimum_adaptive(1.0, Some(0.1), None);
 
             match result {
                 Ok(res) => assert!(res.is_valid()),
@@ -2241,7 +2206,7 @@ mod minimize_bracket_tests {
             let mut bracket = Bracket::new(objective);
 
             let result = bracket
-                .bracket_minimum_robust(&50.0, BracketOptions::default())
+                .bracket_minimum_robust(50.0, BracketOptions::default())
                 .unwrap();
             assert!(result.is_valid());
         }
@@ -2255,7 +2220,7 @@ mod minimize_bracket_tests {
             let objective = SingleDimFn::new(func);
             let mut bracket = Bracket::new(objective);
 
-            let result = bracket.bracket_minimum_auto(&1.0, &0.5, None).unwrap();
+            let result = bracket.bracket_minimum_auto(1.0, 0.5, None).unwrap();
             assert!(result.is_valid());
             assert!(result.a <= 0.0 && 0.0 <= result.c);
         }
@@ -2271,7 +2236,7 @@ mod minimize_bracket_tests {
             let mut bracket = Bracket::new(objective);
 
             let result = bracket
-                .bracket_minimum_adaptive(&0.0, Some(1e3), None)
+                .bracket_minimum_adaptive(0.0, Some(1e3), None)
                 .unwrap();
             assert!(result.is_valid());
             assert!(result.a <= 1e6 && 1e6 <= result.c);
@@ -2284,7 +2249,7 @@ mod minimize_bracket_tests {
             let mut bracket = Bracket::new(objective);
 
             let result = bracket
-                .bracket_minimum_adaptive(&0.0, Some(1e-3), None)
+                .bracket_minimum_adaptive(0.0, Some(1e-3), None)
                 .unwrap();
             assert!(result.is_valid());
             assert!(result.a <= 1e-6 && 1e-6 <= result.c);
@@ -2297,7 +2262,7 @@ mod minimize_bracket_tests {
             let mut bracket = Bracket::new(objective);
 
             let result = bracket
-                .bracket_minimum_adaptive(&0.0, Some(1e3), None)
+                .bracket_minimum_adaptive(0.0, Some(1e3), None)
                 .unwrap();
             assert!(result.is_valid());
             assert!(result.a <= -1e6 && -1e6 <= result.c);
@@ -2309,7 +2274,7 @@ mod minimize_bracket_tests {
             let objective = SingleDimFn::new(func);
             let mut bracket = Bracket::new(objective);
 
-            let result = bracket.bracket_minimum_auto(&1e-3, &1e-6, None).unwrap();
+            let result = bracket.bracket_minimum_auto(1e-3, 1e-6, None).unwrap();
             assert!(result.is_valid());
             assert!(result.a <= 0.0 && 0.0 <= result.c);
         }
@@ -2328,7 +2293,7 @@ mod minimize_bracket_tests {
             let objective = SingleDimFn::new(func);
             let mut bracket = Bracket::new(objective);
 
-            let result = bracket.bracket_minimum(&100.0, &101.0, Some(1000)).unwrap();
+            let result = bracket.bracket_minimum(100.0, 101.0, Some(1000)).unwrap();
             assert!(result.is_valid());
             assert!(result.iterations <= 1000);
         }
@@ -2338,7 +2303,7 @@ mod minimize_bracket_tests {
             let func = quadratic(0.0, 1.0);
             let mut bracket = Bracket::new(func);
 
-            let result = bracket.bracket_minimum_adaptive(&-1.0, Some(2.0), None);
+            let result = bracket.bracket_minimum_adaptive(-1.0, Some(2.0), None);
 
             match result {
                 Ok(res) => {
@@ -2348,7 +2313,7 @@ mod minimize_bracket_tests {
                 }
                 Err(_) => {
                     // If basic adaptive fails, try a simpler approach
-                    let result2 = bracket.bracket_minimum_auto(&0.0, &1.0, None);
+                    let result2 = bracket.bracket_minimum_auto(0.0, 1.0, None);
                     if let Ok(res) = result2 {
                         assert!(res.function_evaluations < 200);
                         assert!(res.function_evaluations >= 3);
@@ -2364,13 +2329,11 @@ mod minimize_bracket_tests {
             let mut bracket = Bracket::new(func);
 
             // Very small step
-            let result = bracket
-                .bracket_minimum_with_step(&0.0, &1e-10, None)
-                .unwrap();
+            let result = bracket.bracket_minimum_with_step(0.0, 1e-10, None).unwrap();
             assert!(result.is_valid());
 
             // Very large step (within reason)
-            let result = bracket.bracket_minimum_with_step(&0.0, &1e3, None).unwrap();
+            let result = bracket.bracket_minimum_with_step(0.0, 1e3, None).unwrap();
             assert!(result.is_valid());
         }
     }
@@ -2391,7 +2354,7 @@ mod minimize_bracket_tests {
             let objective = SingleDimFn::new(func);
             let mut bracket = Bracket::new(objective);
 
-            let result = bracket.bracket(&0.0, &1.0).unwrap();
+            let result = bracket.bracket(0.0, 1.0).unwrap();
             assert!(result.is_valid());
             assert!(result.a <= 2.0 && 2.0 <= result.c);
 
@@ -2412,7 +2375,7 @@ mod minimize_bracket_tests {
             let objective = SingleDimFn::new(func);
             let mut bracket = Bracket::new(objective);
 
-            let result = bracket.bracket(&0.0, &1.0);
+            let result = bracket.bracket(0.0, 1.0);
 
             match result {
                 Ok(res) => assert!(res.is_valid()),
@@ -2437,7 +2400,7 @@ mod minimize_bracket_tests {
             ];
 
             for &(a, b) in &configs {
-                let result = bracket.bracket(&a, &b);
+                let result = bracket.bracket(a, b);
 
                 match result {
                     Ok(res) => {
@@ -2454,7 +2417,7 @@ mod minimize_bracket_tests {
                     Err(_) => {
                         // Some configurations might fail, try adaptive approach
                         let result2 =
-                            bracket.bracket_minimum_adaptive(&a, Some((b - a).abs()), None);
+                            bracket.bracket_minimum_adaptive(a, Some((b - a).abs()), None);
                         match result2 {
                             Ok(res) => {
                                 assert!(
@@ -2488,7 +2451,7 @@ mod minimize_bracket_tests {
             let mut bracket = Bracket::new(objective);
 
             // Step 1: Find bracket
-            let bracket_result = bracket.bracket_minimum_auto(&0.0, &1.0, None).unwrap();
+            let bracket_result = bracket.bracket_minimum_auto(0.0, 1.0, None).unwrap();
             assert!(bracket_result.is_valid());
 
             // Step 2: Verify bracket contains expected minimum
@@ -2506,12 +2469,12 @@ mod minimize_bracket_tests {
             let objective = SingleDimFn::new(func);
             let mut bracket = Bracket::new(objective);
 
-            let result1 = bracket.bracket_minimum_auto(&0.0, &1.0, None).unwrap();
+            let result1 = bracket.bracket_minimum_auto(0.0, 1.0, None).unwrap();
             let result2 = bracket
-                .bracket_minimum_adaptive(&0.0, Some(1.0), None)
+                .bracket_minimum_adaptive(0.0, Some(1.0), None)
                 .unwrap();
             let result3 = bracket
-                .bracket_minimum_robust(&0.0, BracketOptions::default())
+                .bracket_minimum_robust(0.0, BracketOptions::default())
                 .unwrap();
 
             // All should be valid
@@ -2547,7 +2510,7 @@ mod minimize_bracket_tests {
                     let mut bracket = Bracket::new(func);
 
                     let result = bracket
-                        .bracket_minimum_adaptive(&(center + 5.0), Some(1.0), None)
+                        .bracket_minimum_adaptive(center + 5.0, Some(1.0), None)
                         .unwrap();
 
                     // Properties that should always hold
@@ -2621,7 +2584,7 @@ mod minimize_bracket_tests {
             for (func, name) in monotonic_funcs.into_iter() {
                 let mut bracket = Bracket::new(func);
 
-                let result = bracket.bracket(&0.0, &1.0);
+                let result = bracket.bracket(0.0, 1.0);
 
                 match result {
                     Ok(res) => {

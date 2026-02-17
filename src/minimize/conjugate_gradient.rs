@@ -3,17 +3,16 @@
 use crate::{
     error::MinimizerError,
     minimize::{LineSearchResult, ObjGradFn, WolfeParams},
-    num::RFFloat,
+    num::RealScalar,
     pts::{Points1, Pts},
 };
-use ndarray::prelude::*;
 use std::fmt;
 
 /// Result of conjugate gradient optimization
 #[derive(Debug, Clone)]
 pub struct ConjGradResult<T>
 where
-    T: RFFloat,
+    T: RealScalar,
 {
     xmin: Points1<T>,
     fmin: T,
@@ -30,18 +29,18 @@ where
 
 impl<T> ConjGradResult<T>
 where
-    T: RFFloat,
+    T: RealScalar,
 {
     pub fn xmin(&self) -> Points1<T> {
         self.xmin.clone()
     }
 
     pub fn fmin(&self) -> T {
-        self.fmin.clone()
+        self.fmin
     }
 
     pub fn gradient_norm(&self) -> T {
-        self.gradient_norm.clone()
+        self.gradient_norm
     }
 
     pub fn iters(&self) -> usize {
@@ -61,11 +60,11 @@ where
     }
 
     pub fn history(&self) -> Points1<T> {
-        self.convergence_history.clone()
+        self.convergence_history
     }
 
     pub fn grad_norm_history(&self) -> Points1<T> {
-        self.gradient_norm_history.clone()
+        self.gradient_norm_history
     }
 
     pub fn restarts(&self) -> usize {
@@ -109,12 +108,12 @@ pub struct ConjGrad<T> {
 
 impl<T> Clone for ConjGrad<T>
 where
-    T: Clone,
+    T: RealScalar,
 {
     fn clone(&self) -> Self {
         Self {
             xmin: self.xmin.clone(),
-            fmin: self.fmin.clone(),
+            fmin: self.fmin,
             f: dyn_clone::clone_box(&*self.f),
             iters: self.iters,
             converged: self.converged,
@@ -124,27 +123,7 @@ where
 
 impl<T> ConjGrad<T>
 where
-    T: RFFloat,
-    for<'a, 'b> &'a T: std::ops::Add<&'b T, Output = T>,
-    for<'a, 'b> &'a T: std::ops::Sub<&'b T, Output = T>,
-    for<'a, 'b> &'a T: std::ops::Mul<&'b T, Output = T>,
-    for<'a, 'b> &'a T: std::ops::Div<&'b T, Output = T>,
-    for<'a> &'a T: std::ops::Add<T, Output = T>,
-    for<'a> &'a T: std::ops::Sub<T, Output = T>,
-    for<'a> &'a T: std::ops::Mul<T, Output = T>,
-    for<'a> &'a T: std::ops::Div<T, Output = T>,
-    for<'a> &'a T: std::ops::Add<f64, Output = T>,
-    for<'a> &'a T: std::ops::Sub<f64, Output = T>,
-    for<'a> &'a T: std::ops::Mul<f64, Output = T>,
-    for<'a> &'a T: std::ops::Div<f64, Output = T>,
-    f64: std::ops::Add<T, Output = T>,
-    f64: std::ops::Sub<T, Output = T>,
-    f64: std::ops::Mul<T, Output = T>,
-    f64: std::ops::Div<T, Output = T>,
-    for<'a> f64: std::ops::Add<&'a T, Output = T>,
-    for<'a> f64: std::ops::Sub<&'a T, Output = T>,
-    for<'a> f64: std::ops::Mul<&'a T, Output = T>,
-    for<'a> f64: std::ops::Div<&'a T, Output = T>,
+    T: RealScalar,
 {
     pub fn new<F>(f: F) -> Self
     where
@@ -152,7 +131,7 @@ where
     {
         let boxed = Box::new(f);
         ConjGrad {
-            xmin: array![].into(),
+            xmin: points![],
             fmin: T::zero(),
             f: boxed,
             iters: 0,
@@ -162,7 +141,7 @@ where
 
     pub fn new_boxed(f: Box<dyn ObjGradFn<T>>) -> Self {
         ConjGrad {
-            xmin: array![].into(),
+            xmin: points![],
             fmin: T::zero(),
             f: f,
             iters: 0,
@@ -175,9 +154,9 @@ where
         &mut self,
         x: &Points1<T>,
         direction: &Points1<T>,
-        f_current: &T,
+        f_current: T,
         grad_current: &Points1<T>,
-        initial_step: &T,
+        initial_step: T,
         wolfe_params: &WolfeParams<T>,
         max_evaluations: usize,
     ) -> Result<LineSearchResult<T>, MinimizerError> {
@@ -185,14 +164,14 @@ where
         let directional_derivative = grad_current
             .iter()
             .zip(direction.iter())
-            .map(|(g, d)| g * d)
+            .map(|(&g, &d)| g * d)
             .sum::<T>();
 
         if directional_derivative >= T::zero() {
             return Err(MinimizerError::LinearSearchFailed);
         }
 
-        let mut alpha = initial_step.clone();
+        let mut alpha = initial_step;
         let mut evaluations = 0;
 
         let max_zoom_iterations = 50;
@@ -200,7 +179,7 @@ where
 
         // Initial bracketing phase
         let mut alpha_prev = T::zero();
-        let mut f_prev = f_current.clone();
+        let mut f_prev = f_current;
 
         loop {
             if evaluations >= max_evaluations || zoom_iterations >= max_zoom_iterations {
@@ -211,7 +190,7 @@ where
             let x_new: Points1<T> = x
                 .iter()
                 .zip(direction.iter())
-                .map(|(xi, di)| xi + &alpha * di)
+                .map(|(&xi, &di)| xi + alpha * di)
                 .collect();
 
             let f_new = self.f.call(&x_new);
@@ -222,7 +201,7 @@ where
             }
 
             // Check Armijo condition
-            if f_new > f_current + &wolfe_params.c1 * &alpha * &directional_derivative
+            if f_new > f_current + wolfe_params.c1 * alpha * directional_derivative
                 || (evaluations > 1 && f_new >= f_prev)
             {
                 return self
@@ -231,8 +210,8 @@ where
                         direction,
                         f_current,
                         grad_current,
-                        &alpha_prev,
-                        &alpha,
+                        alpha_prev,
+                        alpha,
                         wolfe_params,
                         max_evaluations - evaluations,
                     )
@@ -253,11 +232,12 @@ where
             let new_directional_derivative = grad_new
                 .iter()
                 .zip(direction.iter())
-                .map(|(g, d)| g * d)
+                .map(|(&g, &d)| g * d)
                 .sum::<T>();
 
             // Check curvature condition
-            if new_directional_derivative.abs() <= -1.0 * &wolfe_params.c2 * &directional_derivative
+            if new_directional_derivative.abs()
+                <= (-1.0).into() * wolfe_params.c2 * directional_derivative
             {
                 return Ok(LineSearchResult {
                     alpha,
@@ -274,8 +254,8 @@ where
                         direction,
                         f_current,
                         grad_current,
-                        &alpha,
-                        &alpha_prev,
+                        alpha,
+                        alpha_prev,
                         wolfe_params,
                         max_evaluations - evaluations,
                     )
@@ -286,12 +266,12 @@ where
             }
 
             // Expand step size
-            alpha_prev = alpha.clone();
-            f_prev = f_new.clone();
-            alpha *= T::from_f64(2.0);
+            alpha_prev = alpha;
+            f_prev = f_new;
+            alpha *= (2.0).into();
             zoom_iterations += 1;
 
-            if alpha > T::from_f64(1e6) {
+            if alpha > (1e6).into() {
                 break;
             }
         }
@@ -310,19 +290,19 @@ where
         &mut self,
         x: &Points1<T>,
         direction: &Points1<T>,
-        f_current: &T,
+        f_current: T,
         grad_current: &Points1<T>,
-        al_low: &T,
-        al_high: &T,
+        al_low: T,
+        al_high: T,
         wolfe_params: &WolfeParams<T>,
         max_evaluations: usize,
     ) -> Result<LineSearchResult<T>, MinimizerError> {
-        let mut alpha_low = al_low.clone();
-        let mut alpha_high = al_high.clone();
+        let mut alpha_low = al_low;
+        let mut alpha_high = al_high;
         let directional_derivative = grad_current
             .iter()
             .zip(direction.iter())
-            .map(|(g, d)| g * d)
+            .map(|(&g, &d)| g * d)
             .sum::<T>();
 
         let mut evaluations = 0;
@@ -335,28 +315,28 @@ where
 
             // Interpolate to find new alpha
             let alpha = if alpha_high.is_finite() {
-                (&alpha_low + &alpha_high) / 2.0
+                (alpha_low + alpha_high) / 2.0.into()
             } else {
-                &alpha_low * 2.0
+                alpha_low * 2.0.into()
             };
 
             let x_new: Points1<T> = x
                 .iter()
                 .zip(direction.iter())
-                .map(|(xi, di)| xi + &alpha * di)
+                .map(|(&xi, &di)| xi + alpha * di)
                 .collect();
 
             let f_new = self.f.call(&x_new);
             evaluations += 1;
 
             if !f_new.is_finite() {
-                alpha_high = alpha.clone();
+                alpha_high = alpha;
                 continue;
             }
 
             // Check Armijo condition
-            if f_new > f_current + &wolfe_params.c1 * &alpha * &directional_derivative {
-                alpha_high = alpha.clone();
+            if f_new > f_current + wolfe_params.c1 * alpha * directional_derivative {
+                alpha_high = alpha;
                 continue;
             }
 
@@ -366,11 +346,12 @@ where
             let new_directional_derivative = grad_new
                 .iter()
                 .zip(direction.iter())
-                .map(|(g, d)| g * d)
+                .map(|(&g, &d)| g * d)
                 .sum::<T>();
 
             // Check curvature condition
-            if new_directional_derivative.abs() <= -1.0 * &wolfe_params.c2 * &directional_derivative
+            if new_directional_derivative.abs()
+                <= (-1.0).into() * wolfe_params.c2 * directional_derivative
             {
                 return Ok(LineSearchResult {
                     alpha,
@@ -380,19 +361,19 @@ where
                 });
             }
 
-            if &new_directional_derivative * (&alpha_high - &alpha_low) >= T::zero() {
-                alpha_high = alpha_low.clone();
+            if new_directional_derivative * (alpha_high - alpha_low) >= T::zero() {
+                alpha_high = alpha_low;
             }
 
-            alpha_low = alpha.clone();
+            alpha_low = alpha;
         }
 
         // Return best alpha found
-        let alpha = alpha_low.clone();
+        let alpha = alpha_low;
         let x_new: Points1<T> = x
             .iter()
             .zip(direction.iter())
-            .map(|(xi, di)| xi + &alpha * di)
+            .map(|(&xi, &di)| xi + alpha * di)
             .collect();
 
         Ok(LineSearchResult {
@@ -457,14 +438,14 @@ where
         let mut fn_evals = 1;
         let mut g_evals = 1;
         self.iters = 0;
-        let mut convergence_history = vec![f_current.clone()];
+        let mut convergence_history = vec![f_current];
         let mut gradient_norm_history = Vec::new();
         let mut restart_count = 0;
 
         // Initial search direction is negative gradient
-        let mut search_direction: Points1<T> = grad_current.iter().map(|g| -g.clone()).collect();
-        let mut grad_norm = grad_current.iter().map(|g| g * g).sum::<T>().sqrt();
-        gradient_norm_history.push(grad_norm.clone());
+        let mut search_direction: Points1<T> = grad_current.iter().map(|&g| -g).collect();
+        let mut grad_norm = grad_current.iter().map(|&g| g * g).sum::<T>().sqrt();
+        gradient_norm_history.push(grad_norm);
 
         while self.iters < max_iter && grad_norm > tol {
             self.iters += 1;
@@ -473,9 +454,9 @@ where
             let line_result = self.wolfe_line_search(
                 &x,
                 &search_direction,
-                &f_current,
+                f_current,
                 &grad_current,
-                &T::one(), // Initial step size
+                T::one(), // Initial step size
                 &wolfe_params,
                 100,
             )?;
@@ -485,11 +466,11 @@ where
 
             // Update position
             for i in 0..n {
-                x[i] += &line_result.alpha * &search_direction[i];
+                x[i] += line_result.alpha * search_direction[i];
             }
 
-            f_current = line_result.f_new.clone();
-            let grad_old = grad_current.clone();
+            f_current = line_result.f_new;
+            let grad_old = grad_current;
             grad_current = self.f.grad(&x);
             g_evals += 1;
 
@@ -497,9 +478,9 @@ where
                 return Err(MinimizerError::GradientEvaluationError);
             }
 
-            grad_norm = grad_current.iter().map(|g| g * g).sum::<T>().sqrt();
-            convergence_history.push(f_current.clone());
-            gradient_norm_history.push(grad_norm.clone());
+            grad_norm = grad_current.iter().map(|&g| g * g).sum::<T>().sqrt();
+            convergence_history.push(f_current);
+            gradient_norm_history.push(grad_norm);
 
             // Check for convergence
             if grad_norm <= tol {
@@ -508,7 +489,7 @@ where
 
             // Restart condition - use steepest descent
             if self.iters % restart_freq == 0 {
-                search_direction = grad_current.iter().map(|g| -g.clone()).collect();
+                search_direction = grad_current.iter().map(|&g| -g).collect();
                 restart_count += 1;
                 continue;
             }
@@ -516,8 +497,8 @@ where
             // Compute beta using the specified method
             let beta = match method {
                 ConjGradMethod::FletcherReeves => {
-                    let grad_new_norm_sq = grad_current.iter().map(|g| g * g).sum::<T>();
-                    let grad_old_norm_sq = grad_old.iter().map(|g| g * g).sum::<T>();
+                    let grad_new_norm_sq = grad_current.iter().map(|&g| g * g).sum::<T>();
+                    let grad_old_norm_sq = grad_old.iter().map(|&g| g * g).sum::<T>();
 
                     if grad_old_norm_sq < 1e-12.into() {
                         T::zero()
@@ -530,21 +511,21 @@ where
                     let grad_diff: Points1<T> = grad_current
                         .iter()
                         .zip(grad_old.iter())
-                        .map(|(g_new, g_old)| g_new - g_old)
+                        .map(|(&g_new, &g_old)| g_new - g_old)
                         .collect();
 
                     let numerator = grad_current
                         .iter()
                         .zip(grad_diff.iter())
-                        .map(|(g, diff)| g * diff)
+                        .map(|(&g, &diff)| g * diff)
                         .sum::<T>();
 
-                    let denominator = grad_old.iter().map(|g| g * g).sum::<T>();
+                    let denominator = grad_old.iter().map(|&g| g * g).sum::<T>();
 
                     if denominator < 1e-12.into() {
                         T::zero()
                     } else {
-                        (&numerator / &denominator).max(&T::zero()) // Non-negative variant
+                        (numerator / denominator).max(T::zero()) // Non-negative variant
                     }
                 }
 
@@ -552,25 +533,25 @@ where
                     let grad_diff: Points1<T> = grad_current
                         .iter()
                         .zip(grad_old.iter())
-                        .map(|(g_new, g_old)| g_new - g_old)
+                        .map(|(&g_new, &g_old)| g_new - g_old)
                         .collect();
 
                     let numerator = grad_current
                         .iter()
                         .zip(grad_diff.iter())
-                        .map(|(g, diff)| g * diff)
+                        .map(|(&g, &diff)| g * diff)
                         .sum::<T>();
 
                     let denominator = search_direction
                         .iter()
                         .zip(grad_diff.iter())
-                        .map(|(h, diff)| h * diff)
+                        .map(|(&h, &diff)| h * diff)
                         .sum::<T>();
 
-                    if denominator.abs() < T::from_f64(1e-12) {
-                        T::from_f64(0.0)
+                    if denominator.abs() < 1e-12.into() {
+                        0.0.into()
                     } else {
-                        &numerator / &denominator
+                        numerator / denominator
                     }
                 }
 
@@ -578,21 +559,21 @@ where
                     let grad_diff: Points1<T> = grad_current
                         .iter()
                         .zip(grad_old.iter())
-                        .map(|(g_new, g_old)| g_new - g_old)
+                        .map(|(&g_new, &g_old)| g_new - g_old)
                         .collect();
 
-                    let numerator = grad_current.iter().map(|g| g * g).sum::<T>();
+                    let numerator = grad_current.iter().map(|&g| g * g).sum::<T>();
 
                     let denominator = search_direction
                         .iter()
                         .zip(grad_diff.iter())
-                        .map(|(h, diff)| h * diff)
+                        .map(|(&h, &diff)| h * diff)
                         .sum::<T>();
 
                     if denominator.abs() < 1e-12.into() {
                         T::zero()
                     } else {
-                        &numerator / &denominator
+                        numerator / denominator
                     }
                 }
 
@@ -600,65 +581,64 @@ where
                     let grad_diff: Points1<T> = grad_current
                         .iter()
                         .zip(grad_old.iter())
-                        .map(|(g_new, g_old)| g_new - g_old)
+                        .map(|(&g_new, &g_old)| g_new - g_old)
                         .collect();
 
                     let hd_dot = search_direction
                         .iter()
                         .zip(grad_diff.iter())
-                        .map(|(h, diff)| h * diff)
+                        .map(|(&h, &diff)| h * diff)
                         .sum::<T>();
 
-                    if hd_dot.abs() < T::from_f64(1e-12) {
-                        T::from_f64(0.0)
+                    if hd_dot.abs() < 1e-12.into() {
+                        0.0.into()
                     } else {
-                        let grad_diff_norm_sq = grad_diff.iter().map(|d| d * d).sum::<T>();
-                        let scaling = 2.0 * &grad_diff_norm_sq / &hd_dot;
+                        let grad_diff_norm_sq = grad_diff.iter().map(|&d| d * d).sum::<T>();
+                        let scaling = 2.0 * &grad_diff_norm_sq / hd_dot;
 
                         let adjusted_diff: Points1<T> = grad_diff
                             .iter()
                             .zip(search_direction.iter())
-                            .map(|(diff, h)| diff - &scaling * h)
+                            .map(|(&diff, &h)| diff - scaling * h)
                             .collect();
 
                         let numerator = adjusted_diff
                             .iter()
                             .zip(grad_current.iter())
-                            .map(|(adj, g)| adj * g)
+                            .map(|(&adj, &g)| adj * g)
                             .sum::<T>();
 
-                        &numerator / &hd_dot
+                        numerator / hd_dot
                     }
                 }
             };
 
             // Update search direction
             for i in 0..n {
-                search_direction[i] =
-                    T::from_f64(-1.0) * &grad_current[i] + &beta * &search_direction[i];
+                search_direction[i] = (-1.0).into() * grad_current[i] + beta * search_direction[i];
             }
 
             // Check if direction is still descent direction
             let directional_derivative = search_direction
                 .iter()
                 .zip(grad_current.iter())
-                .map(|(d, g)| d * g)
+                .map(|(&d, &g)| d * g)
                 .sum::<T>();
 
             if directional_derivative >= T::zero() {
                 // Not a descent direction, restart with steepest descent
-                search_direction = grad_current.iter().map(|g| -g.clone()).collect();
+                search_direction = grad_current.iter().map(|&g| -g).collect();
                 restart_count += 1;
             }
         }
 
-        self.xmin = x.clone();
-        self.fmin = f_current.clone();
+        self.xmin = x;
+        self.fmin = f_current;
         self.converged = grad_norm <= tol;
         Ok(ConjGradResult {
             xmin: self.xmin.clone(),
-            fmin: self.fmin.clone(),
-            gradient_norm: grad_norm.clone(),
+            fmin: self.fmin,
+            gradient_norm: grad_norm,
             iters: self.iters,
             fn_evals,
             g_evals,
@@ -702,8 +682,7 @@ where
         methods
             .iter()
             .map(|&method| {
-                let result =
-                    self.conjugate_gradient(initial_point, method, tol.clone(), max_iters, None);
+                let result = self.conjugate_gradient(initial_point, method, tol, max_iters, None);
                 (method, result)
             })
             .collect()
@@ -712,7 +691,7 @@ where
 
 impl<T> fmt::Debug for ConjGrad<T>
 where
-    T: RFFloat,
+    T: RealScalar,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
@@ -726,12 +705,10 @@ where
 #[cfg(test)]
 mod minimize_conjgrad_tests {
     use super::*;
-    use crate::{
-        minimize::{GF1dim, MultiDimGradFn, MultiDimNumGradFn},
-        num::MyFloat,
-    };
+    use crate::minimize::{GF1dim, MultiDimGradFn, MultiDimNumGradFn};
     use float_cmp::F64Margin;
     use std::vec;
+    use twofloat::TwoFloat;
 
     const MARGIN: F64Margin = F64Margin {
         epsilon: 1e-4,
@@ -749,23 +726,29 @@ mod minimize_conjgrad_tests {
     #[test]
     fn test_2d_quadratic() {
         // f(x,y) = (x-1)² + (y-2)², grad = (2(x-1), 2(y-2))
-        let func = |x: &Points1<MyFloat>| (&x[0] - 1.0).powi(2) + (&x[1] - 2.0).powi(2);
-        let grad = |x: &Points1<MyFloat>| array![2.0 * (&x[0] - 1.0), 2.0 * (&x[1] - 2.0)].into();
+        let func =
+            |x: &Points1<TwoFloat>| (x[0] - 1.0.into()).powi(2) + (x[1] - 2.0.into()).powi(2);
+        let grad = |x: &Points1<TwoFloat>| {
+            points![
+                2.0.into() * (x[0] - 1.0.into()),
+                2.0.into() * (x[1] - 2.0.into())
+            ]
+        };
         let obj = MultiDimGradFn::new(func, grad);
         let mut conjgrad = ConjGrad::new(obj);
 
         let result = conjgrad
-            .minimize(&array![0.0.into(), 0.0.into()].into())
+            .minimize(&points![0.0.into(), 0.0.into()].into())
             .unwrap();
 
-        assert!((&result.xmin[0] - 1.0).abs() < 1e-8);
-        assert!((&result.xmin[1] - 2.0).abs() < 1e-8);
+        assert!((result.xmin[0] - 1.0.into()).abs() < 1e-8.into());
+        assert!((result.xmin[1] - 2.0.into()).abs() < 1e-8.into());
         assert!(result.fmin < 1e-14);
         assert!(result.converged);
         assert!(result.iters <= 3); // Should converge in 2 iterations for quadratic
 
-        assert!((&conjgrad.xmin[0] - 1.0).abs() < 1e-8);
-        assert!((&conjgrad.xmin[1] - 2.0).abs() < 1e-8);
+        assert!((conjgrad.xmin[0] - 1.0.into()).abs() < 1e-8.into());
+        assert!((conjgrad.xmin[1] - 2.0.into()).abs() < 1e-8.into());
         assert!(conjgrad.fmin < 1e-14);
         assert!(conjgrad.converged);
         assert!(conjgrad.iters <= 3); // Should converge in 2 iterations for quadratic
@@ -773,21 +756,21 @@ mod minimize_conjgrad_tests {
 
     #[test]
     fn test_rosenbrock() {
-        let rosenbrock =
-            |x: &Points1<MyFloat>| (1.0 - &x[0]).powi(2) + 100.0 * (&x[1] - x[0].powi(2)).powi(2);
-        let rosenbrock_grad = |x: &Points1<MyFloat>| {
-            array![
-                -2.0 * (1.0 - &x[0]) - 400.0 * &x[0] * (&x[1] - x[0].powi(2)),
-                200.0 * (&x[1] - x[0].powi(2)),
+        let rosenbrock = |x: &Points1<TwoFloat>| {
+            (1.0.into() - x[0]).powi(2) + 100.0.into() * (x[1] - x[0].powi(2)).powi(2)
+        };
+        let rosenbrock_grad = |x: &Points1<TwoFloat>| {
+            points![
+                (-2.0).into() * (1.0.into() - x[0]) - 400.0.into() * x[0] * (x[1] - x[0].powi(2)),
+                200.0.into() * (x[1] - x[0].powi(2)),
             ]
-            .into()
         };
         let obj = MultiDimGradFn::new(rosenbrock, rosenbrock_grad);
         let mut conjgrad = ConjGrad::new(obj);
 
         let result = conjgrad
             .conjugate_gradient(
-                &array![MyFloat::new(-1.2), 1.0.into()].into(),
+                &points![TwoFloat::from_f64(-1.2), 1.0.into()],
                 ConjGradMethod::PolakRibiere,
                 Some(1e-4.into()), // Relaxed tolerance for Rosenbrock
                 Some(5000),        // More iterations for this difficult problem
@@ -796,33 +779,33 @@ mod minimize_conjgrad_tests {
             .unwrap();
 
         assert!(
-            (&result.xmin[0] - 1.0).abs() < 1e-2,
+            (result.xmin[0] - 1.0.into()).abs() < 1e-2.into(),
             "x[0] = {} should be close to 1.0",
             result.xmin[0]
         );
         assert!(
-            (&result.xmin[1] - 1.0).abs() < 1e-2,
+            (result.xmin[1] - 1.0.into()).abs() < 1e-2.into(),
             "x[1] = {} should be close to 1.0",
             result.xmin[1]
         );
         assert!(
-            result.fmin < 1e-4,
+            result.fmin < 1e-4.into(),
             "Function value {} should be small",
             result.fmin
         );
 
         assert!(
-            (&conjgrad.xmin[0] - 1.0).abs() < 1e-2,
+            (conjgrad.xmin[0] - 1.0.into()).abs() < 1e-2.into(),
             "x[0] = {} should be close to 1.0",
             conjgrad.xmin[0]
         );
         assert!(
-            (&conjgrad.xmin[1] - 1.0).abs() < 1e-2,
+            (conjgrad.xmin[1] - 1.0.into()).abs() < 1e-2.into(),
             "x[1] = {} should be close to 1.0",
             conjgrad.xmin[1]
         );
         assert!(
-            conjgrad.fmin < 1e-4,
+            conjgrad.fmin < 1e-4.into(),
             "Function value {} should be small",
             conjgrad.fmin
         );
@@ -830,8 +813,9 @@ mod minimize_conjgrad_tests {
 
     #[test]
     fn test_different_methods() {
-        let func = |x: &Points1<MyFloat>| x[0].powi(2) + 2.0 * x[1].powi(2) + &x[0] * &x[1];
-        let grad = |x: &Points1<MyFloat>| array![2.0 * &x[0] + &x[1], 4.0 * &x[1] + &x[0]].into();
+        let func = |x: &Points1<TwoFloat>| x[0].powi(2) + 2.0.into() * x[1].powi(2) + x[0] * x[1];
+        let grad =
+            |x: &Points1<TwoFloat>| points![2.0.into() * x[0] + x[1], 4.0.into() * x[1] + x[0]];
         let obj = MultiDimGradFn::new(func, grad);
         let mut conjgrad = ConjGrad::new(obj);
 
@@ -843,7 +827,7 @@ mod minimize_conjgrad_tests {
 
         for method in &methods {
             let result = conjgrad.conjugate_gradient(
-                &array![1.0.into(), 1.0.into()].into(),
+                &points![1.0.into(), 1.0.into()],
                 *method,
                 Some(1e-6.into()), // Reasonable tolerance
                 Some(100),         // Sufficient iterations for this simple problem
@@ -853,13 +837,13 @@ mod minimize_conjgrad_tests {
             match result {
                 Ok(res) => {
                     assert!(
-                        res.xmin[0].abs() < 1e-4,
+                        res.xmin[0].abs() < 1e-4.into(),
                         "Method {:?}: x[0] = {} should be near 0",
                         method,
                         res.xmin[0]
                     );
                     assert!(
-                        res.xmin[1].abs() < 1e-4,
+                        res.xmin[1].abs() < 1e-4.into(),
                         "Method {:?}: x[1] = {} should be near 0",
                         method,
                         res.xmin[1]
@@ -867,13 +851,13 @@ mod minimize_conjgrad_tests {
                     assert!(res.converged, "Method {:?} should converge", method);
 
                     assert!(
-                        conjgrad.xmin[0].abs() < 1e-4,
+                        conjgrad.xmin[0].abs() < 1e-4.into(),
                         "Method {:?}: x[0] = {} should be near 0",
                         method,
                         conjgrad.xmin[0]
                     );
                     assert!(
-                        conjgrad.xmin[1].abs() < 1e-4,
+                        conjgrad.xmin[1].abs() < 1e-4.into(),
                         "Method {:?}: x[1] = {} should be near 0",
                         method,
                         conjgrad.xmin[1]
@@ -883,15 +867,15 @@ mod minimize_conjgrad_tests {
                 Err(_) => {
                     // Some methods might struggle with this particular function form
                     // Let's try a simpler version to make sure the method works at all
-                    let simple_func = |x: &Points1<MyFloat>| x[0].powi(2) + x[1].powi(2);
+                    let simple_func = |x: &Points1<TwoFloat>| x[0].powi(2) + x[1].powi(2);
                     let simple_grad =
-                        |x: &Points1<MyFloat>| array![2.0 * &x[0], 2.0 * &x[1]].into();
+                        |x: &Points1<TwoFloat>| points![2.0.into() * x[0], 2.0.into() * x[1]];
                     let obj_simple = MultiDimGradFn::new(simple_func, simple_grad);
                     let mut conjgrad = ConjGrad::new(obj_simple);
 
                     let simple_result = conjgrad
                         .conjugate_gradient(
-                            &array![1.0.into(), 1.0.into()].into(),
+                            &points![1.0.into(), 1.0.into()],
                             *method,
                             Some(1e-8.into()),
                             Some(50),
@@ -916,13 +900,14 @@ mod minimize_conjgrad_tests {
 
     #[test]
     fn test_numerical_gradients() {
-        let func = |x: &Points1<MyFloat>| (&x[0] - 3.0).powi(2) + (&x[1] + 1.0).powi(2);
+        let func =
+            |x: &Points1<TwoFloat>| (x[0] - 3.0.into()).powi(2) + (x[1] + 1.0.into()).powi(2);
         let obj = MultiDimNumGradFn::new(func, Some(1e-6.into()), 2);
         let mut conjgrad = ConjGrad::new(obj);
 
         let result = conjgrad
             .conjugate_gradient(
-                &array![0.0.into(), 0.0.into()].into(),
+                &points![0.0.into(), 0.0.into()],
                 ConjGradMethod::FletcherReeves,
                 Some(1e-6.into()),
                 None,
@@ -930,34 +915,34 @@ mod minimize_conjgrad_tests {
             )
             .unwrap();
 
-        assert!((&result.xmin[0] - 3.0).abs() < 1e-4);
-        assert!((&result.xmin[1] + 1.0).abs() < 1e-4);
+        assert!((result.xmin[0] - 3.0.into()).abs() < 1e-4);
+        assert!((result.xmin[1] + 1.0.into()).abs() < 1e-4);
         assert!(result.converged);
 
-        assert!((&conjgrad.xmin[0] - 3.0).abs() < 1e-4);
-        assert!((&conjgrad.xmin[1] + 1.0).abs() < 1e-4);
+        assert!((conjgrad.xmin[0] - 3.0.into()).abs() < 1e-4);
+        assert!((conjgrad.xmin[1] + 1.0.into()).abs() < 1e-4);
         assert!(conjgrad.converged);
     }
 
     #[test]
     fn test_method_comparison() {
-        let func = |x: &Points1<MyFloat>| {
+        let func = |x: &Points1<TwoFloat>| {
             x.iter()
                 .enumerate()
-                .map(|(i, xi)| (i + 1) as f64 * xi.powi(2))
-                .sum::<MyFloat>()
+                .map(|(i, &xi)| ((i + 1) as f64).into() * xi.powi(2))
+                .sum::<TwoFloat>()
         };
-        let grad = |x: &Points1<MyFloat>| {
+        let grad = |x: &Points1<TwoFloat>| {
             x.iter()
                 .enumerate()
-                .map(|(i, xi)| 2.0 * (i + 1) as f64 * xi)
+                .map(|(i, &xi)| 2.0.into() * ((i + 1) as f64).into() * xi)
                 .collect()
         };
         let obj = MultiDimGradFn::new(func, grad);
         let mut conjgrad = ConjGrad::new(obj);
 
         let results = conjgrad.compare_cg_methods(
-            &array![1.0.into(), 2.0.into(), 3.0.into()].into(),
+            &points![1.0.into(), 2.0.into(), 3.0.into()],
             Some(1e-8.into()),
             Some(100),
         );
@@ -965,7 +950,7 @@ mod minimize_conjgrad_tests {
         for (method, result) in results {
             match result {
                 Ok(res) => {
-                    for x in res.xmin.clone() {
+                    for x in res.xmin {
                         assert!(
                             x.abs() < 1e-6,
                             "Method {} failed: x = {:?}",
@@ -975,7 +960,7 @@ mod minimize_conjgrad_tests {
                     }
                     assert!(res.converged, "Method {} didn't converge", method);
 
-                    for x in conjgrad.xmin.clone() {
+                    for x in conjgrad.xmin {
                         assert!(
                             x.abs() < 1e-6,
                             "Method {} failed: x = {:?}",
@@ -993,16 +978,16 @@ mod minimize_conjgrad_tests {
     #[test]
     fn test_cg_method_comparison() {
         // Test all CG methods on the same problem
-        let objective = |x: &Points1<MyFloat>| {
+        let objective = |x: &Points1<TwoFloat>| {
             x.iter()
                 .enumerate()
-                .map(|(i, xi)| (i + 1) as f64 * xi.powi(2))
-                .sum::<MyFloat>()
+                .map(|(i, &xi)| ((i + 1) as f64).into() * xi.powi(2))
+                .sum::<TwoFloat>()
         };
-        let gradient = |x: &Points1<MyFloat>| {
+        let gradient = |x: &Points1<TwoFloat>| {
             x.iter()
                 .enumerate()
-                .map(|(i, xi)| 2.0 * (i + 1) as f64 * xi)
+                .map(|(i, &xi)| 2.0.into() * ((i + 1) as f64).into() * xi)
                 .collect()
         };
         let obj = MultiDimGradFn::new(objective, gradient);
@@ -1028,7 +1013,7 @@ mod minimize_conjgrad_tests {
                 .unwrap();
 
             assert!(result.converged, "Method {:?} failed to converge", method);
-            for x in result.xmin.clone() {
+            for x in result.xmin {
                 assert!(
                     x.abs() < 1e-6,
                     "Method {:?} solution: {:?}",
@@ -1042,17 +1027,21 @@ mod minimize_conjgrad_tests {
     #[test]
     fn test_cg_restart_mechanism() {
         // Test that restart prevents cycling
-        let ill_conditioned =
-            |x: &Points1<MyFloat>| 1000.0 * x[0].powi(2) + x[1].powi(2) + 0.1 * &x[0] * &x[1];
-        let ill_conditioned_grad = |x: &Points1<MyFloat>| {
-            array![2000.0 * &x[0] + 0.1 * &x[1], 2.0 * &x[1] + 0.1 * &x[0]].into()
+        let ill_conditioned = |x: &Points1<TwoFloat>| {
+            1000.0.into() * x[0].powi(2) + x[1].powi(2) + 0.1.into() * x[0] * x[1]
+        };
+        let ill_conditioned_grad = |x: &Points1<TwoFloat>| {
+            points![
+                2000.0.into() * x[0] + 0.1.into() * x[1],
+                2.0.into() * x[1] + 0.1.into() * x[0]
+            ]
         };
         let obj = MultiDimGradFn::new(ill_conditioned, ill_conditioned_grad);
         let mut conjgrad = ConjGrad::new(obj);
 
         let result = conjgrad
             .conjugate_gradient(
-                &array![1.0.into(), 1.0.into()].into(),
+                &points![1.0.into(), 1.0.into()],
                 ConjGradMethod::PolakRibiere,
                 Some(1e-6.into()),
                 Some(200),
@@ -1069,15 +1058,15 @@ mod minimize_conjgrad_tests {
     #[test]
     fn test_cg_numerical_gradients() {
         // Test CG with numerical gradients
-        let objective = |x: &Points1<MyFloat>| {
-            (&x[0] - 1.0).powi(4) + (&x[1] + 2.0).powi(2) + 3.0 * &x[0] * &x[1]
+        let objective = |x: &Points1<TwoFloat>| {
+            (x[0] - 1.0.into()).powi(4) + (x[1] + 2.0.into()).powi(2) + 3.0.into() * x[0] * x[1]
         };
         let obj = MultiDimNumGradFn::new(objective, Some(1e-6.into()), 2);
         let mut conjgrad = ConjGrad::new(obj);
 
         let result = conjgrad
             .conjugate_gradient(
-                &array![0.0.into(), 0.0.into()].into(),
+                &points![0.0.into(), 0.0.into()],
                 ConjGradMethod::FletcherReeves,
                 Some(1e-4.into()),
                 Some(500),
@@ -1091,39 +1080,39 @@ mod minimize_conjgrad_tests {
     }
 
     // Helper functions for common test functions
-    fn simple_quadratic() -> GF1dim<MyFloat> {
-        let func = |x: &Points1<MyFloat>| x.iter().map(|xi| xi.powi(2)).sum::<MyFloat>();
-        let grad = |x: &Points1<MyFloat>| x.iter().map(|xi| 2.0 * xi).collect();
+    fn simple_quadratic() -> GF1dim<TwoFloat> {
+        let func = |x: &Points1<TwoFloat>| x.iter().map(|&xi| xi.powi(2)).sum::<TwoFloat>();
+        let grad = |x: &Points1<TwoFloat>| x.iter().map(|&xi| 2.0.into() * xi).collect();
         GF1dim::new(MultiDimGradFn::new(func, grad))
     }
 
-    fn shifted_quadratic(center: &Points1<MyFloat>) -> GF1dim<MyFloat> {
-        let center_func = center.clone();
-        let func = move |x: &Points1<MyFloat>| {
+    fn shifted_quadratic(center: &Points1<TwoFloat>) -> GF1dim<TwoFloat> {
+        let center_func = center;
+        let func = move |x: &Points1<TwoFloat>| {
             x.iter()
                 .zip(center_func.iter())
-                .map(|(xi, ci)| (xi - ci).powi(2))
-                .sum::<MyFloat>()
+                .map(|(&xi, &ci)| (xi - ci).powi(2))
+                .sum::<TwoFloat>()
         };
-        let center_func = center.clone();
-        let grad = move |x: &Points1<MyFloat>| {
+        let center_func = center;
+        let grad = move |x: &Points1<TwoFloat>| {
             x.iter()
                 .zip(center_func.iter())
-                .map(|(xi, ci)| 2.0 * (xi - ci))
+                .map(|(&xi, &ci)| 2.0.into() * (xi - ci))
                 .collect()
         };
         GF1dim::new(MultiDimGradFn::new(func, grad))
     }
 
-    fn rosenbrock_2d() -> GF1dim<MyFloat> {
-        let func =
-            |x: &Points1<MyFloat>| (1.0 - &x[0]).powi(2) + 100.0 * (&x[1] - x[0].powi(2)).powi(2);
-        let grad = |x: &Points1<MyFloat>| {
-            array![
-                -2.0 * (1.0 - &x[0]) - 400.0 * &x[0] * (&x[1] - x[0].powi(2)),
-                200.0 * (&x[1] - x[0].powi(2)),
+    fn rosenbrock_2d() -> GF1dim<TwoFloat> {
+        let func = |x: &Points1<TwoFloat>| {
+            (1.0.into() - x[0]).powi(2) + 100.0.into() * (x[1] - x[0].powi(2)).powi(2)
+        };
+        let grad = |x: &Points1<TwoFloat>| {
+            points![
+                (-2.0).into() * (1.0.into() - x[0]) - 400.0.into() * x[0] * (x[1] - x[0].powi(2)),
+                200.0.into() * (x[1] - x[0].powi(2)),
             ]
-            .into()
         };
         GF1dim::new(MultiDimGradFn::new(func, grad))
     }
@@ -1158,7 +1147,7 @@ mod minimize_conjgrad_tests {
         fn test_debug_formatting() {
             let obj = simple_quadratic();
             let mut conjgrad = ConjGrad::new(obj);
-            let _ = conjgrad.minimize(&array![1.0.into(), 2.0.into()].into());
+            let _ = conjgrad.minimize(&points![1.0.into(), 2.0.into()].into());
 
             let debug_str = format!("{:?}", conjgrad);
             assert!(debug_str.contains("ConjGrad"));
@@ -1190,7 +1179,7 @@ mod minimize_conjgrad_tests {
             let obj = simple_quadratic();
             let mut conjgrad = ConjGrad::new(obj);
 
-            let result = conjgrad.minimize(&array![].into());
+            let result = conjgrad.minimize(&points![].into());
             assert!(matches!(result, Err(MinimizerError::InvalidDimension)));
         }
 
@@ -1200,7 +1189,7 @@ mod minimize_conjgrad_tests {
             let mut conjgrad = ConjGrad::new(obj);
 
             let result = conjgrad.conjugate_gradient(
-                &array![1.0.into(), 2.0.into()].into(),
+                &points![1.0.into(), 2.0.into()].into(),
                 ConjGradMethod::FletcherReeves,
                 Some(0.0.into()),
                 None,
@@ -1215,9 +1204,9 @@ mod minimize_conjgrad_tests {
             let mut conjgrad = ConjGrad::new(obj);
 
             let result = conjgrad.conjugate_gradient(
-                &array![1.0.into(), 2.0.into()].into(),
+                &points![1.0.into(), 2.0.into()].into(),
                 ConjGradMethod::FletcherReeves,
-                Some(MyFloat::new(-1e-6)),
+                Some(TwoFloat::from_f64(-1e-6)),
                 None,
                 None,
             );
@@ -1226,12 +1215,12 @@ mod minimize_conjgrad_tests {
 
         #[test]
         fn test_wrong_gradient_dimension() {
-            let func = |x: &Points1<MyFloat>| x[0].powi(2) + x[1].powi(2);
-            let wrong_grad = |_x: &Points1<MyFloat>| array![1.0.into()].into(); // Wrong dimension
+            let func = |x: &Points1<TwoFloat>| x[0].powi(2) + x[1].powi(2);
+            let wrong_grad = |_x: &Points1<TwoFloat>| points![1.0.into()].into(); // Wrong dimension
             let obj = MultiDimGradFn::new(func, wrong_grad);
             let mut conjgrad = ConjGrad::new(obj);
 
-            let result = conjgrad.minimize(&array![1.0.into(), 1.0.into()].into());
+            let result = conjgrad.minimize(&points![1.0.into(), 1.0.into()].into());
             assert!(matches!(
                 result,
                 Err(MinimizerError::GradientEvaluationError)
@@ -1244,12 +1233,12 @@ mod minimize_conjgrad_tests {
 
         #[test]
         fn test_shifted_quadratic() {
-            let center = array![3.0.into(), MyFloat::new(-2.0)].into();
+            let center = points![3.0.into(), TwoFloat::from_f64(-2.0)].into();
             let obj = shifted_quadratic(&center);
             let mut conjgrad = ConjGrad::new(obj);
 
             let result = conjgrad
-                .minimize(&array![0.0.into(), 0.0.into()].into())
+                .minimize(&points![0.0.into(), 0.0.into()].into())
                 .unwrap();
 
             assert!(result.converged);
@@ -1260,12 +1249,12 @@ mod minimize_conjgrad_tests {
 
         #[test]
         fn test_1d_optimization() {
-            let func = |x: &Points1<MyFloat>| (&x[0] - 5.0).powi(2);
-            let grad = |x: &Points1<MyFloat>| array![2.0 * (&x[0] - 5.0)].into();
+            let func = |x: &Points1<TwoFloat>| (&x[0] - 5.0).powi(2);
+            let grad = |x: &Points1<TwoFloat>| points![2.0 * (&x[0] - 5.0)].into();
             let obj = MultiDimGradFn::new(func, grad);
             let mut conjgrad = ConjGrad::new(obj);
 
-            let result = conjgrad.minimize(&array![0.0.into()].into()).unwrap();
+            let result = conjgrad.minimize(&points![0.0.into()].into()).unwrap();
 
             assert!(result.converged);
             assert!((&result.xmin[0] - 5.0).abs() < 1e-8);
@@ -1275,17 +1264,17 @@ mod minimize_conjgrad_tests {
         #[test]
         fn test_high_dimensional_quadratic() {
             let n = 8;
-            let targets: Vec<MyFloat> = (1..=n).map(|i| (i as f64).into()).collect();
-            let targets_func = targets.clone();
-            let targets_grad = targets.clone();
+            let targets: Vec<TwoFloat> = (1..=n).map(|i| (i as f64).into()).collect();
+            let targets_func = targets;
+            let targets_grad = targets;
 
-            let func = move |x: &Points1<MyFloat>| {
+            let func = move |x: &Points1<TwoFloat>| {
                 x.iter()
                     .zip(targets_func.iter())
                     .map(|(xi, ti)| (xi - ti).powi(2))
-                    .sum::<MyFloat>()
+                    .sum::<TwoFloat>()
             };
-            let grad = move |x: &Points1<MyFloat>| {
+            let grad = move |x: &Points1<TwoFloat>| {
                 x.iter()
                     .zip(targets_grad.iter())
                     .map(|(xi, ti)| 2.0 * (xi - ti))
@@ -1323,7 +1312,7 @@ mod minimize_conjgrad_tests {
 
                 let result = conjgrad
                     .conjugate_gradient(
-                        &array![2.0.into(), MyFloat::new(-1.5)].into(),
+                        &points![2.0.into(), TwoFloat::from_f64(-1.5)].into(),
                         method,
                         Some(1e-8.into()),
                         Some(100),
@@ -1350,12 +1339,12 @@ mod minimize_conjgrad_tests {
 
         #[test]
         fn test_fletcher_reeves_method() {
-            let obj = shifted_quadratic(&array![1.0.into(), MyFloat::new(-1.0)].into());
+            let obj = shifted_quadratic(&points![1.0.into(), TwoFloat::from_f64(-1.0)].into());
             let mut conjgrad = ConjGrad::new(obj);
 
             let result = conjgrad
                 .conjugate_gradient(
-                    &array![0.0.into(), 0.0.into()].into(),
+                    &points![0.0.into(), 0.0.into()].into(),
                     ConjGradMethod::FletcherReeves,
                     Some(1e-8.into()),
                     Some(50),
@@ -1376,7 +1365,7 @@ mod minimize_conjgrad_tests {
 
             let result = conjgrad
                 .conjugate_gradient(
-                    &array![3.0.into(), MyFloat::new(-2.0)].into(),
+                    &points![3.0.into(), TwoFloat::from_f64(-2.0)].into(),
                     ConjGradMethod::PolakRibiere,
                     Some(1e-8.into()),
                     Some(50),
@@ -1396,7 +1385,7 @@ mod minimize_conjgrad_tests {
             let mut conjgrad = ConjGrad::new(obj);
 
             let results = conjgrad.compare_cg_methods(
-                &array![1.0.into(), 2.0.into()].into(),
+                &points![1.0.into(), 2.0.into()].into(),
                 Some(1e-6.into()),
                 Some(100),
             );
@@ -1425,7 +1414,7 @@ mod minimize_conjgrad_tests {
             let mut conjgrad = ConjGrad::new(obj);
 
             let result = conjgrad
-                .minimize(&array![2.0.into(), MyFloat::new(-1.0)].into())
+                .minimize(&points![2.0.into(), TwoFloat::from_f64(-1.0)].into())
                 .unwrap();
 
             // Basic structure validation
@@ -1435,14 +1424,14 @@ mod minimize_conjgrad_tests {
             assert_eq!(result.gradient_norm_history.len(), result.iters + 1);
 
             // Overall progress validation
-            let initial_f = result.convergence_history[0].clone();
-            let final_f = result.convergence_history.last().unwrap().clone();
+            let initial_f = result.convergence_history[0];
+            let final_f = result.convergence_history.last().unwrap();
             assert!(final_f <= initial_f);
             assert!(final_f < 1e-10);
 
             // Gradient norm progress
-            let initial_grad = result.gradient_norm_history[0].clone();
-            let final_grad = result.gradient_norm_history.last().unwrap().clone();
+            let initial_grad = result.gradient_norm_history[0];
+            let final_grad = result.gradient_norm_history.last().unwrap();
             assert!(final_grad <= initial_grad);
             assert!(final_grad < 1e-6);
 
@@ -1457,7 +1446,7 @@ mod minimize_conjgrad_tests {
             let mut conjgrad = ConjGrad::new(obj);
 
             let result = conjgrad
-                .minimize(&array![1.0.into(), 2.0.into()].into())
+                .minimize(&points![1.0.into(), 2.0.into()].into())
                 .unwrap();
 
             assert!(result.fn_evals > 0);
@@ -1472,7 +1461,7 @@ mod minimize_conjgrad_tests {
 
         #[test]
         fn test_tolerance_behavior() {
-            let tolerances = array![1e-4, 1e-6, 1e-8];
+            let tolerances = points![1e-4, 1e-6, 1e-8];
 
             for &tol in &tolerances {
                 let obj = simple_quadratic();
@@ -1480,7 +1469,7 @@ mod minimize_conjgrad_tests {
 
                 let result = conjgrad
                     .conjugate_gradient(
-                        &array![2.0.into(), MyFloat::new(-1.0)].into(),
+                        &points![2.0.into(), TwoFloat::from_f64(-1.0)].into(),
                         ConjGradMethod::PolakRibiere,
                         Some(tol.into()),
                         Some(100),
@@ -1500,14 +1489,14 @@ mod minimize_conjgrad_tests {
         #[test]
         fn test_restart_functionality() {
             // Ill-conditioned quadratic to force restarts
-            let func = |x: &Points1<MyFloat>| 100.0 * x[0].powi(2) + x[1].powi(2);
-            let grad = |x: &Points1<MyFloat>| array![200.0 * &x[0], 2.0 * &x[1]].into();
+            let func = |x: &Points1<TwoFloat>| 100.0 * x[0].powi(2) + x[1].powi(2);
+            let grad = |x: &Points1<TwoFloat>| points![200.0 * &x[0], 2.0 * &x[1]].into();
             let obj = MultiDimGradFn::new(func, grad);
             let mut conjgrad = ConjGrad::new(obj);
 
             let result = conjgrad
                 .conjugate_gradient(
-                    &array![1.0.into(), 1.0.into()].into(),
+                    &points![1.0.into(), 1.0.into()].into(),
                     ConjGradMethod::PolakRibiere,
                     Some(1e-6.into()),
                     Some(200),
@@ -1532,7 +1521,7 @@ mod minimize_conjgrad_tests {
 
             let result = conjgrad
                 .conjugate_gradient(
-                    &array![MyFloat::new(-1.2), 1.0.into()].into(),
+                    &points![TwoFloat::from_f64(-1.2), 1.0.into()].into(),
                     ConjGradMethod::PolakRibiere,
                     Some(1e-3.into()), // Relaxed tolerance for Rosenbrock
                     Some(2000),
@@ -1550,19 +1539,19 @@ mod minimize_conjgrad_tests {
         fn test_booth_function() {
             // Booth function: f(x,y) = (x + 2y - 7)² + (2x + y - 5)²
             // Global minimum at (1, 3) with f(1, 3) = 0
-            let func = |x: &Points1<MyFloat>| {
+            let func = |x: &Points1<TwoFloat>| {
                 (&x[0] + 2.0 * &x[1] - 7.0).powi(2) + (2.0 * &x[0] + &x[1] - 5.0).powi(2)
             };
-            let grad = |x: &Points1<MyFloat>| {
+            let grad = |x: &Points1<TwoFloat>| {
                 let t1 = &x[0] + 2.0 * &x[1] - 7.0;
                 let t2 = 2.0 * &x[0] + &x[1] - 5.0;
-                array![2.0 * &t1 + 4.0 * &t2, 4.0 * &t1 + 2.0 * &t2].into()
+                points![2.0 * &t1 + 4.0 * &t2, 4.0 * &t1 + 2.0 * &t2].into()
             };
             let obj = MultiDimGradFn::new(func, grad);
             let mut conjgrad = ConjGrad::new(obj);
 
             let result = conjgrad
-                .minimize(&array![0.0.into(), 0.0.into()].into())
+                .minimize(&points![0.0.into(), 0.0.into()].into())
                 .unwrap();
 
             assert!(result.converged);
@@ -1577,12 +1566,12 @@ mod minimize_conjgrad_tests {
 
         #[test]
         fn test_numerical_gradients() {
-            let func = |x: &Points1<MyFloat>| (&x[0] - 2.0).powi(2) + (&x[1] + 1.0).powi(2);
+            let func = |x: &Points1<TwoFloat>| (&x[0] - 2.0).powi(2) + (&x[1] + 1.0).powi(2);
             let obj = MultiDimNumGradFn::new(func, Some(1e-8.into()), 2);
             let mut conjgrad = ConjGrad::new(obj);
 
             let result = conjgrad
-                .minimize(&array![0.0.into(), 0.0.into()].into())
+                .minimize(&points![0.0.into(), 0.0.into()].into())
                 .unwrap();
 
             assert!(result.converged);
@@ -1600,7 +1589,7 @@ mod minimize_conjgrad_tests {
             let mut conjgrad = ConjGrad::new(obj);
 
             let result = conjgrad
-                .minimize(&array![0.0.into(), 0.0.into()].into())
+                .minimize(&points![0.0.into(), 0.0.into()].into())
                 .unwrap();
 
             assert!(result.converged);
@@ -1614,7 +1603,7 @@ mod minimize_conjgrad_tests {
             let mut conjgrad = ConjGrad::new(obj);
 
             let result = conjgrad
-                .minimize(&array![100.0.into(), MyFloat::new(-50.0)].into())
+                .minimize(&points![100.0.into(), TwoFloat::from_f64(-50.0)].into())
                 .unwrap();
 
             assert!(result.converged);
@@ -1626,14 +1615,14 @@ mod minimize_conjgrad_tests {
         #[test]
         fn test_function_with_different_scales() {
             // Function with different scales in different dimensions
-            let func = |x: &Points1<MyFloat>| 1000.0 * x[0].powi(2) + x[1].powi(2);
-            let grad = |x: &Points1<MyFloat>| array![2000.0 * &x[0], 2.0 * &x[1]].into();
+            let func = |x: &Points1<TwoFloat>| 1000.0 * x[0].powi(2) + x[1].powi(2);
+            let grad = |x: &Points1<TwoFloat>| points![2000.0 * &x[0], 2.0 * &x[1]].into();
             let obj = MultiDimGradFn::new(func, grad);
             let mut conjgrad = ConjGrad::new(obj);
 
             let result = conjgrad
                 .conjugate_gradient(
-                    &array![1.0.into(), 1.0.into()].into(),
+                    &points![1.0.into(), 1.0.into()].into(),
                     ConjGradMethod::PolakRibiere,
                     Some(1e-6.into()),
                     Some(200),
@@ -1657,7 +1646,7 @@ mod minimize_conjgrad_tests {
 
             let result = conjgrad
                 .conjugate_gradient(
-                    &array![MyFloat::new(-1.2), 1.0.into()].into(),
+                    &points![TwoFloat::from_f64(-1.2), 1.0.into()].into(),
                     ConjGradMethod::FletcherReeves,
                     Some(1e-12.into()), // Very strict tolerance
                     Some(5),            // Very few iterations
@@ -1676,7 +1665,7 @@ mod minimize_conjgrad_tests {
             let mut conjgrad = ConjGrad::new(obj);
 
             let result = conjgrad
-                .minimize(&array![1.0.into(), 2.0.into()].into())
+                .minimize(&points![1.0.into(), 2.0.into()].into())
                 .unwrap();
 
             // Verify all fields are populated
@@ -1695,10 +1684,10 @@ mod minimize_conjgrad_tests {
         fn test_clone_and_debug_traits() {
             let obj = simple_quadratic();
             let mut conjgrad = ConjGrad::new(obj);
-            let result = conjgrad.minimize(&array![1.0.into()].into()).unwrap();
+            let result = conjgrad.minimize(&points![1.0.into()].into()).unwrap();
 
             // Test Clone
-            let result_clone = result.clone();
+            let result_clone = result;
             assert_eq!(result.xmin, result_clone.xmin);
             assert_eq!(result.fmin, result_clone.fmin);
             assert_eq!(result.converged, result_clone.converged);
@@ -1715,13 +1704,13 @@ mod minimize_conjgrad_tests {
         #[test]
         fn test_method_robustness_on_challenging_function() {
             // Moderately challenging function
-            let func = |x: &Points1<MyFloat>| {
+            let func = |x: &Points1<TwoFloat>| {
                 let a = 5.0 * &x[0] + &x[1];
                 let b = &x[0] + 5.0 * &x[1];
                 &a * &a + &b * &b
             };
-            let grad = |x: &Points1<MyFloat>| {
-                array![
+            let grad = |x: &Points1<TwoFloat>| {
+                points![
                     2.0 * (5.0 * &x[0] + &x[1]) * 5.0 + 2.0 * (&x[0] + 5.0 * &x[1]),
                     2.0 * (5.0 * &x[0] + &x[1]) + 2.0 * (&x[0] + 5.0 * &x[1]) * 5.0,
                 ]
@@ -1741,7 +1730,7 @@ mod minimize_conjgrad_tests {
                 let mut conjgrad = ConjGrad::new(obj);
 
                 let result = conjgrad.conjugate_gradient(
-                    &array![1.0.into(), 1.0.into()].into(),
+                    &points![1.0.into(), 1.0.into()].into(),
                     method,
                     Some(1e-6.into()),
                     Some(200),
@@ -1763,19 +1752,19 @@ mod minimize_conjgrad_tests {
 
         #[test]
         fn test_various_starting_points() {
-            let starting_points = array![
-                array![MyFloat::new(0.0), MyFloat::new(0.0)],
-                array![1.0.into(), 1.0.into()],
-                array![MyFloat::new(-1.0), 1.0.into()],
-                array![10.0.into(), MyFloat::new(-5.0)],
-                array![MyFloat::new(-20.0), 15.0.into()],
+            let starting_points = points![
+                points![TwoFloat::from_f64(0.0), TwoFloat::from_f64(0.0)],
+                points![1.0.into(), 1.0.into()],
+                points![TwoFloat::from_f64(-1.0), 1.0.into()],
+                points![10.0.into(), TwoFloat::from_f64(-5.0)],
+                points![TwoFloat::from_f64(-20.0), 15.0.into()],
             ];
 
             for start in starting_points {
-                let obj = shifted_quadratic(&array![2.0.into(), MyFloat::new(-1.0)].into());
+                let obj = shifted_quadratic(&points![2.0.into(), TwoFloat::from_f64(-1.0)].into());
                 let mut conjgrad = ConjGrad::new(obj);
 
-                let result = conjgrad.minimize(&start.clone().into()).unwrap();
+                let result = conjgrad.minimize(&start.into()).unwrap();
 
                 assert!(result.converged, "Failed from starting point {:?}", start);
                 assert!((&result.xmin[0] - 2.0).abs() < 1e-6);

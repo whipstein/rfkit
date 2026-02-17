@@ -1,8 +1,7 @@
 use crate::{
     element::{Elem, ElemType, Term},
     frequency::{FreqArray, Frequency, new_frequency},
-    point,
-    pts::{Points, Pts},
+    pts::Points,
 };
 use ndarray::{IntoDimension, prelude::*};
 use num::complex::{Complex64, c64};
@@ -21,7 +20,7 @@ impl Port {
             id,
             z,
             node,
-            c: point![Complex64, [Complex64::ZERO]],
+            c: points![[Complex64::ZERO]],
         }
     }
 
@@ -149,17 +148,18 @@ mod element_port_tests {
     use crate::{
         scale::Scale,
         unit::UnitValBuilder,
-        util::{comp_num, comp_pts_ix2},
+        util::{ApproxEq, NumMargin, comp_pts_ix2},
     };
-    use float_cmp::*;
 
-    const DEFAULT_MARGIN: F64Margin = F64Margin {
+    const DEFAULT_MARGIN: NumMargin<f64> = NumMargin {
         epsilon: 1e-10,
+        relative: 1e-10,
         ulps: 4,
     };
 
-    const RELAXED_MARGIN: F64Margin = F64Margin {
+    const RELAXED_MARGIN: NumMargin<f64> = NumMargin {
         epsilon: 1e-6,
+        relative: 1e-6,
         ulps: 10,
     };
 
@@ -172,15 +172,15 @@ mod element_port_tests {
             id: "P1".to_string(),
             z: val,
             node: [1],
-            c: point![Complex64, [Complex64::ZERO]],
+            c: points![[Complex64::ZERO]],
         };
         let exemplar_z = val;
         let calc = PortBuilder::new().z(val).nodes([1]).id("P1").build();
-        let margin = F64Margin::default();
+        let margin = NumMargin::default();
 
         assert_eq!(&exemplar.id(), &calc.id());
         comp_pts_ix2(&exemplar.c(&freq), &calc.c(&freq), margin, "calc.c()");
-        comp_num(&exemplar_z.into(), &calc.z(&freq), margin, "calc.z()", "0");
+        exemplar_z.assert_approx_eq(calc.z(&freq), margin, "calc.z()", "0");
     }
 
     mod port_tests {

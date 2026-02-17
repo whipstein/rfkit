@@ -1,13 +1,12 @@
 use crate::{
     error::InversionError,
-    num::{RFComplex, RFFloat, RFNum},
-    pts::{Matrix, Points, Pts},
+    num::{ComplexScalar, Norm, RealScalar, Scalar},
+    pts::{Matrix, MatrixComplex, MatrixReal, Points, Pts, PtsComplex, PtsReal},
 };
-use ndarray::{Dimension, IntoDimension, SliceArg, SliceInfo, ViewRepr, linalg::Dot, prelude::*};
+use ndarray::{Dimension, IntoDimension, SliceArg, SliceInfo, linalg::Dot, prelude::*};
 use ndarray_linalg::error::LinalgError;
-use num::complex::Complex64;
-use num_traits::{One, Zero};
-use std::fmt;
+use num_complex::{Complex, Complex64, ComplexFloat};
+use twofloat::TwoFloat;
 
 // pub mod c64;
 // pub mod f64;
@@ -17,10 +16,9 @@ use std::fmt;
 /// A matrix wrapper around ndarray::Array3 with T elements
 // pub struct Points(Array3<T>);
 
-impl<T> Points<T, Ix3>
-where
-    T: RFNum,
-{
+pub type Points3<T> = Points<T, Ix3>;
+
+impl<T: Scalar> Points<T, Ix3> {
     fn check_vec<U>(vec: &Vec<Vec<Vec<U>>>) -> (usize, usize, usize) {
         let len = vec.len();
         let rows = vec[0].len();
@@ -61,25 +59,6 @@ where
         matrix
     }
 
-    /// Create a matrix from a 3D vector
-    pub fn from_real_vec(data: Vec<Vec<Vec<T::Real>>>) -> Self {
-        if data.is_empty() {
-            return Self::new(Array3::from_elem((0, 0, 0), T::zero()));
-        }
-
-        let shape = Self::check_vec(&data);
-        let mut matrix = Self::zeros(shape);
-        for (i, val) in data.iter().enumerate() {
-            for (j, row) in val.iter().enumerate() {
-                for (k, value) in row.iter().enumerate() {
-                    matrix[(i, j, k)] = <<T as RFNum>::Real as Into<T>>::into(value.clone());
-                }
-            }
-        }
-
-        matrix
-    }
-
     pub fn to_vec(&self) -> Vec<Vec<Vec<T>>> {
         let mut out: Vec<Vec<Vec<T>>> = vec![];
         for pt in self.outer_iter() {
@@ -94,10 +73,7 @@ where
     }
 }
 
-impl<T> Points<T, Ix3>
-where
-    T: RFFloat,
-{
+impl<T: RealScalar> Points<T, Ix3> {
     /// Create a matrix from a 3D vector of f64 values
     pub fn from_vec_f64(data: Vec<Vec<Vec<f64>>>) -> Self {
         if data.is_empty() {
@@ -109,7 +85,7 @@ where
         for (i, val) in data.iter().enumerate() {
             for (j, row) in val.iter().enumerate() {
                 for (k, &value) in row.iter().enumerate() {
-                    matrix[(i, j, k)] = T::from_f64(value);
+                    matrix[(i, j, k)] = <T as From<f64>>::from(value);
                 }
             }
         }
@@ -121,7 +97,7 @@ where
     pub fn from_vec_float<U>(data: Vec<Vec<Vec<U>>>) -> Self
     where
         T: From<U>,
-        U: RFFloat,
+        U: RealScalar,
     {
         if data.is_empty() {
             return Self::new(Array3::from_elem((0, 0, 0), T::zero()));
@@ -132,7 +108,7 @@ where
         for (i, val) in data.iter().enumerate() {
             for (j, row) in val.iter().enumerate() {
                 for (k, value) in row.iter().enumerate() {
-                    matrix[(i, j, k)] = T::from(value.clone());
+                    matrix[(i, j, k)] = <T as From<U>>::from(*value);
                 }
             }
         }
@@ -143,7 +119,8 @@ where
 
 impl<T> Points<T, Ix3>
 where
-    T: RFComplex,
+    T: ComplexScalar + From<Complex64>,
+    T::Real: RealScalar,
 {
     /// Create a matrix from a 3D vector of Complex64
     pub fn from_vec_c64(data: Vec<Vec<Vec<Complex64>>>) -> Self {
@@ -156,7 +133,7 @@ where
         for (i, val) in data.iter().enumerate() {
             for (j, row) in val.iter().enumerate() {
                 for (k, &value) in row.iter().enumerate() {
-                    matrix[(i, j, k)] = T::from(value);
+                    matrix[(i, j, k)] = T::new(T::Real::from(value.re), T::Real::from(value.im));
                 }
             }
         }
@@ -167,8 +144,8 @@ where
     /// Create a matrix from a 3D vector of complex
     pub fn from_vec_complex<U>(data: Vec<Vec<Vec<U>>>) -> Self
     where
-        for<'a> T: From<&'a U>,
-        U: RFComplex,
+        T: From<U>,
+        U: Copy,
     {
         if data.is_empty() {
             return Self::new(Array3::from_elem((0, 0, 0), T::zero()));
@@ -179,7 +156,30 @@ where
         for (i, val) in data.iter().enumerate() {
             for (j, row) in val.iter().enumerate() {
                 for (k, value) in row.iter().enumerate() {
-                    matrix[(i, j, k)] = T::from(value);
+                    matrix[(i, j, k)] = <T as From<U>>::from(*value);
+                }
+            }
+        }
+
+        matrix
+    }
+
+    /// Create a matrix from a 3D vector
+    pub fn from_real_vec(data: Vec<Vec<Vec<T::Real>>>) -> Self
+    where
+        T: From<T::Real>,
+        T::Real: Copy,
+    {
+        if data.is_empty() {
+            return Self::new(Array3::from_elem((0, 0, 0), T::zero()));
+        }
+
+        let shape = Self::check_vec(&data);
+        let mut matrix = Self::zeros(shape);
+        for (i, val) in data.iter().enumerate() {
+            for (j, row) in val.iter().enumerate() {
+                for (k, value) in row.iter().enumerate() {
+                    matrix[(i, j, k)] = <T as From<T::Real>>::from(*value);
                 }
             }
         }
@@ -190,8 +190,9 @@ where
     /// Create a matrix from a 3D vector of real tuples (real, imag)
     pub fn from_vec_tuple<U>(data: Vec<Vec<Vec<(U, U)>>>) -> Self
     where
+        T: From<Complex<T::Real>>,
         T::Real: From<U>,
-        U: RFFloat,
+        U: RealScalar,
     {
         if data.is_empty() {
             return Self::new(Array3::from_elem((0, 0, 0), T::zero()));
@@ -202,10 +203,8 @@ where
         for (i, val) in data.iter().enumerate() {
             for (j, row) in val.iter().enumerate() {
                 for (k, (real, imag)) in row.iter().enumerate() {
-                    matrix[(i, j, k)] = T::new(
-                        &<T as RFNum>::Real::from(real.clone()),
-                        &<T as RFNum>::Real::from(imag.clone()),
-                    );
+                    matrix[(i, j, k)] =
+                        Complex::<T::Real>::new(T::Real::from(*real), T::Real::from(*imag)).into();
                 }
             }
         }
@@ -214,46 +213,8 @@ where
     }
 }
 
-impl<T> Pts<T, Ix3> for Points<T, Ix3>
-where
-    T: RFNum,
-{
+impl<T: Scalar> Pts<T, Ix3> for Points<T, Ix3> {
     type Idx = (usize, usize, usize);
-    type Tuple<'a>
-        = &'a [(T, T)]
-    where
-        T: 'a;
-
-    /// Create a new matrix with given dimensions filled with zeros
-    fn zeros(shape: impl IntoDimension<Dim = Dim<[usize; 3]>>) -> Self {
-        Points(Array3::from_elem(shape, T::zero()))
-    }
-
-    /// Create a new matrix with given dimensions filled with ones
-    fn ones(shape: impl IntoDimension<Dim = Dim<[usize; 3]>>) -> Self {
-        Points(Array3::from_elem(shape, T::one()))
-    }
-
-    /// Create a matrix from a flat vector with specified dimensions
-    fn from_flat_f64(
-        data: Vec<f64>,
-        shape: impl IntoDimension<Dim = Dim<[usize; 3]>>,
-    ) -> Result<Self, &'static str> {
-        let (depth, rows, cols) = shape.into_dimension().into_pattern();
-        if data.len() != depth * rows * cols {
-            return Err("Data length does not match matrix dimensions");
-        }
-
-        let mut matrix = Self::zeros((depth, rows, cols));
-        for (idx, &value) in data.iter().enumerate() {
-            let i = idx / (rows * cols);
-            let j = idx / cols;
-            let k = idx % cols;
-            matrix[(i, j, k)] = T::from(value);
-        }
-
-        Ok(matrix)
-    }
 
     fn from_elem(shape: impl IntoDimension<Dim = Ix3>, elem: T) -> Self {
         Points(Array3::from_elem(shape, elem))
@@ -484,46 +445,125 @@ where
     {
         self.0.map_inplace(|x| *x = f(x));
     }
+}
 
-    /// Check if a matrix is approximately equal to another matrix within a tolerance
-    fn approx_eq(a: &ArrayView3<T>, b: &ArrayView3<T>, tol: f64) -> bool
+impl<T: ComplexScalar> PtsComplex<T, Ix3> for Points<T, Ix3>
+where
+    T::Real: RealScalar,
+{
+    // type Size = (usize, usize, usize);
+    type Tuple<'a>
+        = &'a [(T, T)]
     where
-        <T as RFNum>::Real: PartialOrd<f64>,
-        for<'a, 'b> &'a T: std::ops::Sub<&'b T, Output = T>,
-    {
-        if a.dim() != b.dim() {
-            return false;
+        T: 'a;
+    // type Vec = Vec<Vec<Vec<(T::Real, T::Real)>>>;
+
+    // fn check_dims(
+    //     vals: &Vec<Vec<Vec<(T::Real, T::Real)>>>,
+    // ) -> Result<(usize, usize, usize), &'static str> {
+    //     let pts = vals.len();
+    //     let rows = vals.first().map_or(0, |s| s.len());
+    //     let cols = vals.first().and_then(|s| s.first()).map_or(0, |r| r.len());
+
+    //     for slice in vals.iter() {
+    //         if slice.len() != rows {
+    //             return Err("Inconsistent dimension 1 lengths");
+    //         }
+    //         for row in slice.iter() {
+    //             if row.len() != cols {
+    //                 return Err("Inconsistent dimension 2 lengths");
+    //             }
+    //         }
+    //     }
+
+    //     Ok((pts, rows, cols))
+    // }
+
+    // fn from_db(vals: &Vec<Vec<Vec<(T::Real, T::Real)>>>) -> Result<Self, String> {
+    //     let dim = Self::check_dims(vals)?;
+
+    //     Ok(Points3::from_shape_fn(dim, |(i, j, k)| {
+    //         let r = ComplexFloat::powf(T::Real::C10, vals[i][j][k].0 / T::Real::C20);
+    //         let theta = vals[i][j][k].1.to_radians();
+    //         T::new(
+    //             r * <T::Real as Float>::cos(theta),
+    //             r * <T::Real as Float>::sin(theta),
+    //         )
+    //     }))
+    // }
+
+    // fn from_magang(vals: &Vec<Vec<Vec<(T::Real, T::Real)>>>) -> Result<Self, String> {
+    //     let dim = Self::check_dims(vals)?;
+
+    //     Ok(Points3::from_shape_fn(dim, |(i, j, k)| {
+    //         let r = vals[i][j][k].0;
+    //         let theta = vals[i][j][k].1.to_radians();
+    //         T::new(
+    //             r * <T::Real as Float>::cos(theta),
+    //             r * <T::Real as Float>::sin(theta),
+    //         )
+    //     }))
+    // }
+
+    // fn from_reim(vals: &Vec<Vec<Vec<(T::Real, T::Real)>>>) -> Result<Self, String> {
+    //     let dim = Self::check_dims(vals)?;
+
+    //     Ok(Points3::from_shape_fn(dim, |(i, j, k)| {
+    //         T::new(vals[i][j][k].0, vals[i][j][k].1)
+    //     }))
+    // }
+
+    // fn db(&self) -> Points<T::Real, Ix3> {
+    //     Points::from_shape_fn(self.dim(), |idx| {
+    //         T::Real::C20 * Float::log10(self[idx].abs())
+    //     })
+    // }
+
+    // fn deg(&self) -> Points<T::Real, Ix3> {
+    //     Points::from_shape_fn(self.dim(), |idx| self[idx].arg().to_degrees())
+    // }
+
+    // fn im(&self) -> Points<T::Real, Ix3> {
+    //     Points::from_shape_fn(self.dim(), |idx| self[idx].im())
+    // }
+
+    // fn mag(&self) -> Points<T::Real, Ix3> {
+    //     Points::from_shape_fn(self.dim(), |idx| self[idx].abs())
+    // }
+
+    // fn rad(&self) -> Points<<T>::Real, Ix3> {
+    //     Points::from_shape_fn(self.dim(), |idx| self[idx].arg())
+    // }
+
+    // fn re(&self) -> Points<T::Real, Ix3> {
+    //     Points::from_shape_fn(self.dim(), |idx| self[idx].re())
+    // }
+}
+
+impl<T: RealScalar> PtsReal<T, Ix3> for Points<T, Ix3> {
+    /// Create a matrix from a flat vector with specified dimensions
+    fn from_flat_f64(
+        data: Vec<f64>,
+        shape: impl IntoDimension<Dim = Dim<[usize; 3]>>,
+    ) -> Result<Self, &'static str> {
+        let (depth, rows, cols) = shape.into_dimension().into_pattern();
+        if data.len() != depth * rows * cols {
+            return Err("Data length does not match matrix dimensions");
         }
 
-        let (npts, rows, cols) = a.dim();
-
-        for i in 0..npts {
-            for j in 0..rows {
-                for k in 0..cols {
-                    let diff: T = &a[[i, j, k]] - &b[[i, j, k]];
-                    if diff.norm() > tol {
-                        return false;
-                    }
-                }
-            }
+        let mut matrix = Self::zeros((depth, rows, cols));
+        for (idx, &value) in data.iter().enumerate() {
+            let i = idx / (rows * cols);
+            let j = idx / cols;
+            let k = idx % cols;
+            matrix[(i, j, k)] = <T as From<f64>>::from(value);
         }
 
-        true
+        Ok(matrix)
     }
 }
 
-impl<T> Matrix<T, Ix3> for Points<T, Ix3>
-where
-    T: RFNum,
-{
-    /// Create an identity matrix of given size
-    fn eye(size: impl IntoDimension<Dim = Dim<[usize; 2]>>) -> Self {
-        let dim = size.into_dimension().into_pattern();
-        Points(Array3::from_shape_fn((dim.0, dim.1, dim.1), |(_, j, k)| {
-            if j == k { T::one() } else { T::zero() }
-        }))
-    }
-
+impl<T: Scalar> Matrix<T, Ix3> for Points<T, Ix3> {
     /// Get the number of rows
     fn nrows(&self) -> usize {
         self.0.shape()[1]
@@ -532,129 +572,6 @@ where
     /// Get the number of cols
     fn ncols(&self) -> usize {
         self.0.shape()[2]
-    }
-
-    /// Check if the matrix is square
-    fn is_square(&self) -> bool {
-        self.nrows() == self.ncols()
-    }
-
-    /// Transpose the matrix
-    fn t(&self) -> Self {
-        Points(self.0.t().to_owned())
-    }
-
-    /// Transpose the matrix
-    fn transpose(&self) -> Self {
-        self.t()
-    }
-
-    /// Get the conjugate transpose (Hermitian transpose)
-    fn h(&self) -> Self {
-        let transposed = self.transpose();
-        let mut result = transposed;
-        for element in result.0.iter_mut() {
-            *element = element.conj();
-        }
-        result
-    }
-
-    /// Get the conjugate transpose (Hermitian transpose)
-    fn conj_transpose(&self) -> Self {
-        self.h()
-    }
-
-    /// Calculate the trace (sum of diagonal elements)
-    fn trace(&self) -> Result<Array1<T>, LinalgError> {
-        _ = match self.is_square() {
-            true => Ok(self.nrows()),
-            false => Err(LinalgError::NotSquare {
-                rows: self.nrows() as i32,
-                cols: self.ncols() as i32,
-            }),
-        };
-
-        let mut trace = Array1::zeros(self.npts());
-        for (i, pt) in self.outer_iter().enumerate() {
-            let mut sum = T::zero();
-            for j in 0..pt.nrows() {
-                sum += &pt[[j, j]];
-            }
-            trace[i] = sum;
-        }
-        Ok(trace)
-    }
-
-    /// Calculate the determinant (only for small matrices)
-    fn det(&self) -> Result<Array1<T>, LinalgError>
-    where
-        for<'a> &'a T: std::ops::Mul<T, Output = T>,
-        for<'a, 'b> &'a T: std::ops::Mul<&'b T, Output = T>,
-    {
-        _ = match self.is_square() {
-            true => Ok(self.nrows()),
-            false => Err(LinalgError::NotSquare {
-                rows: self.nrows() as i32,
-                cols: self.ncols() as i32,
-            }),
-        };
-
-        let mut det = Array1::zeros(self.npts());
-        for (i, pt) in self.outer_iter().enumerate() {
-            let val = match pt.nrows() {
-                0 => Ok(T::one()),
-                1 => Ok(pt[[0, 0]].clone()),
-                2 => Ok(&pt[[0, 0]] * &pt[[1, 1]] - &pt[[0, 1]] * &pt[[1, 0]]),
-                3 => {
-                    let a00 = &pt[[0, 0]];
-                    let a01 = &pt[[0, 1]];
-                    let a02 = &pt[[0, 2]];
-                    let a10 = &pt[[1, 0]];
-                    let a11 = &pt[[1, 1]];
-                    let a12 = &pt[[1, 2]];
-                    let a20 = &pt[[2, 0]];
-                    let a21 = &pt[[2, 1]];
-                    let a22 = &pt[[2, 2]];
-
-                    Ok(
-                        a00 * (a11 * a22 - a12 * a21) - a01 * (a10 * a22 - a12 * a20)
-                            + a02 * (a10 * a21 - a11 * a20),
-                    )
-                }
-                _ => Err(LinalgError::NotStandardShape {
-                    obj: "Determinant calculation for matrices larger than 3x3 not implemented",
-                    rows: self.nrows() as i32,
-                    cols: self.ncols() as i32,
-                }),
-            };
-            det[i] = val.unwrap();
-        }
-        Ok(det)
-    }
-
-    /// Element-wise conjugate
-    fn conj(&self) -> Self {
-        let mut result = self.0.clone();
-        for element in result.iter_mut() {
-            *element = element.conj();
-        }
-        Points(result)
-    }
-
-    /// Calculate the Frobenius norm
-    fn frobenius_norm(&self) -> Array1<T::Real>
-    where
-        T::Real: RFNum,
-    {
-        let mut norm = Array1::<T::Real>::zeros(self.npts());
-        for (i, pt) in self.outer_iter().enumerate() {
-            let mut sum = T::Real::zero();
-            for element in pt.iter() {
-                sum += element.norm_sqr();
-            }
-            norm[i] = sum.sqrt()
-        }
-        norm
     }
 
     /// Get a row as a new matrix (1 x ncols)
@@ -757,23 +674,116 @@ where
         }
     }
 
+    /// Check if the matrix is square
+    fn is_square(&self) -> bool {
+        self.nrows() == self.ncols()
+    }
+
+    /// Transpose the matrix
+    fn t(&self) -> Self {
+        Points(self.0.t().to_owned())
+    }
+
+    /// Transpose the matrix
+    fn transpose(&self) -> Self {
+        self.t()
+    }
+
+    /// Create an identity matrix of given size
+    fn eye(size: impl IntoDimension<Dim = Dim<[usize; 2]>>) -> Self {
+        let dim = size.into_dimension().into_pattern();
+        Points(Array3::from_shape_fn((dim.0, dim.1, dim.1), |(_, j, k)| {
+            if j == k { T::one() } else { T::zero() }
+        }))
+    }
+
+    /// Create an identity matrix of given size
+    fn eye_value(size: impl IntoDimension<Dim = Dim<[usize; 2]>>, value: T) -> Self {
+        let dim = size.into_dimension().into_pattern();
+        Points(Array3::from_shape_fn((dim.0, dim.1, dim.1), |(_, j, k)| {
+            if j == k { value } else { T::zero() }
+        }))
+    }
+
+    /// Calculate the trace (sum of diagonal elements)
+    fn trace(&self) -> Result<Array1<T>, LinalgError> {
+        _ = match self.is_square() {
+            true => Ok(self.nrows()),
+            false => Err(LinalgError::NotSquare {
+                rows: self.nrows() as i32,
+                cols: self.ncols() as i32,
+            }),
+        };
+
+        let mut trace = Array1::zeros(self.npts());
+        for (i, pt) in self.outer_iter().enumerate() {
+            let mut sum = T::zero();
+            for j in 0..pt.nrows() {
+                sum += pt[[j, j]];
+            }
+            trace[i] = sum;
+        }
+        Ok(trace)
+    }
+
+    /// Calculate the determinant (only for small matrices)
+    fn det(&self) -> Result<Array1<T>, LinalgError> {
+        _ = match self.is_square() {
+            true => Ok(self.nrows()),
+            false => Err(LinalgError::NotSquare {
+                rows: self.nrows() as i32,
+                cols: self.ncols() as i32,
+            }),
+        };
+
+        let mut det = Array1::zeros(self.npts());
+        for (i, pt) in self.outer_iter().enumerate() {
+            let val = match pt.nrows() {
+                0 => Ok(T::one()),
+                1 => Ok(pt[[0, 0]]),
+                2 => Ok(pt[[0, 0]] * pt[[1, 1]] - pt[[0, 1]] * pt[[1, 0]]),
+                3 => {
+                    let a00 = pt[[0, 0]];
+                    let a01 = pt[[0, 1]];
+                    let a02 = pt[[0, 2]];
+                    let a10 = pt[[1, 0]];
+                    let a11 = pt[[1, 1]];
+                    let a12 = pt[[1, 2]];
+                    let a20 = pt[[2, 0]];
+                    let a21 = pt[[2, 1]];
+                    let a22 = pt[[2, 2]];
+
+                    Ok(
+                        a00 * (a11 * a22 - a12 * a21) - a01 * (a10 * a22 - a12 * a20)
+                            + a02 * (a10 * a21 - a11 * a20),
+                    )
+                }
+                _ => Err(LinalgError::NotStandardShape {
+                    obj: "Determinant calculation for matrices larger than 3x3 not implemented",
+                    rows: self.nrows() as i32,
+                    cols: self.ncols() as i32,
+                }),
+            };
+            det[i] = val.unwrap();
+        }
+        Ok(det)
+    }
+
     /// Compute the inverse of a square matrix using LU decomposition with partial pivoting
     fn inv(&self) -> Points<T, Ix3>
     where
-        for<'a, 'b> &'a T: std::ops::Mul<&'b T, Output = T>,
-        for<'a, 'b> &'a T: std::ops::Div<&'b T, Output = T>,
-        <T as RFNum>::Real: PartialOrd,
-        <T as RFNum>::Real: PartialOrd<f64>,
+        Self: Sized,
+        T: Norm,
+        <T as ComplexFloat>::Real: RealScalar,
     {
         self.try_inv().unwrap()
     }
 
     fn try_inv(&self) -> Result<Points<T, Ix3>, InversionError>
     where
-        for<'a, 'b> &'a T: std::ops::Mul<&'b T, Output = T>,
-        for<'a, 'b> &'a T: std::ops::Div<&'b T, Output = T>,
-        <T as RFNum>::Real: PartialOrd,
-        <T as RFNum>::Real: PartialOrd<f64>,
+        Self: Sized,
+        T: Norm,
+        <T as ComplexFloat>::Real: RealScalar,
     {
         let (npts, rows, cols) = self.dim();
 
@@ -819,7 +829,7 @@ where
                 }
 
                 // Check for singularity
-                if max_abs < 1e-12 {
+                if max_abs < 1e-12.into() {
                     return Err(InversionError::Singular(format!(
                         "Matrix is singular or nearly singular at pivot {}",
                         j
@@ -829,25 +839,25 @@ where
                 // Swap rows if necessary
                 if pivot_row != j {
                     for k in 0..(2 * n) {
-                        let temp = augmented[[j, k]].clone();
-                        augmented[[j, k]] = augmented[[pivot_row, k]].clone();
+                        let temp = augmented[[j, k]];
+                        augmented[[j, k]] = augmented[[pivot_row, k]];
                         augmented[[pivot_row, k]] = temp;
                     }
                 }
 
                 // Scale pivot row to make diagonal element 1
-                let pivot = augmented[[j, j]].clone();
+                let pivot = augmented[[j, j]];
                 for k in 0..(2 * n) {
-                    augmented[[j, k]] /= &pivot;
+                    augmented[[j, k]] /= pivot;
                 }
 
                 // Eliminate column i in all other rows
                 for l in 0..n {
                     if l != j {
-                        let factor = augmented[[l, j]].clone();
+                        let factor = augmented[[l, j]];
                         for k in 0..(2 * n) {
-                            let temp = &augmented[[j, k]] * &factor;
-                            augmented[[l, k]] -= &temp;
+                            let temp = augmented[[j, k]] * factor;
+                            augmented[[l, k]] -= temp;
                         }
                     }
                 }
@@ -856,21 +866,22 @@ where
             // Extract the inverse matrix from the right half
             for j in 0..n {
                 for k in 0..n {
-                    inverse[[i, j, k]] = augmented[[j, k + n]].clone();
+                    inverse[[i, j, k]] = augmented[[j, k + n]];
                 }
             }
         }
 
         Ok(Points(inverse))
     }
+}
 
+impl<T: RealScalar> MatrixReal<T, Ix3> for Points<T, Ix3> {
     /// Solve the linear system Ax = b using LU decomposition
     fn solve_linear_system(&self, b: &ArrayView3<T>) -> Result<Array3<T>, InversionError>
     where
-        for<'a, 'b> &'a T: std::ops::Mul<&'b T, Output = T>,
-        for<'a, 'b> &'a T: std::ops::Div<&'b T, Output = T>,
-        <T as RFNum>::Real: PartialOrd,
-        <T as RFNum>::Real: PartialOrd<f64>,
+        Self: Sized,
+        T: Norm,
+        <T as ComplexFloat>::Real: RealScalar,
     {
         let (a_npts, a_rows, a_cols) = self.dim();
         let (b_npts, b_rows, b_cols) = b.dim();
@@ -937,7 +948,7 @@ where
                 }
 
                 // Check for singularity
-                if max_abs < 1e-12 {
+                if max_abs < 1e-12.into() {
                     return Err(InversionError::Singular(format!(
                         "Matrix is singular at pivot {}",
                         j
@@ -955,21 +966,21 @@ where
 
                 // Eliminate below pivot
                 for l in (j + 1)..n {
-                    let factor = &augmented[[l, j]] / &augmented[[j, j]];
+                    let factor = augmented[[l, j]] / augmented[[j, j]];
                     for k in j..(n + 1) {
-                        let temp = &augmented[[j, k]] * &factor;
-                        augmented[[l, k]] -= &temp;
+                        let temp = augmented[[j, k]] * factor;
+                        augmented[[l, k]] -= temp;
                     }
                 }
             }
 
             // Back substitution
             for j in (0..n).rev() {
-                let mut sum = augmented[[j, n]].clone();
+                let mut sum = augmented[[j, n]];
                 for k in (j + 1)..n {
-                    sum -= &augmented[[j, k]] * &x[[i, k, 0]];
+                    sum -= augmented[[j, k]] * x[[i, k, 0]];
                 }
-                x[[i, j, 0]] = sum / &augmented[[j, j]];
+                x[[i, j, 0]] = sum / augmented[[j, j]];
             }
         }
 
@@ -977,16 +988,53 @@ where
     }
 }
 
-// Dot product implementations
-impl<T, U> Dot<Points<U, Ix2>> for Points<T, Ix3>
+impl<T: ComplexScalar> MatrixComplex<T, Ix3> for Points<T, Ix3>
 where
-    T: RFNum,
-    U: RFNum,
-    for<'a, 'b> &'a T: std::ops::Mul<&'b U, Output = T>,
+    T::Real: RealScalar,
 {
+    /// Get the conjugate transpose (Hermitian transpose)
+    fn h(&self) -> Self {
+        let transposed = self.transpose();
+        let mut result = transposed;
+        for element in result.0.iter_mut() {
+            *element = element.conj();
+        }
+        result
+    }
+
+    /// Get the conjugate transpose (Hermitian transpose)
+    fn conj_transpose(&self) -> Self {
+        self.h()
+    }
+
+    /// Element-wise conjugate
+    fn conj(&self) -> Self {
+        let mut result = self.0.clone();
+        for element in result.iter_mut() {
+            *element = element.conj();
+        }
+        Points(result)
+    }
+
+    // /// Calculate the Frobenius norm
+    // fn frobenius_norm(&self) -> Array1<T::Real> {
+    //     let mut norm = Array1::<T::Real>::zeros(self.npts());
+    //     for (i, pt) in self.outer_iter().enumerate() {
+    //         let mut sum = T::Real::zero();
+    //         for &element in pt.iter() {
+    //             sum += element.norm_sqr();
+    //         }
+    //         norm[i] = sum.sqrt()
+    //     }
+    //     norm
+    // }
+}
+
+// Dot product implementations
+impl<T: Scalar> Dot<Points<T, Ix2>> for Points<T, Ix3> {
     type Output = Points<T, Ix3>;
 
-    fn dot(&self, rhs: &Points<U, Ix2>) -> Self::Output {
+    fn dot(&self, rhs: &Points<T, Ix2>) -> Self::Output {
         let mut result = Self::Output::zeros(self.dim());
 
         for i in 0..self.npts() {
@@ -1000,17 +1048,10 @@ where
     }
 }
 
-impl<T, U> Dot<Points<U, Ix3>> for Points<T, Ix3>
-where
-    T: RFNum,
-    U: RFNum,
-    for<'a, 'b> &'a T: std::ops::Mul<&'b T, Output = T>,
-    for<'a> Points<T, ndarray::Dim<[usize; 2]>>: From<ndarray::ArrayBase<ViewRepr<&'a U>, ndarray::Dim<[usize; 2]>, U>>
-        + From<Points<U, ndarray::Dim<[usize; 2]>>>,
-{
+impl<T: Scalar> Dot<Points<T, Ix3>> for Points<T, Ix3> {
     type Output = Points<T, Ix3>;
 
-    fn dot(&self, rhs: &Points<U, Ix3>) -> Self::Output {
+    fn dot(&self, rhs: &Points<T, Ix3>) -> Self::Output {
         let mut result = Self::Output::zeros(self.dim());
 
         for i in 0..self.npts() {
@@ -1028,108 +1069,99 @@ where
 }
 
 // Traits
-impl<T> Default for Points<T, Ix3>
-where
-    T: RFNum,
-{
+impl<T: Scalar> Default for Points<T, Ix3> {
     fn default() -> Self {
         Points::<T, Ix3>::zeros((0, 0, 0))
     }
 }
 
-impl<T> Zero for Points<T, Ix3>
-where
-    T: RFNum,
-{
-    fn zero() -> Self {
-        Points::<T, Ix3>::zeros((0, 0, 0))
-    }
+// impl<T> Zero for Points<T, Ix3>
+// where
+//     T: Scalar,
+// {
+//     fn zero() -> Self {
+//         Points::<T, Ix3>::zeros((0, 0, 0))
+//     }
 
-    fn is_zero(&self) -> bool {
-        self.0.iter().all(|x| x.is_zero())
-    }
-}
+//     fn is_zero(&self) -> bool {
+//         self.0.iter().all(|x| x.is_zero())
+//     }
+// }
 
-impl<T> One for Points<T, Ix3>
-where
-    T: RFNum,
-{
-    fn one() -> Self {
-        Points::<T, Ix3>::ones((0, 0, 0))
-    }
+// impl<T> One for Points<T, Ix3>
+// where
+//     T: ComplexFloat,
+// {
+//     fn one() -> Self {
+//         Points::<T, Ix3>::ones((0, 0, 0))
+//     }
 
-    fn is_one(&self) -> bool {
-        self.0.iter().all(|x| x.is_one())
-    }
-}
+//     fn is_one(&self) -> bool {
+//         self.0.iter().all(|x| x.is_one())
+//     }
+// }
 
-// Display implementation
-impl<T> fmt::Display for Points<T, Ix3>
-where
-    T: RFNum,
-{
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.len_of(Axis(0)) == 0 || self.len_of(Axis(1)) == 0 || self.len_of(Axis(2)) == 0 {
-            return write!(f, "[]");
-        }
+// // Display implementation
+// impl<T> fmt::Display for Points<T, Ix3>
+// where
+//     T: Scalar,
+// {
+//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+//         if self.len_of(Axis(0)) == 0 || self.len_of(Axis(1)) == 0 || self.len_of(Axis(2)) == 0 {
+//             return write!(f, "[]");
+//         }
 
-        writeln!(f, "[")?;
-        for i in 0..self.len_of(Axis(0)) {
-            write!(f, "  [")?;
-            for j in 0..self.len_of(Axis(1)) {
-                write!(f, "  [")?;
-                for k in 0..self.len_of(Axis(2)) {
-                    if k > 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "{}", self[(i, j, k)])?;
-                }
-                if j < self.len_of(Axis(1)) - 1 {
-                    writeln!(f, "],")?;
-                } else {
-                    writeln!(f, "]")?;
-                }
-            }
-            if i < self.len_of(Axis(0)) - 1 {
-                writeln!(f, "],")?;
-            } else {
-                writeln!(f, "]")?;
-            }
-        }
-        write!(f, "]")
-    }
-}
+//         writeln!(f, "[")?;
+//         for i in 0..self.len_of(Axis(0)) {
+//             write!(f, "  [")?;
+//             for j in 0..self.len_of(Axis(1)) {
+//                 write!(f, "  [")?;
+//                 for k in 0..self.len_of(Axis(2)) {
+//                     if k > 0 {
+//                         write!(f, ", ")?;
+//                     }
+//                     write!(f, "{}", self[(i, j, k)])?;
+//                 }
+//                 if j < self.len_of(Axis(1)) - 1 {
+//                     writeln!(f, "],")?;
+//                 } else {
+//                     writeln!(f, "]")?;
+//                 }
+//             }
+//             if i < self.len_of(Axis(0)) - 1 {
+//                 writeln!(f, "],")?;
+//             } else {
+//                 writeln!(f, "]")?;
+//             }
+//         }
+//         write!(f, "]")
+//     }
+// }
 
-impl<T> fmt::Debug for Points<T, Ix3>
-where
-    T: RFNum,
-{
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "Points({}x{}x{}) {}",
-            self.len_of(Axis(0)),
-            self.len_of(Axis(1)),
-            self.len_of(Axis(2)),
-            self
-        )
-    }
-}
+// impl<T> fmt::Debug for Points<T, Ix3>
+// where
+//     T: Scalar,
+// {
+//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+//         write!(
+//             f,
+//             "Points({}x{}x{}) {}",
+//             self.len_of(Axis(0)),
+//             self.len_of(Axis(1)),
+//             self.len_of(Axis(2)),
+//             self
+//         )
+//     }
+// }
 
 // Conversion traits
-impl<T> From<Array3<T>> for Points<T, Ix3>
-where
-    T: RFNum,
-{
+impl<T: Scalar> From<Array3<T>> for Points<T, Ix3> {
     fn from(array: Array3<T>) -> Self {
         Points(array)
     }
 }
 
-impl<T> From<ArrayView3<'_, T>> for Points<T, Ix3>
-where
-    T: RFNum,
-{
+impl<T: Scalar> From<ArrayView3<'_, T>> for Points<T, Ix3> {
     fn from(array: ArrayView3<T>) -> Self {
         Points(array.to_owned())
     }
@@ -1141,42 +1173,98 @@ impl<T> From<Points<T, Ix3>> for Array3<T> {
     }
 }
 
-impl<T> From<Vec<Vec<Vec<T>>>> for Points<T, Ix3>
-where
-    T: RFNum,
-{
+impl<T: Scalar> From<Vec<Vec<Vec<T>>>> for Points<T, Ix3> {
     fn from(data: Vec<Vec<Vec<T>>>) -> Self {
         Points::<T, Ix3>::from_vec(data)
     }
 }
 
-impl<T> From<Vec<Vec<Vec<(T::Real, T::Real)>>>> for Points<T, Ix3>
-where
-    T: RFComplex,
-    <T as RFNum>::Real: RFFloat,
-{
-    fn from(data: Vec<Vec<Vec<(T::Real, T::Real)>>>) -> Self {
-        Points::<T, Ix3>::from_vec_tuple(data)
+// impl<T> From<Vec<Vec<Vec<(T::Real, T::Real)>>>> for Points<T, Ix3>
+// where
+//     T: ComplexFloat,
+//     <T as ComplexFloat>::Real: Float,
+// {
+//     fn from(data: Vec<Vec<Vec<(T::Real, T::Real)>>>) -> Self {
+//         Points::<T, Ix3>::from_vec_tuple(data)
+//     }
+// }
+
+// impl<T, U> From<&Points<U, Ix3>> for Points<T, Ix3>
+// where
+//     T: Scalar + From<U> + Abs,
+//     U: Scalar,
+// {
+//     fn from(point: &Points<U, Ix3>) -> Self {
+//         Points::from_shape_fn(point.dim(), |(i, j, k)| point[[i, j, k]].into())
+//     }
+// }
+
+impl From<Points<f64, Ix3>> for Points<TwoFloat, Ix3> {
+    fn from(point: Points<f64, Ix3>) -> Self {
+        Points::from_shape_fn(point.dim(), |(i, j, k)| point[[i, j, k]].into())
     }
 }
 
-impl<T> From<&Points<T, Ix3>> for Points<T, Ix3>
-where
-    T: RFNum,
-{
-    fn from(point: &Points<T, Ix3>) -> Self {
-        point.clone()
+impl From<&Points<f64, Ix3>> for Points<TwoFloat, Ix3> {
+    fn from(point: &Points<f64, Ix3>) -> Self {
+        Points::from_shape_fn(point.dim(), |(i, j, k)| point[[i, j, k]].into())
+    }
+}
+
+impl From<Points<TwoFloat, Ix3>> for Points<f64, Ix3> {
+    fn from(point: Points<TwoFloat, Ix3>) -> Self {
+        Points::from_shape_fn(point.dim(), |(i, j, k)| point[[i, j, k]].hi())
+    }
+}
+
+impl From<&Points<TwoFloat, Ix3>> for Points<f64, Ix3> {
+    fn from(point: &Points<TwoFloat, Ix3>) -> Self {
+        Points::from_shape_fn(point.dim(), |(i, j, k)| point[[i, j, k]].hi())
+    }
+}
+
+impl From<Points<Complex<f64>, Ix3>> for Points<Complex<TwoFloat>, Ix3> {
+    fn from(point: Points<Complex<f64>, Ix3>) -> Self {
+        Points::from_shape_fn(point.dim(), |(i, j, k)| {
+            Complex::<TwoFloat>::new(point[[i, j, k]].re.into(), point[[i, j, k]].im.into())
+        })
+    }
+}
+
+impl From<&Points<Complex<f64>, Ix3>> for Points<Complex<TwoFloat>, Ix3> {
+    fn from(point: &Points<Complex<f64>, Ix3>) -> Self {
+        Points::from_shape_fn(point.dim(), |(i, j, k)| {
+            Complex::<TwoFloat>::new(point[[i, j, k]].re.into(), point[[i, j, k]].im.into())
+        })
+    }
+}
+
+impl From<Points<Complex<TwoFloat>, Ix3>> for Points<Complex<f64>, Ix3> {
+    fn from(point: Points<Complex<TwoFloat>, Ix3>) -> Self {
+        Points::from_shape_fn(point.dim(), |(i, j, k)| {
+            Complex::<f64>::new(point[[i, j, k]].re.hi(), point[[i, j, k]].im.hi())
+        })
+    }
+}
+
+impl From<&Points<Complex<TwoFloat>, Ix3>> for Points<Complex<f64>, Ix3> {
+    fn from(point: &Points<Complex<TwoFloat>, Ix3>) -> Self {
+        Points::from_shape_fn(point.dim(), |(i, j, k)| {
+            Complex::<f64>::new(point[[i, j, k]].re.hi(), point[[i, j, k]].im.hi())
+        })
     }
 }
 
 #[cfg(test)]
 mod points_ix3_f64_tests {
     use super::*;
-    use crate::{num::MyFloat, util::comp_pts_ix3};
-    use float_cmp::F64Margin;
+    use crate::util::{NumMargin, comp_pts_ix3};
+    use num_traits::{One, Zero};
+    use twofloat::TwoFloat;
 
-    const MARGIN: F64Margin = F64Margin {
+    const MARGIN: NumMargin<f64> = NumMargin {
         epsilon: 1e-4,
+        relative: 1.0,
         ulps: 10,
     };
 
@@ -1305,7 +1393,7 @@ mod points_ix3_f64_tests {
 
     #[test]
     fn test_from_vec_float() {
-        let data: Vec<Vec<Vec<MyFloat>>> = vec![
+        let data: Vec<Vec<Vec<TwoFloat>>> = vec![
             vec![
                 vec![1.0.into(), 2.0.into(), 3.0.into(), 4.0.into()],
                 vec![5.0.into(), 6.0.into(), 7.0.into(), 8.0.into()],

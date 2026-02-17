@@ -1,54 +1,27 @@
 use crate::{
-    num::{RFComplex, RFFloat, RFNum},
-    pts::{Matrix, Points, Pts},
+    num::{ComplexScalar, RealScalar, Scalar},
+    pts::{Points, Pts, PtsComplex, PtsReal},
 };
 use ndarray::{IntoDimension, SliceArg, linalg::Dot, prelude::*};
-use num::complex::Complex64;
-use num_traits::{One, Zero};
-use std::fmt;
+use num_complex::{Complex, Complex64, ComplexFloat};
+use twofloat::TwoFloat;
 
 // pub mod c64;
 // pub mod f64;
 // pub mod mycomplex;
 // pub mod myfloat;
 
-/// A matrix wrapper around ndarray::Array1 with RFNum elements
-impl<T> Points<T, Ix1>
-where
-    T: RFNum,
-{
+pub type Points1<T> = Points<T, Ix1>;
+
+/// A matrix wrapper around ndarray::Array1 with ComplexFloat elements
+impl<T: Scalar> Points<T, Ix1> {
     fn check_vec<U>(vec: &Vec<U>) -> usize {
         vec.len()
     }
 
     /// Create a matrix from a 1D vector of f64 values
     pub fn from_vec(data: Vec<T>) -> Self {
-        if data.is_empty() {
-            return Self::new(Array1::from_elem(0, T::zero()));
-        }
-
-        let shape = Self::check_vec(&data);
-        let mut matrix = Self::zeros(shape);
-        for (i, value) in data.iter().enumerate() {
-            matrix[i] = value.clone();
-        }
-
-        matrix
-    }
-
-    /// Create a matrix from a 1D vector of f64 values
-    pub fn from_real_vec(data: Vec<T::Real>) -> Self {
-        if data.is_empty() {
-            return Self::new(Array1::from_elem(0, T::zero()));
-        }
-
-        let shape = Self::check_vec(&data);
-        let mut matrix = Self::zeros(shape);
-        for (i, value) in data.iter().enumerate() {
-            matrix[i] = <<T as RFNum>::Real as Into<T>>::into(value.clone());
-        }
-
-        matrix
+        Points(ndarray::Array1::from_vec(data))
     }
 
     pub fn to_vec(&self) -> Vec<T> {
@@ -70,11 +43,8 @@ where
     }
 }
 
-/// A matrix wrapper around ndarray::Array1 with RFNum elements
-impl<T> Points<T, Ix1>
-where
-    T: RFFloat,
-{
+/// A matrix wrapper around ndarray::Array1 with ComplexFloat elements
+impl<T: RealScalar> Points<T, Ix1> {
     /// Create a matrix from a 1D vector of f64 values
     pub fn from_vec_f64(data: Vec<f64>) -> Self {
         if data.is_empty() {
@@ -82,9 +52,9 @@ where
         }
 
         let shape = Self::check_vec(&data);
-        let mut matrix = Self::zeros(shape);
+        let mut matrix = Points(ndarray::Array1::zeros(shape));
         for (i, &value) in data.iter().enumerate() {
-            matrix[i] = T::from(value);
+            matrix[i] = <T as From<f64>>::from(value);
         }
 
         matrix
@@ -94,26 +64,27 @@ where
     pub fn from_vec_float<U>(data: Vec<U>) -> Self
     where
         T: From<U>,
-        U: RFFloat,
+        U: RealScalar,
     {
         if data.is_empty() {
             return Self::new(Array1::from_elem(0, T::zero()));
         }
 
         let shape = Self::check_vec(&data);
-        let mut matrix = Self::zeros(shape);
+        let mut matrix = Points(ndarray::Array1::zeros(shape));
         for (i, value) in data.iter().enumerate() {
-            matrix[i] = T::from(value.clone());
+            matrix[i] = <T as From<U>>::from(*value);
         }
 
         matrix
     }
 }
 
-/// A matrix wrapper around ndarray::Array1 with RFNum elements
+/// A matrix wrapper around ndarray::Array1 with ComplexFloat elements
 impl<T> Points<T, Ix1>
 where
-    T: RFComplex,
+    T: ComplexScalar + From<Complex64>,
+    <T as ComplexFloat>::Real: RealScalar,
 {
     /// Create a matrix from a 1D vector of complex tuples (real, imag)
     pub fn from_vec_c64(data: Vec<Complex64>) -> Self {
@@ -124,7 +95,7 @@ where
         let shape = Self::check_vec(&data);
         let mut matrix = Self::zeros(shape);
         for (i, &value) in data.iter().enumerate() {
-            matrix[i] = T::from(value);
+            matrix[i] = <T as From<Complex64>>::from(value);
         }
 
         matrix
@@ -133,8 +104,8 @@ where
     /// Create a matrix from a 1D vector of complex tuples (real, imag)
     pub fn from_vec_complex<U>(data: Vec<U>) -> Self
     where
-        for<'a> T: From<&'a U>,
-        U: RFComplex,
+        T: From<U>,
+        U: Copy,
     {
         if data.is_empty() {
             return Self::new(Array1::from_elem(0, T::zero()));
@@ -143,7 +114,22 @@ where
         let shape = Self::check_vec(&data);
         let mut matrix = Self::zeros(shape);
         for (i, value) in data.iter().enumerate() {
-            matrix[i] = T::from(value);
+            matrix[i] = <T as From<U>>::from(*value);
+        }
+
+        matrix
+    }
+
+    /// Create a matrix from a 1D vector of f64 values
+    pub fn from_real_vec(data: Vec<T::Real>) -> Self {
+        if data.is_empty() {
+            return Self::new(Array1::from_elem(0, T::zero()));
+        }
+
+        let shape = Self::check_vec(&data);
+        let mut matrix = Self::zeros(shape);
+        for (i, value) in data.iter().enumerate() {
+            matrix[i] = <T as From<T::Real>>::from(*value);
         }
 
         matrix
@@ -153,7 +139,7 @@ where
     pub fn from_vec_tuple<U>(data: Vec<(U, U)>) -> Self
     where
         T::Real: From<U>,
-        U: RFFloat,
+        U: Scalar,
     {
         if data.is_empty() {
             return Self::new(Array1::from_elem(0, T::zero()));
@@ -162,53 +148,15 @@ where
         let shape = Self::check_vec(&data);
         let mut matrix = Self::zeros(shape);
         for (i, (real, imag)) in data.iter().enumerate() {
-            matrix[i] = T::new(
-                &<T as RFNum>::Real::from(real.clone()),
-                &<T as RFNum>::Real::from(imag.clone()),
-            );
+            matrix[i] = T::new(T::Real::from(*real), T::Real::from(*imag));
         }
 
         matrix
     }
 }
 
-impl<T> Pts<T, Ix1> for Points<T, Ix1>
-where
-    T: RFNum,
-{
+impl<T: Scalar> Pts<T, Ix1> for Points<T, Ix1> {
     type Idx = usize;
-    type Tuple<'a>
-        = (T::Real, T::Real)
-    where
-        T: 'a;
-
-    /// Create a new matrix with given dimensions filled with zeros
-    fn zeros(shape: impl IntoDimension<Dim = Dim<[usize; 1]>>) -> Self {
-        Points(Array1::from_elem(shape, T::zero()))
-    }
-
-    /// Create a new matrix with given dimensions filled with ones
-    fn ones(shape: impl IntoDimension<Dim = Dim<[usize; 1]>>) -> Self {
-        Points(Array1::from_elem(shape, T::one()))
-    }
-
-    /// Create a matrix from a flat vector with specified dimensions
-    fn from_flat_f64(
-        data: Vec<f64>,
-        shape: impl IntoDimension<Dim = Dim<[usize; 1]>>,
-    ) -> Result<Self, &'static str> {
-        let len = shape.into_dimension().into_pattern();
-        if data.len() != len {
-            return Err("Data length does not match matrix dimensions");
-        }
-
-        let mut matrix = Self::zeros(len);
-        for (idx, &value) in data.iter().enumerate() {
-            matrix[idx] = T::from(value);
-        }
-
-        Ok(matrix)
-    }
 
     fn from_elem(shape: impl IntoDimension<Dim = Ix1>, elem: T) -> Self {
         Points(Array1::from_elem(shape, elem))
@@ -425,40 +373,40 @@ where
     {
         self.0.map_inplace(|x| *x = f(x));
     }
-    /// Check if a matrix is approximately equal to another matrix within a tolerance
-    ///
-    /// # Arguments
-    /// * `a` - First matrix
-    /// * `b` - Second matrix  
-    /// * `tol` - Tolerance for comparison
-    ///
-    /// # Returns
-    /// * `true` if matrices are approximately equal, `false` otherwise
-    fn approx_eq(a: &ArrayView1<T>, b: &ArrayView1<T>, tol: f64) -> bool
-    where
-        <T as RFNum>::Real: PartialOrd<f64>,
-        for<'a, 'b> &'a T: std::ops::Sub<&'b T, Output = T>,
-    {
-        if a.dim() != b.dim() {
-            return false;
-        }
+    // /// Check if a matrix is approximately equal to another matrix within a tolerance
+    // ///
+    // /// # Arguments
+    // /// * `a` - First matrix
+    // /// * `b` - Second matrix
+    // /// * `tol` - Tolerance for comparison
+    // ///
+    // /// # Returns
+    // /// * `true` if matrices are approximately equal, `false` otherwise
+    // fn approx_eq(a: &ArrayView1<T>, b: &ArrayView1<T>, tol: f64) -> bool
+    // where
+    //     <T as ComplexFloat>::Real: PartialOrd<f64>,
+    //     for<'a, 'b> &'a T: std::ops::Sub<&'b T, Output = T>,
+    // {
+    //     if a.dim() != b.dim() {
+    //         return false;
+    //     }
 
-        let len = a.dim();
+    //     let len = a.dim();
 
-        for i in 0..len {
-            let diff = &a[i] - &b[i];
-            if diff.norm() > tol {
-                return false;
-            }
-        }
+    //     for i in 0..len {
+    //         let diff = &a[i] - &b[i];
+    //         if diff.norm() > tol {
+    //             return false;
+    //         }
+    //     }
 
-        true
-    }
+    //     true
+    // }
 
     // /// Calculate the L1 norm (Manhattan norm)
     // fn norm_l1(&self) -> Array0<T::Real>
     // where
-    //     T::Real: RFFloat,
+    //     T::Real: Float,
     // {
     //     let mut sum = T::Real::zero();
     //     for i in 0..self.len() {
@@ -470,7 +418,7 @@ where
     // /// Calculate the L2 norm (Euclidean/Frobenius norm)
     // fn norm_l2(&self) -> Array0<T::Real>
     // where
-    //     T::Real: RFFloat + AddAssign<T>,
+    //     T::Real: Float + AddAssign<T>,
     //     for<'a, 'b> &'a T: std::ops::Mul<&'b T, Output = T>,
     // {
     //     let mut sum = T::Real::zero();
@@ -483,7 +431,7 @@ where
     // /// Calculate the infinite norm
     // fn norm_inf(&self) -> Array0<T::Real>
     // where
-    //     T::Real: RFFloat,
+    //     T::Real: Float,
     // {
     //     let mut max = T::Real::zero();
     //     for i in 0..self.len() {
@@ -496,16 +444,107 @@ where
     // }
 }
 
+impl<T: ComplexScalar> PtsComplex<T, Ix1> for Points<T, Ix1>
+where
+    T::Real: RealScalar,
+{
+    // type Size = usize;
+    type Tuple<'a>
+        = (T::Real, T::Real)
+    where
+        T: 'a;
+    // type Vec = Vec<(T::Real, T::Real)>;
+
+    // fn check_dims(vals: &Vec<(T::Real, T::Real)>) -> Result<usize, &'static str> {
+    //     Ok(vals.len())
+    // }
+
+    // fn from_db(vals: &Vec<(T::Real, T::Real)>) -> Result<Self, String> {
+    //     let dim = Self::check_dims(vals)?;
+
+    //     Ok(Points1::from_shape_fn(dim, |i| {
+    //         let r = ComplexFloat::powf(T::Real::C10, vals[i].0 / T::Real::C20);
+    //         let theta = vals[i].1.to_radians();
+    //         T::new(
+    //             r * <T::Real as Float>::cos(theta),
+    //             r * <T::Real as Float>::sin(theta),
+    //         )
+    //     }))
+    // }
+
+    // fn from_magang(vals: &Vec<(T::Real, T::Real)>) -> Result<Self, String> {
+    //     let dim = Self::check_dims(vals)?;
+
+    //     Ok(Points1::from_shape_fn(dim, |i| {
+    //         let r = vals[i].0;
+    //         let theta = vals[i].1.to_radians();
+    //         T::new(
+    //             r * <T::Real as Float>::cos(theta),
+    //             r * <T::Real as Float>::sin(theta),
+    //         )
+    //     }))
+    // }
+
+    // fn from_reim(vals: &Vec<(T::Real, T::Real)>) -> Result<Self, String> {
+    //     let dim = Self::check_dims(vals)?;
+
+    //     Ok(Points1::from_shape_fn(dim, |i| {
+    //         T::new(vals[i].0, vals[i].1)
+    //     }))
+    // }
+
+    // fn db(&self) -> Points<T::Real, Ix1> {
+    //     Points::from_shape_fn(self.dim(), |idx| {
+    //         T::Real::C20 * Float::log10(self[idx].abs())
+    //     })
+    // }
+
+    // fn deg(&self) -> Points<T::Real, Ix1> {
+    //     Points::from_shape_fn(self.dim(), |idx| self[idx].arg().to_degrees())
+    // }
+
+    // fn im(&self) -> Points<T::Real, Ix1> {
+    //     Points::from_shape_fn(self.dim(), |idx| self[idx].im())
+    // }
+
+    // fn mag(&self) -> Points<T::Real, Ix1> {
+    //     Points::from_shape_fn(self.dim(), |idx| self[idx].abs())
+    // }
+
+    // fn rad(&self) -> Points<T::Real, Ix1> {
+    //     Points::from_shape_fn(self.dim(), |idx| self[idx].arg())
+    // }
+
+    // fn re(&self) -> Points<T::Real, Ix1> {
+    //     Points::from_shape_fn(self.dim(), |idx| self[idx].re())
+    // }
+}
+
+impl<T: RealScalar> PtsReal<T, Ix1> for Points<T, Ix1> {
+    /// Create a matrix from a flat vector with specified dimensions
+    fn from_flat_f64(
+        data: Vec<f64>,
+        shape: impl IntoDimension<Dim = Dim<[usize; 1]>>,
+    ) -> Result<Self, &'static str> {
+        let len = shape.into_dimension().into_pattern();
+        if data.len() != len {
+            return Err("Data length does not match matrix dimensions");
+        }
+
+        let mut matrix = Self::zeros(len);
+        for (idx, &value) in data.iter().enumerate() {
+            matrix[idx] = <T as From<f64>>::from(value);
+        }
+
+        Ok(matrix)
+    }
+}
+
 // Dot product implementations
-impl<T, U> Dot<Points<U, Ix1>> for Points<T, Ix1>
-where
-    T: RFNum,
-    U: RFNum,
-    for<'a, 'b> &'a T: std::ops::Mul<&'b U, Output = T>,
-{
+impl<T: Scalar> Dot<Points<T, Ix1>> for Points<T, Ix1> {
     type Output = T;
 
-    fn dot(&self, rhs: &Points<U, Ix1>) -> Self::Output {
+    fn dot(&self, rhs: &Points<T, Ix1>) -> Self::Output {
         if self.len() != rhs.len() {
             panic!(
                 "Point dimensions incompatible for multiplication: {} * {}",
@@ -517,22 +556,17 @@ where
         let mut result = Self::Output::zero();
 
         for i in 0..self.len() {
-            result += &self[i] * &rhs[i];
+            result += self[i] * rhs[i];
         }
 
         result
     }
 }
 
-impl<T, U> Dot<&Points<U, Ix1>> for Points<T, Ix1>
-where
-    T: RFNum,
-    U: RFNum,
-    for<'a, 'b> &'a T: std::ops::Mul<&'b U, Output = T>,
-{
+impl<T: Scalar> Dot<&Points<T, Ix1>> for Points<T, Ix1> {
     type Output = T;
 
-    fn dot(&self, rhs: &&Points<U, Ix1>) -> Self::Output {
+    fn dot(&self, rhs: &&Points<T, Ix1>) -> Self::Output {
         if self.len() != rhs.len() {
             panic!(
                 "Point dimensions incompatible for multiplication: {} * {}",
@@ -544,22 +578,17 @@ where
         let mut result = Self::Output::zero();
 
         for i in 0..self.len() {
-            result += &self[i] * &rhs[i];
+            result += self[i] * rhs[i];
         }
 
         result
     }
 }
 
-impl<T, U> Dot<Points<U, Ix2>> for Points<T, Ix1>
-where
-    T: RFNum,
-    U: RFNum,
-    for<'a, 'b> &'a T: std::ops::Mul<&'b U, Output = T>,
-{
+impl<T: Scalar> Dot<Points<T, Ix2>> for Points<T, Ix1> {
     type Output = Points<T, Ix1>;
 
-    fn dot(&self, rhs: &Points<U, Ix2>) -> Self::Output {
+    fn dot(&self, rhs: &Points<T, Ix2>) -> Self::Output {
         if self.len() != rhs.nrows() {
             panic!(
                 "Point dimensions incompatible for multiplication: {} * {}x{}",
@@ -572,7 +601,7 @@ where
         let mut result = Points::zeros(rhs.ncols());
         for j in 0..rhs.ncols() {
             for i in 0..rhs.nrows() {
-                result[j] += &self[i] * &rhs[[i, j]];
+                result[j] += self[i] * rhs[[i, j]];
             }
         }
 
@@ -580,15 +609,10 @@ where
     }
 }
 
-impl<T, U> Dot<Array1<U>> for Points<T, Ix1>
-where
-    T: RFNum,
-    U: RFNum,
-    for<'a, 'b> &'a T: std::ops::Mul<&'b U, Output = T>,
-{
+impl<T: Scalar> Dot<Array1<T>> for Points<T, Ix1> {
     type Output = T;
 
-    fn dot(&self, rhs: &Array1<U>) -> Self::Output {
+    fn dot(&self, rhs: &Array1<T>) -> Self::Output {
         if self.len() != rhs.len() {
             panic!(
                 "Point dimensions incompatible for multiplication: {} * {}",
@@ -600,22 +624,17 @@ where
         let mut result = Self::Output::zero();
 
         for i in 0..self.len() {
-            result += &self[i] * &rhs[i];
+            result += self[i] * rhs[i];
         }
 
         result
     }
 }
 
-impl<T, U> Dot<Array2<U>> for Points<T, Ix1>
-where
-    T: RFNum,
-    U: RFNum,
-    for<'a, 'b> &'a T: std::ops::Mul<&'b U, Output = T>,
-{
+impl<T: Scalar> Dot<Array2<T>> for Points<T, Ix1> {
     type Output = Points<T, Ix1>;
 
-    fn dot(&self, rhs: &Array2<U>) -> Self::Output {
+    fn dot(&self, rhs: &Array2<T>) -> Self::Output {
         if self.len() != rhs.nrows() {
             panic!(
                 "Point dimensions incompatible for multiplication: {} * {}x{}",
@@ -628,7 +647,7 @@ where
         let mut result = Points::zeros(rhs.ncols());
         for j in 0..rhs.ncols() {
             for i in 0..rhs.nrows() {
-                result[j] += &self[i] * &rhs[[i, j]];
+                result[j] += self[i] * rhs[[i, j]];
             }
         }
 
@@ -636,15 +655,10 @@ where
     }
 }
 
-impl<T, U> Dot<ArrayView1<'_, U>> for Points<T, Ix1>
-where
-    T: RFNum,
-    U: RFNum,
-    for<'a, 'b> &'a T: std::ops::Mul<&'b U, Output = T>,
-{
+impl<T: Scalar> Dot<ArrayView1<'_, T>> for Points<T, Ix1> {
     type Output = T;
 
-    fn dot(&self, rhs: &ArrayView1<'_, U>) -> Self::Output {
+    fn dot(&self, rhs: &ArrayView1<'_, T>) -> Self::Output {
         if self.len() != rhs.len() {
             panic!(
                 "Point dimensions incompatible for multiplication: {} * {}",
@@ -656,22 +670,17 @@ where
         let mut result = Self::Output::zero();
 
         for i in 0..self.len() {
-            result += &self[i] * &rhs[i];
+            result += self[i] * rhs[i];
         }
 
         result
     }
 }
 
-impl<T, U> Dot<ArrayView2<'_, U>> for Points<T, Ix1>
-where
-    T: RFNum,
-    U: RFNum,
-    for<'a, 'b> &'a T: std::ops::Mul<&'b U, Output = T>,
-{
+impl<T: Scalar> Dot<ArrayView2<'_, T>> for Points<T, Ix1> {
     type Output = Points<T, Ix1>;
 
-    fn dot(&self, rhs: &ArrayView2<'_, U>) -> Self::Output {
+    fn dot(&self, rhs: &ArrayView2<'_, T>) -> Self::Output {
         if self.len() != rhs.nrows() {
             panic!(
                 "Point dimensions incompatible for multiplication: {} * {}x{}",
@@ -684,7 +693,7 @@ where
         let mut result = Points::zeros(rhs.ncols());
         for j in 0..rhs.ncols() {
             for i in 0..rhs.nrows() {
-                result[j] += &self[i] * &rhs[[i, j]];
+                result[j] += self[i] * rhs[[i, j]];
             }
         }
 
@@ -692,15 +701,10 @@ where
     }
 }
 
-impl<T, U> Dot<Points<U, Ix1>> for Array1<T>
-where
-    T: RFNum,
-    U: RFNum,
-    for<'a, 'b> &'a T: std::ops::Mul<&'b U, Output = T>,
-{
+impl<T: Scalar> Dot<Points<T, Ix1>> for Array1<T> {
     type Output = T;
 
-    fn dot(&self, rhs: &Points<U, Ix1>) -> Self::Output {
+    fn dot(&self, rhs: &Points<T, Ix1>) -> Self::Output {
         if self.len() != rhs.len() {
             panic!(
                 "Point dimensions incompatible for multiplication: {} * {}",
@@ -712,22 +716,17 @@ where
         let mut result = Self::Output::zero();
 
         for i in 0..self.len() {
-            result += &self[i] * &rhs[i];
+            result += self[i] * rhs[i];
         }
 
         result
     }
 }
 
-impl<T, U> Dot<Points<U, Ix2>> for Array1<T>
-where
-    T: RFNum,
-    U: RFNum,
-    for<'a, 'b> &'a T: std::ops::Mul<&'b U, Output = T>,
-{
+impl<T: Scalar> Dot<Points<T, Ix2>> for Array1<T> {
     type Output = Array1<T>;
 
-    fn dot(&self, rhs: &Points<U, Ix2>) -> Self::Output {
+    fn dot(&self, rhs: &Points<T, Ix2>) -> Self::Output {
         if self.len() != rhs.nrows() {
             panic!(
                 "Point dimensions incompatible for multiplication: {} * {}x{}",
@@ -740,7 +739,7 @@ where
         let mut result = Array1::zeros(rhs.ncols());
         for j in 0..rhs.ncols() {
             for i in 0..rhs.nrows() {
-                result[j] += &self[i] * &rhs[[i, j]];
+                result[j] += self[i] * rhs[[i, j]];
             }
         }
 
@@ -748,15 +747,10 @@ where
     }
 }
 
-impl<T, U> Dot<Points<U, Ix1>> for ArrayView1<'_, T>
-where
-    T: RFNum,
-    U: RFNum,
-    for<'a, 'b> &'a T: std::ops::Mul<&'b U, Output = T>,
-{
+impl<T: Scalar> Dot<Points<T, Ix1>> for ArrayView1<'_, T> {
     type Output = T;
 
-    fn dot(&self, rhs: &Points<U, Ix1>) -> Self::Output {
+    fn dot(&self, rhs: &Points<T, Ix1>) -> Self::Output {
         if self.len() != rhs.len() {
             panic!(
                 "Point dimensions incompatible for multiplication: {} * {}",
@@ -768,22 +762,17 @@ where
         let mut result = Self::Output::zero();
 
         for i in 0..self.len() {
-            result += &self[i] * &rhs[i];
+            result += self[i] * rhs[i];
         }
 
         result
     }
 }
 
-impl<T, U> Dot<Points<U, Ix2>> for ArrayView1<'_, T>
-where
-    T: RFNum,
-    U: RFNum,
-    for<'a, 'b> &'a T: std::ops::Mul<&'b U, Output = T>,
-{
+impl<T: Scalar> Dot<Points<T, Ix2>> for ArrayView1<'_, T> {
     type Output = Array1<T>;
 
-    fn dot(&self, rhs: &Points<U, Ix2>) -> Self::Output {
+    fn dot(&self, rhs: &Points<T, Ix2>) -> Self::Output {
         if self.len() != rhs.nrows() {
             panic!(
                 "Point dimensions incompatible for multiplication: {} * {}x{}",
@@ -796,7 +785,7 @@ where
         let mut result = Array1::zeros(rhs.ncols());
         for j in 0..rhs.ncols() {
             for i in 0..rhs.nrows() {
-                result[j] += &self[i] * &rhs[[i, j]];
+                result[j] += self[i] * rhs[[i, j]];
             }
         }
 
@@ -805,84 +794,80 @@ where
 }
 
 // Traits
-impl<T> Default for Points<T, Ix1>
-where
-    T: RFNum,
-{
+impl<T: Scalar> Default for Points<T, Ix1> {
     fn default() -> Self {
         Points::zeros(0)
     }
 }
 
-impl<T> Zero for Points<T, Ix1>
-where
-    T: RFNum,
-{
-    fn zero() -> Self {
-        Points::zeros(0)
-    }
+// impl<T> Zero for Points<T, Ix1>
+// where
+//     T: ComplexFloat,
+// {
+//     fn zero() -> Self {
+//         Points::zeros(0)
+//     }
 
-    fn is_zero(&self) -> bool {
-        self.0.iter().all(|x| x.is_zero())
-    }
-}
+//     fn is_zero(&self) -> bool {
+//         self.0.iter().all(|x| x.is_zero())
+//     }
+// }
 
-impl<T> One for Points<T, Ix1>
-where
-    T: RFNum,
-{
-    fn one() -> Self {
-        Points::ones(0)
-    }
+// impl<T> One for Points<T, Ix1>
+// where
+//     T: ComplexFloat,
+// {
+//     fn one() -> Self {
+//         Points::ones(0)
+//     }
 
-    fn is_one(&self) -> bool {
-        self.0.iter().all(|x| x.is_one())
-    }
-}
+//     fn is_one(&self) -> bool {
+//         self.0.iter().all(|x| x.is_one())
+//     }
+// }
 
-// Display implementation
-impl<T> fmt::Display for Points<T, Ix1>
-where
-    T: RFNum,
-{
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.len() == 0 {
-            return write!(f, "[]");
-        }
+// // Display implementation
+// impl<T> fmt::Display for Points<T, Ix1>
+// where
+//     T: Scalar,
+// {
+//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+//         if self.len() == 0 {
+//             return write!(f, "[]");
+//         }
 
-        writeln!(f, "[")?;
-        for i in 0..self.len() {
-            if i > 0 {
-                write!(f, ", ")?;
-            }
-            write!(f, "{}", self[i])?;
-        }
-        write!(f, "]")
-    }
-}
+//         writeln!(f, "[")?;
+//         for i in 0..self.len() {
+//             if i > 0 {
+//                 write!(f, ", ")?;
+//             }
+//             write!(f, "{}", self[i])?;
+//         }
+//         write!(f, "]")
+//     }
+// }
 
-impl<T> fmt::Debug for Points<T, Ix1>
-where
-    T: RFNum,
-{
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Points({}) {}", self.len(), self)
-    }
-}
+// impl<T> fmt::Debug for Points<T, Ix1>
+// where
+//     T: Scalar,
+// {
+//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+//         write!(f, "Points({}) {}", self.len(), self)
+//     }
+// }
 
 // Conversion traits
 impl<T> From<Array1<T>> for Points<T, Ix1>
-where
-    T: RFNum,
+// where
+//     T: ComplexFloat,
 {
     fn from(array: Array1<T>) -> Self {
         Points(array)
     }
 }
 
-impl<T> From<ArrayRef1<T>> for Points<T, Ix1>
+impl<T: Scalar> From<ArrayRef1<T>> for Points<T, Ix1>
 where
-    T: RFNum,
     ArrayRef1<T>: Sized,
 {
     fn from(array: ArrayRef1<T>) -> Self {
@@ -890,10 +875,7 @@ where
     }
 }
 
-impl<T> From<ArrayView1<'_, T>> for Points<T, Ix1>
-where
-    T: RFNum,
-{
+impl<T: Scalar> From<ArrayView1<'_, T>> for Points<T, Ix1> {
     fn from(array: ArrayView1<T>) -> Self {
         Points(array.to_owned())
     }
@@ -905,48 +887,98 @@ impl<T> From<Points<T, Ix1>> for Array1<T> {
     }
 }
 
-impl<T> From<Vec<T>> for Points<T, Ix1>
-where
-    T: RFNum,
-{
+impl<T: Scalar> From<Vec<T>> for Points<T, Ix1> {
     fn from(data: Vec<T>) -> Self {
         Points::<T, Ix1>::from_vec(data)
     }
 }
 
-impl<T> From<Vec<(T::Real, T::Real)>> for Points<T, Ix1>
-where
-    T: RFComplex,
-    <T as RFNum>::Real: RFFloat,
-{
-    fn from(data: Vec<(T::Real, T::Real)>) -> Self {
-        Points::<T, Ix1>::from_vec_tuple(data)
-    }
-}
+// impl<T> From<Vec<(T::Real, T::Real)>> for Points<T, Ix1>
+// where
+//     T: ComplexFloat,
+//     <T as ComplexFloat>::Real: Float,
+// {
+//     fn from(data: Vec<(T::Real, T::Real)>) -> Self {
+//         Points::<T, Ix1>::from_vec_tuple(data)
+//     }
+// }
 
 // impl<T> From<&Points<T, Ix1>> for Points<T, Ix1>
 // where
-//     T: RFNum,
+//     T: ComplexFloat,
 // {
 //     fn from(point: &Points<T, Ix1>) -> Self {
 //         point.clone()
 //     }
 // }
 
-impl<T, U> From<&Points<U, Ix1>> for Points<T, Ix1>
-where
-    T: RFNum + std::convert::From<U>,
-    U: RFNum,
-{
-    fn from(point: &Points<U, Ix1>) -> Self {
-        Points::<T, Ix1>::from_shape_fn(point.shape(), |i| point[i].clone().into())
+// impl<T, U> From<&Points<U, Ix1>> for Points<T, Ix1>
+// where
+//     T: Scalar + std::convert::From<U>,
+//     U: Scalar,
+// {
+//     fn from(point: &Points<U, Ix1>) -> Self {
+//         Points::<T, Ix1>::from_shape_fn(point.shape(), |i| point[i].into())
+//     }
+// }
+
+impl From<Points<f64, Ix1>> for Points<TwoFloat, Ix1> {
+    fn from(point: Points<f64, Ix1>) -> Self {
+        Points::from_shape_fn(point.dim(), |i| point[i].into())
     }
 }
 
-impl<T> FromIterator<T> for Points<T, Ix1>
-where
-    T: RFNum,
-{
+impl From<&Points<f64, Ix1>> for Points<TwoFloat, Ix1> {
+    fn from(point: &Points<f64, Ix1>) -> Self {
+        Points::from_shape_fn(point.dim(), |i| point[i].into())
+    }
+}
+
+impl From<Points<TwoFloat, Ix1>> for Points<f64, Ix1> {
+    fn from(point: Points<TwoFloat, Ix1>) -> Self {
+        Points::from_shape_fn(point.dim(), |i| point[i].hi())
+    }
+}
+
+impl From<&Points<TwoFloat, Ix1>> for Points<f64, Ix1> {
+    fn from(point: &Points<TwoFloat, Ix1>) -> Self {
+        Points::from_shape_fn(point.dim(), |i| point[i].hi())
+    }
+}
+
+impl From<Points<Complex<f64>, Ix1>> for Points<Complex<TwoFloat>, Ix1> {
+    fn from(point: Points<Complex<f64>, Ix1>) -> Self {
+        Points::from_shape_fn(point.dim(), |i| {
+            Complex::<TwoFloat>::new(point[i].re.into(), point[i].im.into())
+        })
+    }
+}
+
+impl From<&Points<Complex<f64>, Ix1>> for Points<Complex<TwoFloat>, Ix1> {
+    fn from(point: &Points<Complex<f64>, Ix1>) -> Self {
+        Points::from_shape_fn(point.dim(), |i| {
+            Complex::<TwoFloat>::new(point[i].re.into(), point[i].im.into())
+        })
+    }
+}
+
+impl From<Points<Complex<TwoFloat>, Ix1>> for Points<Complex<f64>, Ix1> {
+    fn from(point: Points<Complex<TwoFloat>, Ix1>) -> Self {
+        Points::from_shape_fn(point.dim(), |i| {
+            Complex::<f64>::new(point[i].re.hi(), point[i].im.hi())
+        })
+    }
+}
+
+impl From<&Points<Complex<TwoFloat>, Ix1>> for Points<Complex<f64>, Ix1> {
+    fn from(point: &Points<Complex<TwoFloat>, Ix1>) -> Self {
+        Points::from_shape_fn(point.dim(), |i| {
+            Complex::<f64>::new(point[i].re.hi(), point[i].im.hi())
+        })
+    }
+}
+
+impl<T: Scalar> FromIterator<T> for Points<T, Ix1> {
     fn from_iter<I>(iterable: I) -> Points<T, Ix1>
     where
         I: IntoIterator<Item = T>,
@@ -955,10 +987,7 @@ where
     }
 }
 
-impl<T> IntoIterator for Points<T, Ix1>
-where
-    T: RFNum,
-{
+impl<T: Scalar> IntoIterator for Points<T, Ix1> {
     type Item = T;
     type IntoIter = ndarray::iter::IntoIter<T, Ix1>;
 
@@ -968,10 +997,7 @@ where
 }
 
 // For borrowing iteration
-impl<'a, T> IntoIterator for &'a Points<T, Ix1>
-where
-    T: RFNum,
-{
+impl<'a, T: Scalar> IntoIterator for &'a Points<T, Ix1> {
     type Item = &'a T;
     type IntoIter = ndarray::iter::Iter<'a, T, Ix1>;
 
@@ -981,10 +1007,7 @@ where
 }
 
 // For mutable borrowing iteration
-impl<'a, T> IntoIterator for &'a mut Points<T, Ix1>
-where
-    T: RFNum,
-{
+impl<'a, T: Scalar> IntoIterator for &'a mut Points<T, Ix1> {
     type Item = &'a mut T;
     type IntoIter = ndarray::iter::IterMut<'a, T, Ix1>;
 
@@ -996,11 +1019,12 @@ where
 #[cfg(test)]
 mod points_ix1_f64_tests {
     use super::*;
-    use crate::util::{comp_num, comp_pts_ix1};
-    use float_cmp::F64Margin;
+    use crate::util::{ApproxEq, NumMargin, comp_pts_ix1};
+    use num_traits::{One, Zero};
 
-    const MARGIN: F64Margin = F64Margin {
+    const MARGIN: NumMargin<f64> = NumMargin {
         epsilon: 1e-4,
+        relative: 1e-4,
         ulps: 10,
     };
 
@@ -1100,7 +1124,7 @@ mod points_ix1_f64_tests {
 
         // Expected: [1*5+2*6] = 17
         assert_eq!(result, 17.0);
-        comp_num(&17.0, &result, MARGIN, "a.dot(b)", "");
+        result.assert_approx_eq(&17.0, MARGIN, "a.dot(b)", "");
     }
 
     #[test]
@@ -1132,7 +1156,7 @@ mod points_ix1_f64_tests {
         let other = Points::<f64, Ix1>::from_vec_float(vec![5.0, 6.0]);
 
         // Test AddAssign
-        matrix += &other;
+        azip!((matrix in matrix.inner_mut(), &other in other.inner()) *matrix += other);
         assert_eq!(matrix[0], 6.0);
         assert_eq!(matrix[1], 8.0);
         comp_pts_ix1(
@@ -1143,7 +1167,7 @@ mod points_ix1_f64_tests {
         );
 
         // Test MulAssign with scalar
-        matrix *= 2.0;
+        azip!((matrix in matrix.inner_mut()) *matrix *= 2.0);
         assert_eq!(matrix[0], 12.0);
         assert_eq!(matrix[1], 16.0);
         comp_pts_ix1(

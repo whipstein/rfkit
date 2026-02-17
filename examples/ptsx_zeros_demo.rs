@@ -1,5 +1,5 @@
 use ndarray::prelude::*;
-use rfkit::pts::{Points, Pts};
+use rfkit::pts::Points;
 
 fn main() {
     // 1D array (vector)

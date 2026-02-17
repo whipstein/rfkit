@@ -3,17 +3,17 @@
 use crate::{
     error::MinimizerError,
     minimize::{ObjFn, Vertex},
-    num::RFFloat,
     pts::{Points1, Pts},
 };
 use ndarray::prelude::*;
+use num_traits::Float;
 use std::fmt;
 
 /// Result of downhill simplex optimization
 #[derive(Debug, Clone)]
 pub struct SimplexResult<T>
 where
-    T: RFFloat,
+    T: Float,
 {
     xmin: Points1<T>,
     fmin: T,
@@ -26,7 +26,7 @@ where
 
 impl<T> SimplexResult<T>
 where
-    T: RFFloat,
+    T: Float,
 {
     pub fn xmin(&self) -> Points1<T> {
         self.xmin.clone()
@@ -82,7 +82,7 @@ where
 
 impl<T> Simplex<T>
 where
-    T: RFFloat,
+    T: Float,
     for<'a, 'b> &'a T: std::ops::Sub<&'b T, Output = T>,
     for<'a, 'b> &'a T: std::ops::Mul<&'b T, Output = T>,
     for<'a> &'a T: std::ops::Add<T, Output = T>,
@@ -150,7 +150,7 @@ where
                     .sum::<T>()
                     .sqrt();
 
-                max_distance = max_distance.max(&distance);
+                max_distance = max_distance.max(distance);
             }
         }
 
@@ -255,7 +255,7 @@ where
                     return Err(MinimizerError::FunctionEvaluationError);
                 }
 
-                if f_contracted < worst.value.min(&f_reflected) {
+                if f_contracted < worst.value.min(f_reflected) {
                     simplex[n] = Vertex {
                         point: contracted,
                         value: f_contracted,
@@ -452,7 +452,7 @@ where
                     return Err(MinimizerError::FunctionEvaluationError);
                 }
 
-                if f_contracted < worst.value.min(&f_reflected) {
+                if f_contracted < worst.value.min(f_reflected) {
                     // Accept contraction
                     simplex[n] = Vertex {
                         point: contracted,
@@ -652,7 +652,7 @@ where
                     return Err(MinimizerError::FunctionEvaluationError);
                 }
 
-                if f_contracted < worst.value.min(&f_reflected) {
+                if f_contracted < worst.value.min(f_reflected) {
                     simplex[n] = Vertex {
                         point: contracted,
                         value: f_contracted,
@@ -742,7 +742,7 @@ where
 
 impl<T> fmt::Debug for Simplex<T>
 where
-    T: RFFloat,
+    T: Float,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(

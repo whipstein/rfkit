@@ -3,18 +3,20 @@
 use crate::{
     error::MinimizerError,
     minimize::{LineSearchResult, ObjGradFn, WolfeParams},
-    num::{RFFloat, RFNum},
+    num::Abs,
     pts::{Matrix, Points1, Points2, Pts},
 };
 use ndarray::{linalg::Dot, prelude::*};
 use ndarray_linalg::Norm;
+use num_complex::ComplexFloat;
+use num_traits::{Float, FloatConst, FromPrimitive};
 use std::fmt;
 
 /// Result of quasi-Newton optimization
 #[derive(Debug, Clone)]
 pub struct QuasiNewtonResult<T>
 where
-    T: RFFloat,
+    T: Float + FloatConst,
 {
     xmin: Points1<T>,
     fmin: T,
@@ -31,7 +33,7 @@ where
 
 impl<T> QuasiNewtonResult<T>
 where
-    T: RFFloat,
+    T: Float + FloatConst,
 {
     pub fn xmin(&self) -> Points1<T> {
         self.xmin.clone()
@@ -123,15 +125,13 @@ where
 
 impl<T> QuasiNewton<T>
 where
-    T: RFFloat + PartialOrd<T::Real> + std::convert::From<<T as RFNum>::Real>,
-    T::Real: RFFloat,
+    T: ComplexFloat + PartialOrd + FromPrimitive + Abs<Output = T>,
     for<'a> &'a T: std::ops::Add<T, Output = T>,
     for<'a> &'a T: std::ops::Mul<T, Output = T>,
     for<'a, 'b> &'a T: std::ops::Add<&'b T, Output = T>,
     for<'a, 'b> &'a T: std::ops::Sub<&'b T, Output = T>,
     for<'a, 'b> &'a T: std::ops::Mul<&'b T, Output = T>,
     for<'a, 'b> &'a T: std::ops::Div<&'b T, Output = T>,
-    <T as RFNum>::Real: RFNum + PartialOrd<T::Real>,
 {
     pub fn new<F>(f: F) -> Self
     where
@@ -139,7 +139,7 @@ where
     {
         let boxed = Box::new(f);
         QuasiNewton {
-            xmin: array![].into(),
+            xmin: points![],
             fmin: T::zero(),
             f: boxed,
             iters: 0,
@@ -170,12 +170,12 @@ where
     ) -> Result<LineSearchResult<T>, MinimizerError> {
         let directional_derivative = grad_current.dot(&direction);
 
-        if directional_derivative >= T::from_f64(-1e-13) {
+        if directional_derivative >= T::from_f64(-1e-13).unwrap() {
             // Stricter descent check
             return Err(MinimizerError::LinearSearchFailed);
         }
 
-        let mut alpha = initial_step.min(&wolfe_params.max_step);
+        let mut alpha = initial_step.min(wolfe_params.max_step);
         let mut evaluations = 0;
         let max_backtrack = 50;
 
@@ -220,7 +220,7 @@ where
         }
 
         // Return the best alpha found, even if not perfect
-        let final_alpha = alpha.max(&wolfe_params.min_step);
+        let final_alpha = alpha.max(wolfe_params.min_step);
         let x_new: Points1<T> = x
             .iter()
             .zip(direction.iter())
@@ -821,7 +821,7 @@ where
 
 impl<T> fmt::Debug for QuasiNewton<T>
 where
-    T: RFFloat,
+    T: Float,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(

@@ -3,21 +3,16 @@ use crate::{
     frequency::Frequency,
     impedance::ComplexNumberType,
     math::*,
-    num::{MyComplex, MyFloat, RFNum},
+    num::{ComplexScalar, RealScalar},
     parameter::RFParameter,
-    pts::{Points, Pts},
+    pts::{Points, Points1, Pts},
     unit::Unit,
 };
-use ndarray::OwnedRepr;
-use ndarray::prelude::*;
+use ndarray::{OwnedRepr, prelude::*};
 use ndarray_linalg::*;
-use num::complex::{Complex64, c64};
-use num::zero;
+use num_complex::{Complex64, ComplexFloat, c64};
 use num_traits::{ConstZero, Num, One, Zero};
 use regex::{Regex, RegexBuilder};
-use rug::az::UnwrappedAs;
-use rug::ops::{Pow, PowAssign};
-use rug::{Complex, Float};
 use simple_error::SimpleError;
 use std::{
     error::Error,
@@ -42,50 +37,6 @@ pub mod port_points;
 pub use self::builder::NetworkBuilder;
 pub use self::network::Network;
 
-macro_rules! unwrap_or_bail {
-    ($opt: expr, $msg: expr) => {
-        match $opt {
-            Some(v) => v,
-            None => {
-                bail!($msg);
-            }
-        }
-    };
-}
-
-macro_rules! unwrap_or_break {
-    ($opt: expr) => {
-        match $opt {
-            Some(v) => v,
-            None => {
-                break;
-            }
-        }
-    };
-}
-
-macro_rules! unwrap_or_continue {
-    ($opt: expr) => {
-        match $opt {
-            Some(v) => v,
-            None => {
-                continue;
-            }
-        }
-    };
-}
-
-macro_rules! unwrap_or_panic {
-    ($opt: expr, $msg: expr) => {
-        match $opt {
-            Some(v) => v,
-            None => {
-                panic!($msg);
-            }
-        }
-    };
-}
-
 fn network_err_msg(param: RFParameter, nports: usize) -> String {
     format!("{param} parameters do not exist for network with {nports} port(s)")
 }
@@ -98,41 +49,34 @@ pub enum WaveType {
     Traveling,
 }
 
-// pub type PointComplex = Array2<MyComplex>;
-// pub type PointFloat = Array2<MyFloat>;
-// pub type Point = Array2<Complex64>;
-// pub type Pointf64 = Array2<f64>;
-pub type PortPoints<T> = Array1<T>;
-// pub type PortPointsf64 = Array1<f64>;
-// pub type Points = Array3<Complex64>;
-// pub type Pointsf64 = Array3<f64>;
+pub type PortPoints<T> = Points1<T>;
 
-pub trait NetworkPortPoints {
-    fn db(&self) -> PortPoints<f64>;
+pub trait NetworkPortPoints<T: ComplexScalar>
+where
+    <T as ComplexFloat>::Real: RealScalar,
+{
+    fn db(&self) -> PortPoints<T::Real>;
 
-    fn deg(&self) -> PortPoints<f64>;
+    fn deg(&self) -> PortPoints<T::Real>;
 
-    fn im(&self) -> PortPoints<f64>;
+    fn im(&self) -> PortPoints<T::Real>;
 
-    fn mag(&self) -> PortPoints<f64>;
+    fn mag(&self) -> PortPoints<T::Real>;
 
-    // fn new_like(pt: &Points) -> PortPoints;
+    fn rad(&self) -> PortPoints<T::Real>;
 
-    fn rad(&self) -> PortPoints<f64>;
-
-    fn re(&self) -> PortPoints<f64>;
+    fn re(&self) -> PortPoints<T::Real>;
 }
 
-pub trait NetworkPoint<T, D>
+pub trait NetworkPoint<T: ComplexScalar, D: Dimension>
 where
-    T: RFNum,
-    D: Dimension,
+    Self: Sized,
+    <T as ComplexFloat>::Real: RealScalar,
 {
+    type Size;
     type Tuple<'a>
     where
-        Self: 'a;
-
-    const PRECISION: u32 = 53;
+        T: 'a;
 
     fn a_to_g(&self) -> Option<Self>
     where
@@ -142,11 +86,11 @@ where
     where
         Self: Sized;
 
-    fn a_to_s(&self, z0: ArrayView1<T>) -> Option<Self>
+    fn a_to_s(&self, z0: &Vec<T>) -> Option<Self>
     where
         Self: Sized;
 
-    fn a_to_t(&self, z0: ArrayView1<T>) -> Option<Self>
+    fn a_to_t(&self, z0: &Vec<T>) -> Option<Self>
     where
         Self: Sized;
 
@@ -158,7 +102,11 @@ where
     where
         Self: Sized;
 
-    fn connect(&self, p1: usize, net: &Self, p2: usize) -> Option<Self>
+    fn check_dims<'a>(data: &[Self::Tuple<'a>]) -> Result<Self::Size, &'static str>
+    where
+        T: 'a;
+
+    fn connect(&self, p1: usize, net: &Self, p2: usize) -> Result<Self, String>
     where
         Self: Sized;
 
@@ -166,11 +114,17 @@ where
 
     fn deg(&self) -> Points<T::Real, D>;
 
-    fn from_db(data: &[Self::Tuple<'_>]) -> Self;
+    fn from_db<'a>(data: &[Self::Tuple<'a>]) -> Result<Self, String>
+    where
+        T: 'a;
 
-    fn from_ma(data: &[Self::Tuple<'_>]) -> Self;
+    fn from_magang<'a>(data: &[Self::Tuple<'a>]) -> Result<Self, String>
+    where
+        T: 'a;
 
-    fn from_ri(data: &[Self::Tuple<'_>]) -> Self;
+    fn from_reim<'a>(data: &[Self::Tuple<'a>]) -> Result<Self, String>
+    where
+        T: 'a;
 
     fn g_to_a(&self) -> Option<Self>
     where
@@ -180,11 +134,11 @@ where
     where
         Self: Sized;
 
-    fn g_to_s(&self, z0: ArrayView1<T>) -> Option<Self>
+    fn g_to_s(&self, z0: &Vec<T>) -> Option<Self>
     where
         Self: Sized;
 
-    fn g_to_t(&self, z0: ArrayView1<T>) -> Option<Self>
+    fn g_to_t(&self, z0: &Vec<T>) -> Option<Self>
     where
         Self: Sized;
 
@@ -204,11 +158,11 @@ where
     where
         Self: Sized;
 
-    fn h_to_s(&self, z0: ArrayView1<T>) -> Option<Self>
+    fn h_to_s(&self, z0: &Vec<T>) -> Option<Self>
     where
         Self: Sized;
 
-    fn h_to_t(&self, z0: ArrayView1<T>) -> Option<Self>
+    fn h_to_t(&self, z0: &Vec<T>) -> Option<Self>
     where
         Self: Sized;
 
@@ -220,8 +174,6 @@ where
     where
         Self: Sized;
 
-    // fn identity() -> Self;
-
     fn im(&self) -> Points<T::Real, D>;
 
     fn is_reciprocal(&self) -> bool;
@@ -230,27 +182,25 @@ where
 
     fn new_like(pt: &Self) -> Self;
 
-    // fn ones() -> Self;
-
     fn rad(&self) -> Points<T::Real, D>;
 
     fn re(&self) -> Points<T::Real, D>;
 
-    fn reciprocity(&self) -> Option<Points<T::Real, D>>;
+    fn reciprocity(&self) -> Result<Points<T::Real, D>, String>;
 
-    fn s_to_a(&self, z0: ArrayView1<T>) -> Option<Self>
+    fn s_to_a(&self, z0: &Vec<T>) -> Option<Self>
     where
         Self: Sized;
 
-    fn s_to_g(&self, z0: ArrayView1<T>) -> Option<Self>
+    fn s_to_g(&self, z0: &Vec<T>) -> Option<Self>
     where
         Self: Sized;
 
-    fn s_to_h(&self, z0: ArrayView1<T>) -> Option<Self>
+    fn s_to_h(&self, z0: &Vec<T>) -> Option<Self>
     where
         Self: Sized;
 
-    fn s_to_s(&self, z0: ArrayView1<T>, from: WaveType, to: WaveType) -> Option<Self>
+    fn s_to_s(&self, z0: &Vec<T>, from: WaveType, to: WaveType) -> Option<Self>
     where
         Self: Sized;
 
@@ -258,23 +208,23 @@ where
     where
         Self: Sized;
 
-    fn s_to_y(&self, z0: ArrayView1<T>) -> Option<Self>
+    fn s_to_y(&self, z0: &Vec<T>) -> Option<Self>
     where
         Self: Sized;
 
-    fn s_to_z(&self, z0: ArrayView1<T>) -> Option<Self>
+    fn s_to_z(&self, z0: &Vec<T>) -> Option<Self>
     where
         Self: Sized;
 
-    fn t_to_a(&self, z0: ArrayView1<T>) -> Option<Self>
+    fn t_to_a(&self, z0: &Vec<T>) -> Option<Self>
     where
         Self: Sized;
 
-    fn t_to_g(&self, z0: ArrayView1<T>) -> Option<Self>
+    fn t_to_g(&self, z0: &Vec<T>) -> Option<Self>
     where
         Self: Sized;
 
-    fn t_to_h(&self, z0: ArrayView1<T>) -> Option<Self>
+    fn t_to_h(&self, z0: &Vec<T>) -> Option<Self>
     where
         Self: Sized;
 
@@ -282,11 +232,11 @@ where
     where
         Self: Sized;
 
-    fn t_to_y(&self, z0: ArrayView1<T>) -> Option<Self>
+    fn t_to_y(&self, z0: &Vec<T>) -> Option<Self>
     where
         Self: Sized;
 
-    fn t_to_z(&self, z0: ArrayView1<T>) -> Option<Self>
+    fn t_to_z(&self, z0: &Vec<T>) -> Option<Self>
     where
         Self: Sized;
 
@@ -302,11 +252,11 @@ where
     where
         Self: Sized;
 
-    fn y_to_s(&self, z0: ArrayView1<T>) -> Option<Self>
+    fn y_to_s(&self, z0: &Vec<T>) -> Option<Self>
     where
         Self: Sized;
 
-    fn y_to_t(&self, z0: ArrayView1<T>) -> Option<Self>
+    fn y_to_t(&self, z0: &Vec<T>) -> Option<Self>
     where
         Self: Sized;
 
@@ -326,11 +276,11 @@ where
     where
         Self: Sized;
 
-    fn z_to_s(&self, z0: ArrayView1<T>) -> Option<Self>
+    fn z_to_s(&self, z0: &Vec<T>) -> Option<Self>
     where
         Self: Sized;
 
-    fn z_to_t(&self, z0: ArrayView1<T>) -> Option<Self>
+    fn z_to_t(&self, z0: &Vec<T>) -> Option<Self>
     where
         Self: Sized;
 

@@ -1,6 +1,6 @@
 [package]
 name = "rfkit"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2024"
 
 [profile.release]
@@ -28,7 +28,7 @@ rug = { version = "1.27.0", features = ["float", "complex"] }
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"
 simple-error = "0.3.1"
-twofloat = "0.8.4"
+twofloat = { path = "../twofloat", features = ["serde"] }
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }

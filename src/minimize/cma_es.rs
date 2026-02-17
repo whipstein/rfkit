@@ -3,8 +3,8 @@
 use crate::{
     error::MinimizerError,
     minimize::ObjFn,
-    num::RFFloat,
-    pts::{Matrix, Points1, Points2, Pts},
+    num::{Abs, RealScalar},
+    pts::{Matrix, MatrixReal, Points1, Points2, Pts, PtsReal},
 };
 use ndarray::prelude::*;
 use rand::prelude::*;
@@ -15,7 +15,7 @@ use std::fmt;
 #[derive(Debug, Clone)]
 pub struct CmaEsResult<T>
 where
-    T: RFFloat,
+    T: RealScalar,
 {
     xmin: Points1<T>,
     fmin: T,
@@ -29,7 +29,7 @@ where
 
 impl<T> CmaEsResult<T>
 where
-    T: RFFloat,
+    T: RealScalar,
 {
     pub fn converged(&self) -> bool {
         self.converged
@@ -40,7 +40,7 @@ where
     }
 
     pub fn sigma(&self) -> T {
-        self.final_sigma.clone()
+        self.final_sigma
     }
 
     pub fn fn_evals(&self) -> usize {
@@ -52,15 +52,15 @@ where
     }
 
     pub fn condition_number(&self) -> T {
-        self.condition_number.clone()
+        self.condition_number
     }
 
     pub fn history(&self) -> Vec<T> {
-        self.history.clone()
+        self.history
     }
 
     pub fn xmin(&self) -> Points1<T> {
-        self.xmin.clone()
+        self.xmin
     }
 }
 
@@ -75,50 +75,30 @@ pub struct CmaEs<T> {
 
 impl<T> Clone for CmaEs<T>
 where
-    T: Clone,
+    T: RealScalar,
 {
     fn clone(&self) -> Self {
         Self {
-            xmin: self.xmin.clone(),
-            fmin: self.fmin.clone(),
+            xmin: self.xmin,
+            fmin: self.fmin,
             f: dyn_clone::clone_box(&*self.f),
             generations: self.generations,
             converged: self.converged,
-            rng: self.rng.clone(),
+            rng: self.rng,
         }
     }
 }
 
 impl<T> CmaEs<T>
 where
-    T: RFFloat,
-    for<'a, 'b> &'a T: std::ops::Add<&'b T, Output = T>,
-    for<'a, 'b> &'a T: std::ops::Sub<&'b T, Output = T>,
-    for<'a, 'b> &'a T: std::ops::Mul<&'b T, Output = T>,
-    for<'a, 'b> &'a T: std::ops::Div<&'b T, Output = T>,
-    for<'a> &'a T: std::ops::Add<T, Output = T>,
-    for<'a> &'a T: std::ops::Sub<T, Output = T>,
-    for<'a> &'a T: std::ops::Mul<T, Output = T>,
-    for<'a> &'a T: std::ops::Div<T, Output = T>,
-    for<'a> &'a T: std::ops::Add<f64, Output = T>,
-    for<'a> &'a T: std::ops::Sub<f64, Output = T>,
-    for<'a> &'a T: std::ops::Mul<f64, Output = T>,
-    for<'a> &'a T: std::ops::Div<f64, Output = T>,
-    f64: std::ops::Add<T, Output = T>,
-    f64: std::ops::Sub<T, Output = T>,
-    f64: std::ops::Mul<T, Output = T>,
-    f64: std::ops::Div<T, Output = T>,
-    for<'a> f64: std::ops::Add<&'a T, Output = T>,
-    for<'a> f64: std::ops::Sub<&'a T, Output = T>,
-    for<'a> f64: std::ops::Mul<&'a T, Output = T>,
-    for<'a> f64: std::ops::Div<&'a T, Output = T>,
+    T: RealScalar + Abs + std::iter::Sum,
 {
     pub fn new<F>(f: F) -> Self
     where
         F: ObjFn<T> + 'static,
     {
         CmaEs {
-            xmin: array![].into(),
+            xmin: points![],
             fmin: T::infinity(),
             f: Box::new(f),
             generations: 0,
@@ -129,7 +109,7 @@ where
 
     pub fn new_boxed(f: Box<dyn ObjFn<T>>) -> Self {
         CmaEs {
-            xmin: array![].into(),
+            xmin: points![],
             fmin: T::infinity(),
             f: f,
             generations: 0,
@@ -143,7 +123,7 @@ where
         F: ObjFn<T> + 'static,
     {
         CmaEs {
-            xmin: array![].into(),
+            xmin: points![],
             fmin: T::infinity(),
             f: Box::new(f),
             generations: 0,
@@ -181,48 +161,47 @@ where
             }
 
             // Compute rotation angle
-            let theta = if (&a[[q, q]] - &a[[p, p]]).abs() < 1e-10.into() {
+            let theta = if (a[[q, q]] - a[[p, p]]).abs() < 1e-10.into() {
                 (std::f64::consts::PI / 4.0).into()
             } else {
-                0.5 * (2.0 * &a[[p, q]] / (&a[[q, q]] - &a[[p, p]])).atan()
+                0.5.into() * (2.0.into() * a[[p, q]] / (a[[q, q]] - a[[p, p]])).atan()
             };
 
             let cos_theta = theta.cos();
             let sin_theta = theta.sin();
 
             // Apply Jacobi rotation
-            let app = a[[p, p]].clone();
-            let aqq = a[[q, q]].clone();
-            let apq = a[[p, q]].clone();
+            let app = a[[p, p]];
+            let aqq = a[[q, q]];
+            let apq = a[[p, q]];
 
-            a[[p, p]] = &cos_theta * &cos_theta * &app + &sin_theta * &sin_theta * &aqq
-                - 2.0 * &cos_theta * &sin_theta * &apq;
-            a[[q, q]] = &sin_theta * &sin_theta * &app
-                + &cos_theta * &cos_theta * &aqq
-                + 2.0 * &cos_theta * &sin_theta * &apq;
+            a[[p, p]] = cos_theta * cos_theta * app + sin_theta * sin_theta * aqq
+                - 2.0.into() * cos_theta * sin_theta * apq;
+            a[[q, q]] = sin_theta * sin_theta * app
+                + cos_theta * cos_theta * aqq
+                + 2.0.into() * cos_theta * sin_theta * apq;
             a[[p, q]] = T::zero();
             a[[q, p]] = T::zero();
 
             for i in 0..n {
                 if i != p && i != q {
-                    let aip = a[[i, p]].clone();
-                    let aiq = a[[i, q]].clone();
-                    a[[i, p]] = &cos_theta * &aip - &sin_theta * &aiq;
-                    a[[p, i]] = a[[i, p]].clone();
-                    a[[i, q]] = &sin_theta * &aip + &cos_theta * &aiq;
-                    a[[q, i]] = a[[i, q]].clone();
+                    let aip = a[[i, p]];
+                    let aiq = a[[i, q]];
+                    a[[i, p]] = cos_theta * aip - sin_theta * aiq;
+                    a[[p, i]] = a[[i, p]];
+                    a[[i, q]] = sin_theta * aip + cos_theta * aiq;
+                    a[[q, i]] = a[[i, q]];
                 }
 
-                let vip = v[[i, p]].clone();
-                let viq = v[[i, q]].clone();
-                v[[i, p]] = &cos_theta * &vip - &sin_theta * &viq;
-                v[[i, q]] = &sin_theta * &vip + &cos_theta * &viq;
+                let vip = v[[i, p]];
+                let viq = v[[i, q]];
+                v[[i, p]] = cos_theta * vip - sin_theta * viq;
+                v[[i, q]] = sin_theta * vip + cos_theta * viq;
             }
         }
 
         // Extract eigenvalues and sort
-        let eigenvalues: Points1<T> =
-            Points1::from_vec((0..n).map(|i| a[[i, i]].clone()).collect());
+        let eigenvalues: Points1<T> = Points1::from_vec((0..n).map(|i| a[[i, i]]).collect());
         let mut indices: Vec<usize> = (0..n).collect();
 
         // Sort by eigenvalue magnitude (descending)
@@ -233,10 +212,9 @@ where
                 .unwrap()
         });
 
-        let sorted_eigenvalues: Points1<T> =
-            indices.iter().map(|&i| eigenvalues[i].clone()).collect();
+        let sorted_eigenvalues: Points1<T> = indices.iter().map(|&i| eigenvalues[i]).collect();
         let sorted_eigenvectors =
-            Points2::from_shape_fn((indices.len(), n), |(i, j)| v[[j, indices[i]]].clone());
+            Points2::from_shape_fn((indices.len(), n), |(i, j)| v[[j, indices[i]]]);
 
         (sorted_eigenvalues, sorted_eigenvectors)
     }
@@ -245,12 +223,12 @@ where
     fn condition_number(&self, eigenvalues: &Points1<T>) -> T {
         let max_eig = eigenvalues
             .iter()
-            .fold(T::zero(), |acc, x| acc.max(&x.abs()));
+            .fold(T::zero(), |acc, x| acc.max(x.abs()));
         let min_eig = eigenvalues
             .iter()
-            .fold(T::infinity(), |acc, x| acc.min(&x.abs()));
+            .fold(T::infinity(), |acc, x| acc.min(x.abs()));
         if min_eig > 1e-14.into() {
-            &max_eig / &min_eig
+            max_eig / min_eig
         } else {
             T::infinity()
         }
@@ -289,8 +267,8 @@ where
             ((4.0 + mu as f64 / n as f64) / (n as f64 + 4.0 + 2.0 * mu as f64 / n as f64)).into();
         let cs = ((mu as f64 + 2.0) / (n as f64 + mu as f64 + 5.0)).into();
         let c1 = (2.0 / ((n as f64 + 1.3).powi(2) + mu as f64)).into();
-        let cmu = T::from_f64(2.0).min(&(T::one() - &c1)) * (mu as f64 - 2.0 + 1.0 / mu as f64)
-            / ((n as f64 + 2.0).powi(2) + mu as f64);
+        let cmu: T = 2.0.into().min(T::one() - c1) * (mu as f64 - 2.0 + 1.0 / mu as f64).into()
+            / ((n as f64 + 2.0).powi(2) + mu as f64).into();
         let damps = (1.0 + 2.0 * (0.0_f64).max((mu as f64 - 1.0) / (n as f64 + 1.0) - 1.0)) + &cs;
 
         // Expectation of ||N(0,I)||
@@ -301,13 +279,13 @@ where
         // Weights for recombination
         let mut weights = Points1::<T>::zeros(mu);
         for i in 0..mu {
-            weights[i] = T::from_f64((mu as f64 + 1.0) / 2.0).ln() - ((i + 1) as f64).ln();
+            weights[i] = T::from_f64((mu as f64 + 1.0) / 2.0).ln() - ((i + 1) as f64).into().ln();
         }
         let sum_weights = weights.iter().sum::<T>();
         for w in &mut weights {
-            *w /= &sum_weights;
+            *w /= sum_weights;
         }
-        let mueff = 1.0 / weights.iter().map(|w| w.powi(2)).sum::<T>();
+        let mueff = weights.iter().map(|w| w.powi(2)).sum::<T>().recip();
 
         // Initialize evolution paths and covariance matrix
         let mut xmean = x_scaled.to_owned();
@@ -326,7 +304,7 @@ where
             // Generate and evaluate population
             let (eigenvalues, eigenvectors) = self.eigen_decomposition(&c);
             let sqrt_eigenvalues: Points1<T> = Points1::from_shape_fn(eigenvalues.len(), |i| {
-                eigenvalues[i].max(&T::from_f64(0.0)).sqrt()
+                eigenvalues[i].max(T::from_f64(0.0)).sqrt()
             });
 
             let mut population = Vec::with_capacity(lambda);
@@ -344,14 +322,14 @@ where
                 let mut y = Points1::<T>::zeros(n);
                 for i in 0..n {
                     for j in 0..n {
-                        y[i] += &eigenvectors[[j, i]] * &sqrt_eigenvalues[j] * &z[j];
+                        y[i] += &eigenvectors[[j, i]] * &sqrt_eigenvalues[j] * z[j];
                     }
                 }
 
                 // x = xmean + sigma * y
-                let x = Points1::from_shape_fn(xmean.len(), |i| &xmean[i] + &sigma * &y[i]);
+                let x = Points1::from_shape_fn(xmean.len(), |i| xmean[i] + sigma * y[i]);
 
-                let f_val = self.f.call(&(&x / &scl));
+                let f_val = self.f.call(&(x / scl));
                 fn_evals += 1;
 
                 if !f_val.is_finite() {
@@ -366,8 +344,8 @@ where
             let mut indices: Vec<usize> = (0..lambda).collect();
             indices.sort_by(|&i, &j| fitness[i].partial_cmp(&fitness[j]).unwrap());
 
-            let best_fitness = fitness[indices[0]].clone();
-            history.push(best_fitness.clone());
+            let best_fitness = fitness[indices[0]];
+            history.push(best_fitness);
 
             // Check for convergence
             if sigma < tol {
@@ -375,8 +353,8 @@ where
                 self.fmin = best_fitness;
                 self.converged = true;
                 return Ok(CmaEsResult {
-                    xmin: self.xmin.clone(),
-                    fmin: self.fmin.clone(),
+                    xmin: self.xmin,
+                    fmin: self.fmin,
                     generations: self.generations,
                     fn_evals,
                     converged: self.converged,
@@ -391,7 +369,7 @@ where
             for i in 0..mu {
                 let idx = indices[i];
                 for j in 0..n {
-                    xmean[j] += &weights[i] * &population[idx].0[j];
+                    xmean[j] += weights[i] * population[idx].0[j];
                 }
             }
 
@@ -401,20 +379,20 @@ where
             for i in 0..mu {
                 let idx = indices[i];
                 for j in 0..n {
-                    ymean[j] += &weights[i] * &population[idx].1[j];
-                    zmean[j] += &weights[i] * &population[idx].2[j];
+                    ymean[j] += weights[i] * population[idx].1[j];
+                    zmean[j] += weights[i] * population[idx].2[j];
                 }
             }
 
             // Update ps (evolution path for sigma)
             for i in 0..n {
-                ps[i] = (1.0 - &cs) * &ps[i] + (&cs * (2.0 - &cs) * &mueff).sqrt() * &zmean[i];
+                ps[i] = (1.0 - cs) * ps[i] + (cs * (2.0.into() - cs) * mueff).sqrt() * zmean[i];
             }
 
             let ps_norm = ps.iter().map(|x| x.powi(2)).sum::<T>().sqrt();
-            let hsig = if ps_norm.clone()
-                / (1.0 - (1.0 - &cs).powi(2 * self.generations as i32)).sqrt()
-                < T::from_f64(1.4 + 2.0 / (n as f64 + 1.0)) * &chi_n
+            let hsig = if ps_norm
+                / (1.0.into() - (1.0.into() - cs).powi(2 * self.generations as i32)).sqrt()
+                < T::from_f64(1.4 + 2.0 / (n as f64 + 1.0)) * chi_n
             {
                 T::one()
             } else {
@@ -423,31 +401,31 @@ where
 
             // Update pc (evolution path for covariance)
             for i in 0..n {
-                pc[i] =
-                    (1.0 - &cc) * &pc[i] + &hsig * (&cc * (2.0 - &cc) * &mueff).sqrt() * &ymean[i];
+                pc[i] = (1.0.into() - cc) * pc[i]
+                    + hsig * (cc * (2.0.into() - cc) * mueff).sqrt() * ymean[i];
             }
 
             // Update covariance matrix c
-            let c1a = &c1 * (1.0 - (1.0 - hsig.powi(2)) * &cc * (2.0 - &cc));
+            let c1a = c1 * (1.0.into() - (1.0.into() - hsig.powi(2)) * cc * (2.0.into() - cc));
 
             for i in 0..n {
                 for j in 0..n {
-                    c[[i, j]] = (1.0 - &c1a - &cmu) * &c[[i, j]] + &c1 * &pc[i] * &pc[j];
+                    c[[i, j]] = (1.0.into() - c1a - cmu) * c[[i, j]] + c1 * pc[i] * pc[j];
 
                     // Add rank-mu update
                     for k in 0..mu {
                         let idx = indices[k];
                         c[[i, j]] +=
-                            &cmu * &weights[k] * &population[idx].1[i] * &population[idx].1[j];
+                            &cmu * weights[k] * population[idx].1[i] * population[idx].1[j];
                     }
                 }
             }
 
             // Update sigma
-            sigma *= (&cs / &damps * (&ps_norm / &chi_n - 1.0)).exp();
+            sigma *= (cs / damps * (ps_norm / chi_n - 1.0.into())).exp();
 
             // Limit sigma
-            sigma = sigma.min(&1e10.into()).max(&1e-10.into());
+            sigma = sigma.min(1e10.into()).max(1e-10.into());
         }
 
         // Final result
@@ -460,7 +438,7 @@ where
         let (eigenvalues_final, eigenvectors_final) = self.eigen_decomposition(&c);
         let sqrt_eigenvalues_final: Points1<T> = eigenvalues_final
             .iter()
-            .map(|x| x.max(&T::zero()).sqrt())
+            .map(|x| x.max(T::zero()).sqrt())
             .collect();
 
         for _ in 0..lambda {
@@ -473,12 +451,12 @@ where
             let mut y = Points1::<T>::zeros(n);
             for i in 0..n {
                 for j in 0..n {
-                    y[i] += &eigenvectors_final[[j, i]] * &sqrt_eigenvalues_final[j] * &z[j];
+                    y[i] += eigenvectors_final[[j, i]] * sqrt_eigenvalues_final[j] * z[j];
                 }
             }
 
-            let x = Points1::from_shape_fn(xmean.len(), |i| &xmean[i] + &sigma * &y[i]);
-            let f_val = self.f.call(&(&x / &scl));
+            let x = Points1::from_shape_fn(xmean.len(), |i| xmean[i] + sigma * y[i]);
+            let f_val = self.f.call(&(x / scl));
             fn_evals += 1;
 
             population.push(x);
@@ -489,12 +467,12 @@ where
         indices.sort_by(|&i, &j| fitness[i].partial_cmp(&fitness[j]).unwrap());
 
         self.xmin = &population[indices[0]] / &scl;
-        self.fmin = fitness[indices[0]].clone();
+        self.fmin = fitness[indices[0]];
         self.converged = false;
 
         Ok(CmaEsResult {
-            xmin: self.xmin.clone(),
-            fmin: self.fmin.clone(),
+            xmin: self.xmin,
+            fmin: self.fmin,
             generations: self.generations,
             fn_evals,
             converged: self.converged,
@@ -526,7 +504,7 @@ where
         let max_restarts = max_restarts.unwrap_or(3);
         let max_gen_per_run = max_generations_per_run.unwrap_or(1000);
         let tol = tol.unwrap_or(1e-11.into());
-        let initial_sigma = initial_sigma.clone().unwrap_or(0.3.into());
+        let initial_sigma = initial_sigma.unwrap_or(0.3.into());
 
         let mut best_result: Option<CmaEsResult<T>> = None;
         let mut total_fn_evals = 0;
@@ -537,9 +515,9 @@ where
             // Perturb initial point for restarts
             let mut start_point = initial_point.to_owned();
             if restart > 0 {
-                let sigma_perturbation = &initial_sigma * (1.0 + restart as f64 * 0.5);
-                for x in &mut start_point {
-                    let normal = Normal::new(0.0, sigma_perturbation.to_f64()).unwrap();
+                let sigma_perturbation = initial_sigma * (1.0 + restart as f64 * 0.5).into();
+                for mut x in &mut start_point {
+                    let normal = Normal::new(0.0, sigma_perturbation.to_f64().unwrap()).unwrap();
                     *x += normal.sample(&mut self.rng);
                 }
             }
@@ -547,9 +525,9 @@ where
             let result = self.cma_es(
                 &start_point,
                 scale,
-                Some(initial_sigma.clone()),
+                Some(initial_sigma),
                 None,
-                Some(tol.clone()),
+                Some(tol),
                 Some(max_gen_per_run),
             )?;
 
@@ -572,7 +550,7 @@ where
                     converged: result.converged,
                     final_sigma: result.final_sigma,
                     condition_number: result.condition_number,
-                    history: combined_history.clone(),
+                    history: combined_history,
                 });
 
                 // Early termination if converged
@@ -583,8 +561,8 @@ where
         }
 
         let final_result = best_result.unwrap();
-        self.xmin = final_result.xmin.clone();
-        self.fmin = final_result.fmin.clone();
+        self.xmin = final_result.xmin;
+        self.fmin = final_result.fmin;
         self.converged = final_result.converged;
         self.generations = total_generations;
 
@@ -593,13 +571,13 @@ where
 
     /// Get current best point
     pub fn get_best(&self) -> (Points1<T>, T) {
-        (self.xmin.clone(), self.fmin.clone())
+        (self.xmin.clone(), self.fmin)
     }
 }
 
 impl<T> fmt::Debug for CmaEs<T>
 where
-    T: RFFloat,
+    T: RealScalar,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
@@ -615,65 +593,61 @@ mod minimize_cmaes_tests {
     use super::*;
     use crate::{
         minimize::{F1dim, MultiDimFn},
-        num::MyFloat,
         pts::Points,
     };
     use ndarray::linalg::Dot;
     use ndarray_rand::{RandomExt, rand_distr::Uniform};
     use num_traits::One;
     use std::f64::consts::{E, PI};
+    use twofloat::TwoFloat;
 
     // Helper function to create Ackley
-    fn ackley(bias: &MyFloat) -> F1dim<MyFloat> {
-        let b = bias.clone();
-        F1dim::new(MultiDimFn::new(move |x: &Points1<MyFloat>| {
+    fn ackley(bias: TwoFloat) -> F1dim<TwoFloat> {
+        F1dim::new(MultiDimFn::new(move |x: &Points1<TwoFloat>| {
             let n = x.len() as f64;
-            let t1 = x.iter().map(|val| val.powi(2)).sum::<MyFloat>();
-            let t2 = x.iter().map(|val| (2.0 * PI * val).cos()).sum::<MyFloat>();
-            -20.0 * (-0.2 * (t1 / n).sqrt()).exp() - (t2 / n).exp() + 20.0 + E + &b
+            let t1 = x.iter().map(|val| val.powi(2)).sum::<TwoFloat>();
+            let t2 = x.iter().map(|val| (2.0 * PI * val).cos()).sum::<TwoFloat>();
+            -20.0 * (-0.2 * (t1 / n).sqrt()).exp() - (t2 / n).exp() + 20.0 + E + bias
         }))
     }
 
     // Helper function to create Elliptic
-    fn elliptic(bias: &MyFloat) -> F1dim<MyFloat> {
-        let b = bias.clone();
-        F1dim::new(MultiDimFn::new(move |x: &Points1<MyFloat>| {
-            let sum: MyFloat = x
+    fn elliptic(bias: TwoFloat) -> F1dim<TwoFloat> {
+        F1dim::new(MultiDimFn::new(move |x: &Points1<TwoFloat>| {
+            let sum: TwoFloat = x
                 .iter()
                 .enumerate()
                 .map(|(i, val)| 1e6_f64.powf((i / (x.len() - 1)) as f64) * val.powi(2))
                 .sum();
-            sum + &b
+            sum + bias
         }))
     }
 
     // Helper function to create Griewank
-    fn griewank(bias: &MyFloat) -> F1dim<MyFloat> {
-        let b = bias.clone();
-        F1dim::new(MultiDimFn::new(move |x: &Points1<MyFloat>| {
-            let t1 = x.iter().map(|val| val.powi(2)).sum::<MyFloat>() / 4000.0;
+    fn griewank(bias: TwoFloat) -> F1dim<TwoFloat> {
+        F1dim::new(MultiDimFn::new(move |x: &Points1<TwoFloat>| {
+            let t1 = x.iter().map(|val| val.powi(2)).sum::<TwoFloat>() / 4000.0;
             let t2 = x
                 .iter()
                 .enumerate()
                 .map(|(i, val)| (val / (i as f64 + 1.0).sqrt()).cos())
-                .product::<MyFloat>();
-            t1 - t2 + 1.0 + &b
+                .product::<TwoFloat>();
+            t1 - t2 + 1.0 + bias
         }))
     }
 
     // Helper function to create Rosenbrock
-    fn rosenbrock(shift: &Points1<MyFloat>, bias: &MyFloat) -> F1dim<MyFloat> {
+    fn rosenbrock(shift: &Points1<TwoFloat>, bias: TwoFloat) -> F1dim<TwoFloat> {
         let s = shift.to_owned();
-        let b = bias.clone();
-        F1dim::new(MultiDimFn::new(move |x: &Points1<MyFloat>| {
+        F1dim::new(MultiDimFn::new(move |x: &Points1<TwoFloat>| {
             let x_new = x - &s + 1.0;
-            let sum: MyFloat = x_new
+            let sum: TwoFloat = x_new
                 .0
                 .windows(2)
                 .into_iter()
                 .map(|pair| 100.0 * (pair[0].powi(2) - &pair[1]).powi(2) + (&pair[0] - 1.0).powi(2))
                 .sum();
-            sum + &b
+            sum + bias
         }))
     }
 
@@ -683,7 +657,7 @@ mod minimize_cmaes_tests {
         #[test]
         fn test_2d_quadratic() {
             // f(x,y) = (x-1)² + (y-2)², minimum at (1,2)
-            let func = |x: &Points1<MyFloat>| (&x[0] - 1.0).powi(2) + (&x[1] - 2.0).powi(2);
+            let func = |x: &Points1<TwoFloat>| (&x[0] - 1.0).powi(2) + (&x[1] - 2.0).powi(2);
             let objective = MultiDimFn::new(func);
             let mut cmaes = CmaEs::with_seed(objective, 42);
 
@@ -703,7 +677,7 @@ mod minimize_cmaes_tests {
         #[test]
         fn test_1d_quadratic() {
             // f(x) = (x-5)², minimum at x=5
-            let func = |x: &Points1<MyFloat>| (&x[0] - 5.0).powi(2);
+            let func = |x: &Points1<TwoFloat>| (&x[0] - 5.0).powi(2);
             let objective = MultiDimFn::new(func);
             let mut cmaes = CmaEs::with_seed(objective, 42);
 
@@ -717,7 +691,7 @@ mod minimize_cmaes_tests {
         #[test]
         fn test_rosenbrock_2d() {
             // Rosenbrock function: f(x,y) = (1-x)² + 100(y-x²)²
-            let rosenbrock = |x: &Points1<MyFloat>| {
+            let rosenbrock = |x: &Points1<TwoFloat>| {
                 (1.0 - &x[0]).powi(2) + 100.0 * (&x[1] - x[0].powi(2)).powi(2)
             };
             let objective = MultiDimFn::new(rosenbrock);
@@ -725,7 +699,7 @@ mod minimize_cmaes_tests {
 
             let result = cmaes
                 .cma_es(
-                    &array![MyFloat::new(-1.2), 1.0.into()].into(),
+                    &points![TwoFloat::from_f64(-1.2), 1.0.into()],
                     None,
                     Some(0.5.into()),
                     Some(50),
@@ -747,7 +721,7 @@ mod minimize_cmaes_tests {
         #[test]
         fn test_3d_sphere() {
             // f(x,y,z) = x² + y² + z², minimum at (0,0,0)
-            let sphere = |x: &Points1<MyFloat>| x.iter().map(|xi| xi * xi).sum();
+            let sphere = |x: &Points1<TwoFloat>| x.iter().map(|xi| xi * xi).sum();
             let objective = MultiDimFn::new(sphere);
             let mut cmaes = CmaEs::with_seed(objective, 42);
 
@@ -769,11 +743,11 @@ mod minimize_cmaes_tests {
         #[test]
         fn test_ellipsoid_function() {
             // Ellipsoid: f(x) = sum(i * x_i^2), scaled quadratic
-            let ellipsoid = |x: &Points1<MyFloat>| {
+            let ellipsoid = |x: &Points1<TwoFloat>| {
                 x.iter()
                     .enumerate()
                     .map(|(i, xi)| (i + 1) as f64 * xi.powi(2))
-                    .sum::<MyFloat>()
+                    .sum::<TwoFloat>()
             };
             let objective = MultiDimFn::new(ellipsoid);
             let mut cmaes = CmaEs::with_seed(objective, 42);
@@ -801,7 +775,7 @@ mod minimize_cmaes_tests {
 
         #[test]
         fn test_custom_population_size() {
-            let func = |x: &Points1<MyFloat>| x[0].powi(2) + x[1].powi(2);
+            let func = |x: &Points1<TwoFloat>| x[0].powi(2) + x[1].powi(2);
             let objective = MultiDimFn::new(func);
             let mut cmaes = CmaEs::with_seed(objective, 42);
 
@@ -840,7 +814,7 @@ mod minimize_cmaes_tests {
 
         #[test]
         fn test_different_initial_sigma() {
-            let func = |x: &Points1<MyFloat>| (&x[0] - 2.0).powi(2) + (&x[1] + 1.0).powi(2);
+            let func = |x: &Points1<TwoFloat>| (&x[0] - 2.0).powi(2) + (&x[1] + 1.0).powi(2);
             let objective = MultiDimFn::new(func);
 
             // Test small sigma
@@ -878,7 +852,7 @@ mod minimize_cmaes_tests {
 
         #[test]
         fn test_tolerance_settings() {
-            let func = |x: &Points1<MyFloat>| x[0].powi(2) + x[1].powi(2);
+            let func = |x: &Points1<TwoFloat>| x[0].powi(2) + x[1].powi(2);
             let objective = MultiDimFn::new(func);
             let mut cmaes = CmaEs::with_seed(objective, 42);
 
@@ -909,7 +883,7 @@ mod minimize_cmaes_tests {
 
         #[test]
         fn test_restart_strategy() {
-            let func = |x: &Points1<MyFloat>| (&x[0] - 3.0).powi(2) + (&x[1] + 2.0).powi(2) + 5.0;
+            let func = |x: &Points1<TwoFloat>| (&x[0] - 3.0).powi(2) + (&x[1] + 2.0).powi(2) + 5.0;
             let objective = MultiDimFn::new(func);
             let mut cmaes = CmaEs::with_seed(objective, 42);
 
@@ -940,9 +914,9 @@ mod minimize_cmaes_tests {
         #[test]
         fn test_restart_improves_result() {
             // Function that's difficult from certain starting points
-            let func = |x: &Points1<MyFloat>| {
-                let x1 = x[0].clone();
-                let x2 = x[1].clone();
+            let func = |x: &Points1<TwoFloat>| {
+                let x1 = x[0];
+                let x2 = x[1];
                 // Himmelblau's function (multimodal)
                 (x1.powi(2) + &x2 - 11.0).powi(2) + (x1 + x2.powi(2) - 7.0).powi(2)
             };
@@ -986,7 +960,7 @@ mod minimize_cmaes_tests {
 
         #[test]
         fn test_invalid_dimension() {
-            let func = |_: &Points1<MyFloat>| 0.0.into();
+            let func = |_: &Points1<TwoFloat>| 0.0.into();
             let objective = MultiDimFn::new(func);
             let mut cmaes = CmaEs::new(objective);
 
@@ -997,7 +971,7 @@ mod minimize_cmaes_tests {
 
         #[test]
         fn test_invalid_sigma() {
-            let func = |x: &Points1<MyFloat>| x[0].powi(2);
+            let func = |x: &Points1<TwoFloat>| x[0].powi(2);
             let objective = MultiDimFn::new(func);
             let mut cmaes = CmaEs::new(objective);
 
@@ -1017,7 +991,7 @@ mod minimize_cmaes_tests {
             let result = cmaes.cma_es(
                 &array![1.0.into()].into(),
                 None,
-                Some(MyFloat::new(-0.1)),
+                Some(TwoFloat::from_f64(-0.1)),
                 None,
                 None,
                 None,
@@ -1028,7 +1002,7 @@ mod minimize_cmaes_tests {
 
         #[test]
         fn test_function_evaluation_error() {
-            let bad_func = |x: &Points1<MyFloat>| {
+            let bad_func = |x: &Points1<TwoFloat>| {
                 if x[0] > 5.0 {
                     f64::NAN.into()
                 } else {
@@ -1057,7 +1031,7 @@ mod minimize_cmaes_tests {
 
         #[test]
         fn test_infinite_function_values() {
-            let inf_func = |x: &Points1<MyFloat>| {
+            let inf_func = |x: &Points1<TwoFloat>| {
                 if x[0].abs() > 10.0 {
                     f64::INFINITY.into()
                 } else {
@@ -1093,7 +1067,7 @@ mod minimize_cmaes_tests {
 
         #[test]
         fn test_convergence_tracking() {
-            let func = |x: &Points1<MyFloat>| x[0].powi(2) + x[1].powi(2);
+            let func = |x: &Points1<TwoFloat>| x[0].powi(2) + x[1].powi(2);
             let objective = MultiDimFn::new(func);
             let mut cmaes = CmaEs::with_seed(objective, 42);
 
@@ -1113,7 +1087,7 @@ mod minimize_cmaes_tests {
 
         #[test]
         fn test_condition_number_tracking() {
-            let func = |x: &Points1<MyFloat>| x[0].powi(2) + 100.0 * x[1].powi(2); // Ill-conditioned
+            let func = |x: &Points1<TwoFloat>| x[0].powi(2) + 100.0 * x[1].powi(2); // Ill-conditioned
             let objective = MultiDimFn::new(func);
             let mut cmaes = CmaEs::with_seed(objective, 42);
 
@@ -1129,7 +1103,7 @@ mod minimize_cmaes_tests {
 
         #[test]
         fn test_function_evaluation_counting() {
-            let func = |x: &Points1<MyFloat>| x[0].powi(2) + x[1].powi(2);
+            let func = |x: &Points1<TwoFloat>| x[0].powi(2) + x[1].powi(2);
             let objective = MultiDimFn::new(func);
             let mut cmaes = CmaEs::with_seed(objective, 42);
 
@@ -1159,7 +1133,7 @@ mod minimize_cmaes_tests {
         #[test]
         fn test_high_dimensional() {
             // Test 5D sphere function
-            let sphere_5d = |x: &Points1<MyFloat>| x.iter().map(|xi| xi * xi).sum::<MyFloat>();
+            let sphere_5d = |x: &Points1<TwoFloat>| x.iter().map(|xi| xi * xi).sum::<TwoFloat>();
             let objective = MultiDimFn::new(sphere_5d);
             let mut cmaes = CmaEs::with_seed(objective, 42);
 
@@ -1183,7 +1157,7 @@ mod minimize_cmaes_tests {
         #[test]
         fn test_very_high_dimensional() {
             // Test 10D sphere function
-            let sphere_10d = |x: &Points1<MyFloat>| x.iter().map(|xi| xi * xi).sum::<MyFloat>();
+            let sphere_10d = |x: &Points1<TwoFloat>| x.iter().map(|xi| xi * xi).sum::<TwoFloat>();
             let objective = MultiDimFn::new(sphere_10d);
             let mut cmaes = CmaEs::with_seed(objective, 42);
 
@@ -1208,7 +1182,7 @@ mod minimize_cmaes_tests {
         fn test_dimension_scaling() {
             // Test that algorithm adapts to dimension
             for dim in [2, 4, 6] {
-                let sphere = |x: &Points1<MyFloat>| x.iter().map(|xi| xi * xi).sum::<MyFloat>();
+                let sphere = |x: &Points1<TwoFloat>| x.iter().map(|xi| xi * xi).sum::<TwoFloat>();
                 let objective = MultiDimFn::new(sphere);
                 let mut cmaes = CmaEs::with_seed(objective, 42);
 
@@ -1253,7 +1227,7 @@ mod minimize_cmaes_tests {
 
         #[test]
         fn test_f1() {
-            let shift = array![
+            let shift = points![
                 -3.9311900e+001,
                 5.8899900e+001,
                 -4.6322400e+001,
@@ -1360,9 +1334,9 @@ mod minimize_cmaes_tests {
             // 10d
             let n = 10;
             let x = Points(Array1::random(n, Uniform::new(-100_f64, 100_f64).unwrap()))
-                * MyFloat::one();
+                * TwoFloat::one();
             let shift_func = shift.clone();
-            let func = move |x: &Points1<MyFloat>| {
+            let func = move |x: &Points1<TwoFloat>| {
                 x.iter()
                     .enumerate()
                     .map(|(i, val)| (val - shift_func[i]).powi(2) + bias)
@@ -1392,9 +1366,9 @@ mod minimize_cmaes_tests {
             if TEST_30D {
                 let n = 30;
                 let x = Points(Array1::random(n, Uniform::new(-100_f64, 100_f64).unwrap()))
-                    * MyFloat::one();
+                    * TwoFloat::one();
                 let shift_func = shift.clone();
-                let func = move |x: &Points1<MyFloat>| {
+                let func = move |x: &Points1<TwoFloat>| {
                     x.iter()
                         .enumerate()
                         .map(|(i, val)| (val - shift_func[i]).powi(2) + bias)
@@ -1425,9 +1399,9 @@ mod minimize_cmaes_tests {
             if TEST_50D {
                 let n = 50;
                 let x = Points(Array1::random(n, Uniform::new(-100_f64, 100_f64).unwrap()))
-                    * MyFloat::one();
+                    * TwoFloat::one();
                 let shift_func = shift.clone();
-                let func = move |x: &Points1<MyFloat>| {
+                let func = move |x: &Points1<TwoFloat>| {
                     x.iter()
                         .enumerate()
                         .map(|(i, val)| (val - shift_func[i]).powi(2) + bias)
@@ -1457,7 +1431,7 @@ mod minimize_cmaes_tests {
 
         #[test]
         fn test_f2() {
-            let shift = array![
+            let shift = points![
                 3.5626700e+001,
                 -8.2912300e+001,
                 -1.0642300e+001,
@@ -1564,13 +1538,13 @@ mod minimize_cmaes_tests {
             // 10d
             let n = 10;
             let x = Points(Array1::random(n, Uniform::new(-100_f64, 100_f64).unwrap()))
-                * MyFloat::one();
+                * TwoFloat::one();
             let shift_func = shift.clone();
-            let func = move |x: &Points1<MyFloat>| {
+            let func = move |x: &Points1<TwoFloat>| {
                 x.iter()
                     .enumerate()
                     .map(|(i, _)| {
-                        let mut new_val = MyFloat::new(0.0);
+                        let mut new_val = TwoFloat::from_f64(0.0);
                         for j in 0..=i {
                             new_val += (&x[j] - shift_func[j]).powi(2);
                         }
@@ -1602,13 +1576,13 @@ mod minimize_cmaes_tests {
             if TEST_30D {
                 let n = 30;
                 let x = Points(Array1::random(n, Uniform::new(-100_f64, 100_f64).unwrap()))
-                    * MyFloat::one();
+                    * TwoFloat::one();
                 let shift_func = shift.clone();
-                let func = move |x: &Points1<MyFloat>| {
+                let func = move |x: &Points1<TwoFloat>| {
                     x.iter()
                         .enumerate()
                         .map(|(i, _)| {
-                            let mut new_val = MyFloat::new(0.0);
+                            let mut new_val = TwoFloat::from_f64(0.0);
                             for j in 0..=i {
                                 new_val += (&x[j] - shift_func[j]).powi(2);
                             }
@@ -1641,13 +1615,13 @@ mod minimize_cmaes_tests {
             if TEST_50D {
                 let n = 50;
                 let x = Points(Array1::random(n, Uniform::new(-100_f64, 100_f64).unwrap()))
-                    * MyFloat::one();
+                    * TwoFloat::one();
                 let shift_func = shift.clone();
-                let func = move |x: &Points1<MyFloat>| {
+                let func = move |x: &Points1<TwoFloat>| {
                     x.iter()
                         .enumerate()
                         .map(|(i, _)| {
-                            let mut new_val = MyFloat::new(0.0);
+                            let mut new_val = TwoFloat::from_f64(0.0);
                             for j in 0..=i {
                                 new_val += (&x[j] - shift_func[j]).powi(2);
                             }
@@ -1679,7 +1653,7 @@ mod minimize_cmaes_tests {
 
         #[test]
         fn test_f3() {
-            let shift: Points<MyFloat, Ix1> = array![
+            let shift: Points<TwoFloat, Ix1> = points![
                 (-3.2201300e+001).into(),
                 6.4977600e+001.into(),
                 (-3.8300000e+001).into(),
@@ -1690,9 +1664,8 @@ mod minimize_cmaes_tests {
                 (-4.9364400e+001).into(),
                 5.3499000e+000.into(),
                 5.2241800e+001.into()
-            ]
-            .into();
-            let m: Points<MyFloat, Ix2> = array![
+            ];
+            let m: Points<TwoFloat, Ix2> = points![
                 [
                     1.7830682721057345e-001.into(),
                     5.5786330587166588e-002.into(),
@@ -1703,49 +1676,49 @@ mod minimize_cmaes_tests {
                     2.7787561319902176e-002.into(),
                     2.6664001046775621e-001.into(),
                     4.1568009651337917e-001.into(),
-                    MyFloat::new(-4.7771934552669726e-001)
+                    TwoFloat::from_f64(-4.7771934552669726e-001)
                 ],
                 [
                     6.3516362859468667e-001.into(),
                     5.0091423836646241e-002.into(),
                     2.0110601384121973e-001.into(),
-                    MyFloat::new(-6.8076882416633511e-001),
-                    MyFloat::new(-4.9934546553907944e-002),
-                    MyFloat::new(-4.6399423424582961e-002),
-                    MyFloat::new(-1.9460194646748039e-001),
+                    TwoFloat::from_f64(-6.8076882416633511e-001),
+                    TwoFloat::from_f64(-4.9934546553907944e-002),
+                    TwoFloat::from_f64(-4.6399423424582961e-002),
+                    TwoFloat::from_f64(-1.9460194646748039e-001),
                     1.8961539926194687e-001.into(),
-                    MyFloat::new(-1.9416259626804547e-002),
+                    TwoFloat::from_f64(-1.9416259626804547e-002),
                     1.0639981029473855e-001.into()
                 ],
                 [
                     3.2762147366023187e-001.into(),
                     3.6016598714114556e-001.into(),
-                    MyFloat::new(-2.3635655094044949e-001),
-                    MyFloat::new(-1.8566854017444848e-002),
-                    MyFloat::new(-2.4479096747593634e-001),
+                    TwoFloat::from_f64(-2.3635655094044949e-001),
+                    TwoFloat::from_f64(-1.8566854017444848e-002),
+                    TwoFloat::from_f64(-2.4479096747593634e-001),
                     4.4818973341886903e-001.into(),
                     5.3518635733619568e-001.into(),
-                    MyFloat::new(-3.1206925190530521e-001),
-                    MyFloat::new(-1.3863719921728737e-001),
-                    MyFloat::new(-2.0713981146209595e-001)
+                    TwoFloat::from_f64(-3.1206925190530521e-001),
+                    TwoFloat::from_f64(-1.3863719921728737e-001),
+                    TwoFloat::from_f64(-2.0713981146209595e-001)
                 ],
                 [
-                    MyFloat::new(-6.4783210587984280e-002),
-                    MyFloat::new(-4.9424101683695937e-001),
+                    TwoFloat::from_f64(-6.4783210587984280e-002),
+                    TwoFloat::from_f64(-4.9424101683695937e-001),
                     1.3101175297435969e-001.into(),
                     3.1615171931194543e-002.into(),
-                    MyFloat::new(-1.7506107914871860e-001),
+                    TwoFloat::from_f64(-1.7506107914871860e-001),
                     6.8908039344918381e-001.into(),
                     1.0544234469094992e-002.into(),
                     2.1948984793273507e-001.into(),
-                    MyFloat::new(-1.6468539805844565e-001),
+                    TwoFloat::from_f64(-1.6468539805844565e-001),
                     3.9048550518513409e-001.into()
                 ],
                 [
-                    MyFloat::new(-2.7648044785371367e-001),
+                    TwoFloat::from_f64(-2.7648044785371367e-001),
                     1.1383114506120220e-001.into(),
-                    MyFloat::new(-3.0818401502810994e-001),
-                    MyFloat::new(-3.5959407104438740e-001),
+                    TwoFloat::from_f64(-3.0818401502810994e-001),
+                    TwoFloat::from_f64(-3.5959407104438740e-001),
                     2.6446258034702191e-001.into(),
                     2.8616788379157501e-002.into(),
                     4.7528027904995646e-001.into(),
@@ -1756,65 +1729,64 @@ mod minimize_cmaes_tests {
                 [
                     1.5454249061641606e-001.into(),
                     5.4899186274157996e-001.into(),
-                    MyFloat::new(-1.8382029941792261e-001),
+                    TwoFloat::from_f64(-1.8382029941792261e-001),
                     3.3944461903909162e-001.into(),
                     2.8596188774255699e-001.into(),
                     1.2833167642713417e-001.into(),
-                    MyFloat::new(-2.5495080172376317e-001),
+                    TwoFloat::from_f64(-2.5495080172376317e-001),
                     3.9460752302037100e-001.into(),
-                    MyFloat::new(-3.4524640270007412e-001),
+                    TwoFloat::from_f64(-3.4524640270007412e-001),
                     2.9590318323368509e-001.into()
                 ],
                 [
-                    MyFloat::new(-5.1907977690014512e-002),
-                    MyFloat::new(-1.4450757809700329e-001),
-                    MyFloat::new(-4.6086919626114314e-001),
-                    MyFloat::new(-5.3687964818368079e-002),
-                    MyFloat::new(-3.6317793499109247e-001),
+                    TwoFloat::from_f64(-5.1907977690014512e-002),
+                    TwoFloat::from_f64(-1.4450757809700329e-001),
+                    TwoFloat::from_f64(-4.6086919626114314e-001),
+                    TwoFloat::from_f64(-5.3687964818368079e-002),
+                    TwoFloat::from_f64(-3.6317793499109247e-001),
                     2.7439997038558633e-002.into(),
-                    MyFloat::new(-2.1422629652542946e-001),
+                    TwoFloat::from_f64(-2.1422629652542946e-001),
                     5.0545148893084779e-001.into(),
-                    MyFloat::new(-9.8064717019089837e-002),
-                    MyFloat::new(-5.6346991018564507e-001)
+                    TwoFloat::from_f64(-9.8064717019089837e-002),
+                    TwoFloat::from_f64(-5.6346991018564507e-001)
                 ],
                 [
                     5.0142989354460654e-001.into(),
-                    MyFloat::new(-5.3133659048457516e-001),
-                    MyFloat::new(-3.7294385871521135e-001),
+                    TwoFloat::from_f64(-5.3133659048457516e-001),
+                    TwoFloat::from_f64(-3.7294385871521135e-001),
                     2.3370866431381510e-001.into(),
                     4.4327537662488531e-001.into(),
-                    MyFloat::new(-1.6972740381143742e-001),
+                    TwoFloat::from_f64(-1.6972740381143742e-001),
                     2.0364148963331691e-001.into(),
-                    MyFloat::new(-2.3717523924336927e-002),
-                    MyFloat::new(-7.1805455862954920e-002),
-                    MyFloat::new(-7.3332178450339763e-003)
+                    TwoFloat::from_f64(-2.3717523924336927e-002),
+                    TwoFloat::from_f64(-7.1805455862954920e-002),
+                    TwoFloat::from_f64(-7.3332178450339763e-003)
                 ],
                 [
                     1.0441248047680891e-001.into(),
                     4.3064226149369542e-002.into(),
-                    MyFloat::new(-4.1675972625940993e-001),
+                    TwoFloat::from_f64(-4.1675972625940993e-001),
                     1.6522876074361707e-002.into(),
                     1.7437281849141879e-003.into(),
                     2.9594944879030760e-001.into(),
-                    MyFloat::new(-5.1197487739368741e-001),
-                    MyFloat::new(-3.2679819762357892e-001),
+                    TwoFloat::from_f64(-5.1197487739368741e-001),
+                    TwoFloat::from_f64(-3.2679819762357892e-001),
                     5.8253106590933512e-001.into(),
                     1.3204141339826148e-001.into()
                 ],
                 [
-                    MyFloat::new(-2.9645907657631693e-001),
-                    MyFloat::new(-3.1303011496605505e-002),
-                    MyFloat::new(-7.8009154082116602e-002),
-                    MyFloat::new(-4.1548534874482024e-001),
+                    TwoFloat::from_f64(-2.9645907657631693e-001),
+                    TwoFloat::from_f64(-3.1303011496605505e-002),
+                    TwoFloat::from_f64(-7.8009154082116602e-002),
+                    TwoFloat::from_f64(-4.1548534874482024e-001),
                     5.6959403572443468e-001.into(),
                     2.9095198400348149e-001.into(),
-                    MyFloat::new(-1.8560717510075503e-001),
-                    MyFloat::new(-2.4653488847859115e-001),
-                    MyFloat::new(-3.7149025085479792e-001),
-                    MyFloat::new(-3.0015617693118707e-001)
+                    TwoFloat::from_f64(-1.8560717510075503e-001),
+                    TwoFloat::from_f64(-2.4653488847859115e-001),
+                    TwoFloat::from_f64(-3.7149025085479792e-001),
+                    TwoFloat::from_f64(-3.0015617693118707e-001)
                 ],
-            ]
-            .into();
+            ];
             let bias = -450.0;
 
             // 10d
@@ -1822,7 +1794,7 @@ mod minimize_cmaes_tests {
             let x_shift =
                 Points(Array1::random(n, Uniform::new(-100_f64, 100_f64).unwrap())) - &shift;
             let x = x_shift.dot(&m);
-            let mut cmaes = CmaEs::with_seed(elliptic(&bias.into()), 42);
+            let mut cmaes = CmaEs::with_seed(elliptic(bias.into()), 42);
             let result = cmaes
                 .cma_es(
                     &x,
@@ -1848,7 +1820,7 @@ mod minimize_cmaes_tests {
         #[test]
         fn test_f4() {
             let mut rng = rand::rng();
-            let shift = array![
+            let shift = points![
                 3.5626700e+001,
                 -8.2912300e+001,
                 -1.0642300e+001,
@@ -1955,20 +1927,20 @@ mod minimize_cmaes_tests {
             // 10d
             let n = 10;
             let x = Points(Array1::random(n, Uniform::new(-100_f64, 100_f64).unwrap()))
-                * MyFloat::one();
+                * TwoFloat::one();
             let shift_func = shift.clone();
             let rand_val = rng.random::<f64>();
-            let func = move |x: &Points1<MyFloat>| {
+            let func = move |x: &Points1<TwoFloat>| {
                 x.iter()
                     .enumerate()
                     .map(|(i, _)| {
-                        let mut new_val = MyFloat::new(0.0);
+                        let mut new_val = TwoFloat::from_f64(0.0);
                         for j in 0..=i {
                             new_val += (&x[j] - shift_func[j]).powi(2);
                         }
                         new_val + bias
                     })
-                    .sum::<MyFloat>()
+                    .sum::<TwoFloat>()
                     * (1.0 + 0.4 * rand_val)
             };
             let objective = MultiDimFn::new(func);
@@ -1995,109 +1967,109 @@ mod minimize_cmaes_tests {
         // #[test]
         // fn test_f6() {
         //     let mut rng = rand::rng();
-        //     let shift: Points1<MyFloat> = array![
+        //     let shift: Points1<TwoFloat> = points![
         //         8.1023200e+001.into(),
-        //         MyFloat::new(-4.8395000e+001),
+        //         TwoFloat::from_f64(-4.8395000e+001),
         //         1.9231600e+001.into(),
-        //         MyFloat::new(-2.5231000e+000),
+        //         TwoFloat::from_f64(-2.5231000e+000),
         //         7.0433800e+001.into(),
         //         4.7177400e+001.into(),
-        //         MyFloat::new(-7.8358000e+000),
-        //         MyFloat::new(-8.6669300e+001),
+        //         TwoFloat::from_f64(-7.8358000e+000),
+        //         TwoFloat::from_f64(-8.6669300e+001),
         //         5.7853200e+001.into(),
-        //         MyFloat::new(-9.9533000e+000),
+        //         TwoFloat::from_f64(-9.9533000e+000),
         //         2.0777800e+001.into(),
         //         5.2548600e+001.into(),
         //         7.5926300e+001.into(),
         //         4.2877300e+001.into(),
-        //         MyFloat::new(-5.8272000e+001),
-        //         MyFloat::new(-1.6972800e+001),
+        //         TwoFloat::from_f64(-5.8272000e+001),
+        //         TwoFloat::from_f64(-1.6972800e+001),
         //         7.8384500e+001.into(),
         //         7.5042700e+001.into(),
-        //         MyFloat::new(-1.6151300e+001),
+        //         TwoFloat::from_f64(-1.6151300e+001),
         //         7.0856900e+001.into(),
-        //         MyFloat::new(-7.9579500e+001),
-        //         MyFloat::new(-2.6483700e+001),
+        //         TwoFloat::from_f64(-7.9579500e+001),
+        //         TwoFloat::from_f64(-2.6483700e+001),
         //         5.6369900e+001.into(),
-        //         MyFloat::new(-8.8224900e+001),
-        //         MyFloat::new(-6.4999600e+001),
-        //         MyFloat::new(-5.3502200e+001),
-        //         MyFloat::new(-5.4230000e+001),
+        //         TwoFloat::from_f64(-8.8224900e+001),
+        //         TwoFloat::from_f64(-6.4999600e+001),
+        //         TwoFloat::from_f64(-5.3502200e+001),
+        //         TwoFloat::from_f64(-5.4230000e+001),
         //         1.8682600e+001.into(),
-        //         MyFloat::new(-4.1006100e+001),
-        //         MyFloat::new(-5.4213400e+001),
-        //         MyFloat::new(-8.7250600e+001),
+        //         TwoFloat::from_f64(-4.1006100e+001),
+        //         TwoFloat::from_f64(-5.4213400e+001),
+        //         TwoFloat::from_f64(-8.7250600e+001),
         //         4.4421400e+001.into(),
-        //         MyFloat::new(-9.8826000e+000),
+        //         TwoFloat::from_f64(-9.8826000e+000),
         //         7.7726600e+001.into(),
-        //         MyFloat::new(-6.1210000e+000),
-        //         MyFloat::new(-1.4643000e+001),
+        //         TwoFloat::from_f64(-6.1210000e+000),
+        //         TwoFloat::from_f64(-1.4643000e+001),
         //         6.2319800e+001.into(),
         //         4.5274000e+000.into(),
-        //         MyFloat::new(-5.3523400e+001),
+        //         TwoFloat::from_f64(-5.3523400e+001),
         //         3.0984700e+001.into(),
         //         6.0861300e+001.into(),
-        //         MyFloat::new(-8.6464800e+001),
+        //         TwoFloat::from_f64(-8.6464800e+001),
         //         3.2629800e+001.into(),
-        //         MyFloat::new(-2.1693400e+001),
+        //         TwoFloat::from_f64(-2.1693400e+001),
         //         5.9723200e+001.into(),
         //         5.0630000e-001.into(),
         //         3.7704800e+001.into(),
-        //         MyFloat::new(-1.2799300e+001),
-        //         MyFloat::new(-3.5168800e+001),
-        //         MyFloat::new(-5.5862300e+001),
-        //         MyFloat::new(-5.5182300e+001),
+        //         TwoFloat::from_f64(-1.2799300e+001),
+        //         TwoFloat::from_f64(-3.5168800e+001),
+        //         TwoFloat::from_f64(-5.5862300e+001),
+        //         TwoFloat::from_f64(-5.5182300e+001),
         //         3.2800100e+001.into(),
-        //         MyFloat::new(-3.5502400e+001),
+        //         TwoFloat::from_f64(-3.5502400e+001),
         //         7.5012000e+000.into(),
-        //         MyFloat::new(-6.2842800e+001),
+        //         TwoFloat::from_f64(-6.2842800e+001),
         //         3.5621700e+001.into(),
-        //         MyFloat::new(-2.1892800e+001),
+        //         TwoFloat::from_f64(-2.1892800e+001),
         //         6.4802000e+001.into(),
         //         6.3657900e+001.into(),
         //         1.6841300e+001.into(),
-        //         MyFloat::new(-6.2050000e-001),
+        //         TwoFloat::from_f64(-6.2050000e-001),
         //         7.1958400e+001.into(),
         //         5.7893200e+001.into(),
         //         2.6083800e+001.into(),
         //         5.7235300e+001.into(),
         //         2.8840900e+001.into(),
-        //         MyFloat::new(-2.8445200e+001),
-        //         MyFloat::new(-3.7849300e+001),
-        //         MyFloat::new(-2.8585100e+001),
+        //         TwoFloat::from_f64(-2.8445200e+001),
+        //         TwoFloat::from_f64(-3.7849300e+001),
+        //         TwoFloat::from_f64(-2.8585100e+001),
         //         6.1342000e+000.into(),
         //         4.0880300e+001.into(),
-        //         MyFloat::new(-3.4327700e+001),
+        //         TwoFloat::from_f64(-3.4327700e+001),
         //         6.0929200e+001.into(),
         //         1.2253000e+001.into(),
-        //         MyFloat::new(-2.3325500e+001),
+        //         TwoFloat::from_f64(-2.3325500e+001),
         //         3.6493100e+001.into(),
         //         8.3828000e+000.into(),
-        //         MyFloat::new(-9.9215000e+000),
+        //         TwoFloat::from_f64(-9.9215000e+000),
         //         3.5022100e+001.into(),
         //         2.1835800e+001.into(),
         //         5.3067700e+001.into(),
         //         8.2231800e+001.into(),
         //         4.0662000e+000.into(),
         //         6.8425500e+001.into(),
-        //         MyFloat::new(-5.8867800e+001),
+        //         TwoFloat::from_f64(-5.8867800e+001),
         //         8.6354400e+001.into(),
-        //         MyFloat::new(-4.1139400e+001),
-        //         MyFloat::new(-4.4580700e+001),
+        //         TwoFloat::from_f64(-4.1139400e+001),
+        //         TwoFloat::from_f64(-4.4580700e+001),
         //         6.7633500e+001.into(),
         //         4.2715000e+001.into(),
-        //         MyFloat::new(-6.5426600e+001),
-        //         MyFloat::new(-8.7883700e+001),
+        //         TwoFloat::from_f64(-6.5426600e+001),
+        //         TwoFloat::from_f64(-8.7883700e+001),
         //         7.0901600e+001.into(),
-        //         MyFloat::new(-5.4155100e+001),
-        //         MyFloat::new(-3.6229800e+001),
+        //         TwoFloat::from_f64(-5.4155100e+001),
+        //         TwoFloat::from_f64(-3.6229800e+001),
         //         2.9059600e+001.into(),
-        //         MyFloat::new(-3.8806400e+001),
-        //         MyFloat::new(-5.5396000e+000),
-        //         MyFloat::new(-7.8339300e+001),
+        //         TwoFloat::from_f64(-3.8806400e+001),
+        //         TwoFloat::from_f64(-5.5396000e+000),
+        //         TwoFloat::from_f64(-7.8339300e+001),
         //         8.7900200e+001.into()
         //     ];
-        //     let bias = MyFloat::new(390.0);
+        //     let bias = TwoFloat::from_f64(390.0);
 
         //     // 10d
         //     let n = 10;
@@ -2125,7 +2097,7 @@ mod minimize_cmaes_tests {
         // #[test]
         // fn test_f7() {
         //     let mut rng = rand::rng();
-        //     let shift = array![
+        //     let shift = points![
         //         -2.7626840e+002,
         //         -1.1911000e+001,
         //         -5.7878840e+002,
@@ -2137,7 +2109,7 @@ mod minimize_cmaes_tests {
         //         -1.0586420e+002,
         //         -9.6489800e+001,
         //     ];
-        //     let m = array![
+        //     let m = points![
         //         [
         //             -7.3696625825313500e-002,
         //             1.5747490444892893e+000,
@@ -2263,13 +2235,13 @@ mod minimize_cmaes_tests {
 
         //     // 10d
         //     let n = 10;
-        //     let x = (&Points1::from_shape_fn(n, |_| rng.random::<MyFloat>() * 600.0) - &shift).dot(&m);
+        //     let x = (&Points1::from_shape_fn(n, |_| rng.random::<TwoFloat>() * 600.0) - &shift).dot(&m);
         //     let mut cmaes = CmaEs::with_seed(griewank(bias), 42);
         //     let result = cmaes
         //         .cma_es(
         //             x,
         //             Some(0.3),
-        //             Some(4 + (3.0 * (n as MyFloat).ln()).floor() as usize),
+        //             Some(4 + (3.0 * (n as TwoFloat).ln()).floor() as usize),
         //             Some(1e-10),
         //             Some(1e3 as usize * n.pow(2)),
         //         )
@@ -2293,7 +2265,7 @@ mod minimize_cmaes_tests {
         // #[test]
         // fn test_f8() {
         //     let mut rng = rand::rng();
-        //     let shift = array![
+        //     let shift = points![
         //         -1.6823000e+001,
         //         1.4976900e+001,
         //         6.1690000e+000,
@@ -2305,7 +2277,7 @@ mod minimize_cmaes_tests {
         //         -1.5116200e+001,
         //         1.0793400e+001,
         //     ];
-        //     let m = array![
+        //     let m = points![
         //         [
         //             -1.8785768809450733e+001,
         //             3.3616954860437176e+001,
@@ -2432,13 +2404,13 @@ mod minimize_cmaes_tests {
         //     // 10d
         //     let n = 10;
         //     let x =
-        //         (&Points1::from_shape_fn(n, |_| rng.random::<MyFloat>() * 64.0 - 32.0) - &shift).dot(&m);
+        //         (&Points1::from_shape_fn(n, |_| rng.random::<TwoFloat>() * 64.0 - 32.0) - &shift).dot(&m);
         //     let mut cmaes = CmaEs::with_seed(ackley(bias), 42);
         //     let result = cmaes
         //         .cma_es(
         //             x,
         //             Some(0.3),
-        //             Some(4 + (3.0 * (n as MyFloat).ln()).floor() as usize),
+        //             Some(4 + (3.0 * (n as TwoFloat).ln()).floor() as usize),
         //             Some(1e-10),
         //             Some(1e3 as usize * n.pow(2)),
         //         )
@@ -2464,13 +2436,13 @@ mod minimize_cmaes_tests {
         #[test]
         fn test_multimodal_function() {
             // Ackley function (multimodal but easier than Rastrigin)
-            let ackley = |x: &Points1<MyFloat>| {
+            let ackley = |x: &Points1<TwoFloat>| {
                 let n = x.len() as f64;
-                let sum_sq = x.iter().map(|xi| xi.powi(2)).sum::<MyFloat>();
+                let sum_sq = x.iter().map(|xi| xi.powi(2)).sum::<TwoFloat>();
                 let sum_cos = x
                     .iter()
                     .map(|xi| (2.0 * std::f64::consts::PI * xi).cos())
-                    .sum::<MyFloat>();
+                    .sum::<TwoFloat>();
 
                 -20.0 * (-0.2 * (sum_sq / n).sqrt()).exp() - (sum_cos / n).exp()
                     + 20.0
@@ -2513,10 +2485,10 @@ mod minimize_cmaes_tests {
         #[test]
         fn test_simple_multimodal() {
             // Simpler multimodal test - multiple quadratic wells
-            let multi_quad = |x: &Points1<MyFloat>| {
+            let multi_quad = |x: &Points1<TwoFloat>| {
                 let val1 = (&x[0] - 1.0).powi(2) + (&x[1] - 1.0).powi(2);
                 let val2 = (&x[0] + 1.0).powi(2) + (&x[1] + 1.0).powi(2);
-                val1.min(&val2) // Two wells at (1,1) and (-1,-1)
+                val1.min(val2) // Two wells at (1,1) and (-1,-1)
             };
             let objective = MultiDimFn::new(multi_quad);
             let mut cmaes = CmaEs::with_seed(objective, 123);
@@ -2550,9 +2522,9 @@ mod minimize_cmaes_tests {
         fn test_beale_function() {
             // Beale function: f(x,y) = (1.5 - x + xy)² + (2.25 - x + xy²)² + (2.625 - x + xy³)²
             // Global minimum at (3, 0.5) with value 0
-            let beale = |x: &Points1<MyFloat>| {
-                let x1 = x[0].clone();
-                let x2 = x[1].clone();
+            let beale = |x: &Points1<TwoFloat>| {
+                let x1 = x[0];
+                let x2 = x[1];
                 (1.5 - &x1 + &x1 * &x2).powi(2)
                     + (2.25 - &x1 + &x1 * x2.powi(2)).powi(2)
                     + (2.625 - &x1 + &x1 * x2.powi(3)).powi(2)
@@ -2581,7 +2553,7 @@ mod minimize_cmaes_tests {
         fn test_booth_function() {
             // Booth function: f(x,y) = (x + 2y - 7)² + (2x + y - 5)²
             // Global minimum at (1, 3) with value 0
-            let booth = |x: &Points1<MyFloat>| {
+            let booth = |x: &Points1<TwoFloat>| {
                 (&x[0] + 2.0 * &x[1] - 7.0).powi(2) + (2.0 * &x[0] + &x[1] - 5.0).powi(2)
             };
             let objective = MultiDimFn::new(booth);
@@ -2606,7 +2578,7 @@ mod minimize_cmaes_tests {
             let rng = StdRng::seed_from_u64(12345);
 
             // Function with added noise
-            let noisy_quad = move |x: &Points1<MyFloat>| {
+            let noisy_quad = move |x: &Points1<TwoFloat>| {
                 let clean = x[0].powi(2) + x[1].powi(2);
                 let noise = rng.clone().random::<f64>() * 0.01 - 0.005; // Small noise ±0.005
                 clean + noise
@@ -2635,8 +2607,8 @@ mod minimize_cmaes_tests {
         #[test]
         fn test_very_flat_function() {
             // Very flat function around minimum
-            let flat_func = |x: &Points1<MyFloat>| {
-                let dist_sq = x.iter().map(|xi| xi.powi(2)).sum::<MyFloat>();
+            let flat_func = |x: &Points1<TwoFloat>| {
+                let dist_sq = x.iter().map(|xi| xi.powi(2)).sum::<TwoFloat>();
                 if dist_sq < 1e-6 {
                     0.0.into()
                 } else {
@@ -2666,8 +2638,8 @@ mod minimize_cmaes_tests {
         #[test]
         fn test_very_steep_function() {
             // Very steep function
-            let steep_func = |x: &Points1<MyFloat>| {
-                let dist_sq = x.iter().map(|xi| xi.powi(2)).sum::<MyFloat>();
+            let steep_func = |x: &Points1<TwoFloat>| {
+                let dist_sq = x.iter().map(|xi| xi.powi(2)).sum::<TwoFloat>();
                 dist_sq.powi(4) // Very steep
             };
             let objective = MultiDimFn::new(steep_func);
@@ -2695,7 +2667,7 @@ mod minimize_cmaes_tests {
         fn test_asymmetric_function() {
             // Asymmetric function (different scales in different directions)
             let asymmetric =
-                |x: &Points1<MyFloat>| x[0].powi(2) + 1000.0 * x[1].powi(2) + 10.0 * &x[0] * &x[1];
+                |x: &Points1<TwoFloat>| x[0].powi(2) + 1000.0 * x[1].powi(2) + 10.0 * &x[0] * &x[1];
             let objective = MultiDimFn::new(asymmetric);
             let mut cmaes = CmaEs::with_seed(objective, 42);
 
@@ -2726,7 +2698,7 @@ mod minimize_cmaes_tests {
 
         #[test]
         fn test_get_best_method() {
-            let func = |x: &Points1<MyFloat>| (&x[0] - 2.0).powi(2) + (&x[1] - 3.0).powi(2);
+            let func = |x: &Points1<TwoFloat>| (&x[0] - 2.0).powi(2) + (&x[1] - 3.0).powi(2);
             let objective = MultiDimFn::new(func);
             let mut cmaes = CmaEs::with_seed(objective, 42);
 
@@ -2749,7 +2721,7 @@ mod minimize_cmaes_tests {
 
         #[test]
         fn test_debug_formatting() {
-            let func = |x: &Points1<MyFloat>| x[0].powi(2);
+            let func = |x: &Points1<TwoFloat>| x[0].powi(2);
             let objective = MultiDimFn::new(func);
             let mut cmaes = CmaEs::with_seed(objective, 42);
 
@@ -2768,7 +2740,7 @@ mod minimize_cmaes_tests {
 
         #[test]
         fn test_seed_reproducibility() {
-            let func = |x: &Points1<MyFloat>| x[0].powi(2) + x[1].powi(2);
+            let func = |x: &Points1<TwoFloat>| x[0].powi(2) + x[1].powi(2);
 
             // Run with same seed twice
             let objective1 = MultiDimFn::new(func);
@@ -2809,7 +2781,7 @@ mod minimize_cmaes_tests {
 
         #[test]
         fn test_constructor_variants() {
-            let func = |x: &Points1<MyFloat>| x[0].powi(2);
+            let func = |x: &Points1<TwoFloat>| x[0].powi(2);
             let objective = MultiDimFn::new(func);
 
             // Test new()
@@ -2835,7 +2807,7 @@ mod minimize_cmaes_tests {
 
         #[test]
         fn test_max_generations_limit() {
-            let func = |x: &Points1<MyFloat>| x[0].powi(2) + x[1].powi(2);
+            let func = |x: &Points1<TwoFloat>| x[0].powi(2) + x[1].powi(2);
             let objective = MultiDimFn::new(func);
             let mut cmaes = CmaEs::with_seed(objective, 42);
 
@@ -2859,7 +2831,7 @@ mod minimize_cmaes_tests {
 
         #[test]
         fn test_sigma_bounds_enforcement() {
-            let func = |x: &Points1<MyFloat>| {
+            let func = |x: &Points1<TwoFloat>| {
                 if x[0].abs() < 1e-10 {
                     0.0.into()
                 } else {
@@ -2887,7 +2859,7 @@ mod minimize_cmaes_tests {
 
         #[test]
         fn test_large_population() {
-            let func = |x: &Points1<MyFloat>| x[0].powi(2) + x[1].powi(2);
+            let func = |x: &Points1<TwoFloat>| x[0].powi(2) + x[1].powi(2);
             let objective = MultiDimFn::new(func);
             let mut cmaes = CmaEs::with_seed(objective, 42);
 
@@ -2922,7 +2894,7 @@ mod minimize_cmaes_tests {
 
         #[test]
         fn test_minimal_population() {
-            let func = |x: &Points1<MyFloat>| x[0].powi(2);
+            let func = |x: &Points1<TwoFloat>| x[0].powi(2);
             let objective = MultiDimFn::new(func);
             let mut cmaes = CmaEs::with_seed(objective, 42);
 

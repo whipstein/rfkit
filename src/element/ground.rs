@@ -1,7 +1,6 @@
 use crate::element::{Elem, ElemType, Term};
-use crate::frequency::{new_frequency, FreqArray, Frequency};
-use crate::point;
-use crate::pts::{Points, Pts};
+use crate::frequency::{FreqArray, Frequency, new_frequency};
+use crate::pts::Points;
 use ndarray::{IntoDimension, prelude::*};
 use num::complex::Complex64;
 
@@ -30,7 +29,7 @@ impl Default for Ground {
             id: "gnd".to_string(),
             z: Complex64::ZERO,
             node: [1],
-            c: point![Complex64, [Complex64::ZERO]],
+            c: points![[Complex64::ZERO]],
             z0: Complex64::ZERO,
         }
     }
@@ -155,7 +154,7 @@ mod element_ground_tests {
             let gnd = Ground::new();
             let net = gnd.net(&freq);
 
-            assert_eq!(net.shape(), (1, 1, 1));
+            assert_eq!(net.shape(), &[1, 1, 1]);
             assert_eq!(net[[0, 0, 0]], Complex64::ZERO);
         }
 

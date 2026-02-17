@@ -302,8 +302,7 @@ pub fn read_touchstone(file_path: &String) -> Result<Network, Box<dyn Error>> {
 #[cfg(test)]
 mod file_tests {
     use crate::frequency::FreqArray;
-    use crate::util::{comp_line, comp_pts_ix3};
-    use float_cmp::F64Margin;
+    use crate::util::{NumMargin, comp_line, comp_pts_ix3};
 
     use super::*;
 
@@ -361,19 +360,19 @@ mod file_tests {
         comp_pts_ix3(
             exemplar.net(RFParameter::S),
             net.net(RFParameter::S),
-            F64Margin::default(),
+            NumMargin::default(),
             "net(S)",
         );
         comp_pts_ix3(
             exemplar.net(RFParameter::Y),
             net.net(RFParameter::Y),
-            F64Margin::default(),
+            NumMargin::default(),
             "net(Y)",
         );
         comp_pts_ix3(
             exemplar.net(RFParameter::Z),
             net.net(RFParameter::Z),
-            F64Margin::default(),
+            NumMargin::default(),
             "net(Z)",
         );
     }
@@ -500,43 +499,43 @@ mod file_tests {
         comp_pts_ix3(
             exemplar.net(RFParameter::A),
             net.net(RFParameter::A),
-            F64Margin::default(),
+            NumMargin::default(),
             "net(A)",
         );
         comp_pts_ix3(
             exemplar.net(RFParameter::G),
             net.net(RFParameter::G),
-            F64Margin::default(),
+            NumMargin::default(),
             "net(G)",
         );
         comp_pts_ix3(
             exemplar.net(RFParameter::H),
             net.net(RFParameter::H),
-            F64Margin::default(),
+            NumMargin::default(),
             "net(H)",
         );
         comp_pts_ix3(
             exemplar.net(RFParameter::S),
             net.net(RFParameter::S),
-            F64Margin::default(),
+            NumMargin::default(),
             "net(test.s2p)",
         );
         comp_pts_ix3(
             exemplar.net(RFParameter::T),
             net.net(RFParameter::T),
-            F64Margin::default(),
+            NumMargin::default(),
             "net(T)",
         );
         comp_pts_ix3(
             exemplar.net(RFParameter::Y),
             net.net(RFParameter::Y),
-            F64Margin::default(),
+            NumMargin::default(),
             "net(Y)",
         );
         comp_pts_ix3(
             exemplar.net(RFParameter::Z),
             net.net(RFParameter::Z),
-            F64Margin::default(),
+            NumMargin::default(),
             "net(Z)",
         );
 
@@ -1945,43 +1944,43 @@ mod file_tests {
         comp_pts_ix3(
             exemplar.net(RFParameter::A),
             net.net(RFParameter::A),
-            F64Margin::default(),
+            NumMargin::default(),
             "net(A, test_2.s2p)",
         );
         comp_pts_ix3(
             exemplar.net(RFParameter::G),
             net.net(RFParameter::G),
-            F64Margin::default(),
+            NumMargin::default(),
             "net(G, test_2.s2p)",
         );
         comp_pts_ix3(
             exemplar.net(RFParameter::H),
             net.net(RFParameter::H),
-            F64Margin::default(),
+            NumMargin::default(),
             "net(H, test_2.s2p)",
         );
         comp_pts_ix3(
             exemplar.net(RFParameter::S),
             net.net(RFParameter::S),
-            F64Margin::default(),
+            NumMargin::default(),
             "net(S, test_2.s2p)",
         );
         comp_pts_ix3(
             exemplar.net(RFParameter::T),
             net.net(RFParameter::T),
-            F64Margin::default(),
+            NumMargin::default(),
             "net(T, test_2.s2p)",
         );
         comp_pts_ix3(
             exemplar.net(RFParameter::Y),
             net.net(RFParameter::Y),
-            F64Margin::default(),
+            NumMargin::default(),
             "net(Y, test_2.s2p)",
         );
         comp_pts_ix3(
             exemplar.net(RFParameter::Z),
             net.net(RFParameter::Z),
-            F64Margin::default(),
+            NumMargin::default(),
             "net(Z, test_2.s2p)",
         );
 
@@ -3385,43 +3384,43 @@ mod file_tests {
         comp_pts_ix3(
             exemplar.net(RFParameter::A),
             net.net(RFParameter::A),
-            F64Margin::default(),
+            NumMargin::default(),
             "net(A, test_3.s2p)",
         );
         comp_pts_ix3(
             exemplar.net(RFParameter::G),
             net.net(RFParameter::G),
-            F64Margin::default(),
+            NumMargin::default(),
             "net(G, test_3.s2p)",
         );
         comp_pts_ix3(
             exemplar.net(RFParameter::H),
             net.net(RFParameter::H),
-            F64Margin::default(),
+            NumMargin::default(),
             "net(H, test_3.s2p)",
         );
         comp_pts_ix3(
             exemplar.net(RFParameter::S),
             net.net(RFParameter::S),
-            F64Margin::default(),
+            NumMargin::default(),
             "net(S, test_3.s2p)",
         );
         comp_pts_ix3(
             exemplar.net(RFParameter::T),
             net.net(RFParameter::T),
-            F64Margin::default(),
+            NumMargin::default(),
             "net(T, test_3.s2p)",
         );
         comp_pts_ix3(
             exemplar.net(RFParameter::Y),
             net.net(RFParameter::Y),
-            F64Margin::default(),
+            NumMargin::default(),
             "net(Y, test_3.s2p)",
         );
         comp_pts_ix3(
             exemplar.net(RFParameter::Z),
             net.net(RFParameter::Z),
-            F64Margin::default(),
+            NumMargin::default(),
             "net(Z, test_3.s2p)",
         );
 
@@ -4082,43 +4081,43 @@ mod file_tests {
         comp_pts_ix3(
             exemplar.net(RFParameter::A),
             net.net(RFParameter::A),
-            F64Margin::default(),
+            NumMargin::default(),
             "net(A, drain_short.s2p)",
         );
         comp_pts_ix3(
             exemplar.net(RFParameter::G),
             net.net(RFParameter::G),
-            F64Margin::default(),
+            NumMargin::default(),
             "net(G, drain_short.s2p)",
         );
         comp_pts_ix3(
             exemplar.net(RFParameter::H),
             net.net(RFParameter::H),
-            F64Margin::default(),
+            NumMargin::default(),
             "net(H, drain_short.s2p)",
         );
         comp_pts_ix3(
             exemplar.net(RFParameter::S),
             net.net(RFParameter::S),
-            F64Margin::default(),
+            NumMargin::default(),
             "net(S, drain_short.s2p)",
         );
         comp_pts_ix3(
             exemplar.net(RFParameter::T),
             net.net(RFParameter::T),
-            F64Margin::default(),
+            NumMargin::default(),
             "net(T, drain_short.s2p)",
         );
         comp_pts_ix3(
             exemplar.net(RFParameter::Y),
             net.net(RFParameter::Y),
-            F64Margin::default(),
+            NumMargin::default(),
             "net(Y, drain_short.s2p)",
         );
         comp_pts_ix3(
             exemplar.net(RFParameter::Z),
             net.net(RFParameter::Z),
-            F64Margin::default(),
+            NumMargin::default(),
             "net(Z, drain_short.s2p)",
         );
     }
@@ -4241,14 +4240,14 @@ mod file_tests {
         comp_pts_ix3(
             exemplar.net(RFParameter::S),
             net.net(RFParameter::S),
-            F64Margin::default(),
+            NumMargin::default(),
             "net(S)",
         );
         // Matrix inverse is undefined for calculating Y parameters
         comp_pts_ix3(
             exemplar.net(RFParameter::Z),
             net.net(RFParameter::Z),
-            F64Margin::default(),
+            NumMargin::default(),
             "net(Z)",
         );
     }

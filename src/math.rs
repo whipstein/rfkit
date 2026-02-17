@@ -1,81 +1,101 @@
-use crate::unit::UnitValue;
+use crate::{
+    consts::MathConst,
+    num::{ComplexScalar, RealScalar, Scalar},
+    unit::ScalarUnitValue,
+};
 use ndarray::prelude::*;
-use num::complex::{Complex64, c64};
-use rug::Assign;
-use std::f64::consts::PI;
+use num_complex::{Complex, Complex64, ComplexFloat};
+use num_traits::Float;
 
-pub fn y_to_z(y: Complex64) -> Complex64 {
-    1.0 / y
+pub fn y_to_z<T: ComplexScalar>(y: T) -> T
+where
+    <T as ComplexFloat>::Real: RealScalar,
+{
+    y.recip()
 }
 
-pub fn z_to_y(z: Complex64) -> Complex64 {
-    1.0 / z
+pub fn z_to_y<T: ComplexScalar>(z: T) -> T
+where
+    <T as ComplexFloat>::Real: RealScalar,
+{
+    z.recip()
 }
 
-pub fn z_to_gamma(z: Complex64, z0: f64) -> Complex64 {
-    let z0: f64 = z0;
+pub fn z_to_gamma<T, U>(z: T, z0: U) -> T
+where
+    T: ComplexScalar,
+    <T as ComplexFloat>::Real: RealScalar,
+    U: Scalar + Into<T>,
+{
+    let z0: T = z0.into();
+    (z - z0) / (z + z0)
+}
+
+pub fn rc_to_gamma<T: RealScalar>(r: T, c: T, z0: T, freq: ScalarUnitValue<T>) -> Complex<T> {
+    let z = Complex::new(r.recip(), T::C2 * T::PI_C * freq.val() * c).recip();
 
     (z - z0) / (z + z0)
 }
 
-pub fn rc_to_gamma(r: f64, c: f64, z0: f64, freq: &UnitValue) -> Complex64 {
-    let z = 1.0 / c64(1.0 / r, 2.0 * std::f64::consts::PI * freq.val() * c);
-
-    (z - z0) / (z + z0)
+pub fn gamma_to_z<T, U>(gamma: T, z0: U) -> T
+where
+    T: ComplexScalar,
+    <T as ComplexFloat>::Real: RealScalar,
+    U: Scalar + Into<T>,
+{
+    z0.into() * (T::C1 + gamma) / (T::C1 - gamma)
 }
 
-pub fn gamma_to_z(gamma: Complex64, z0: f64) -> Complex64 {
-    z0 * (1.0 + gamma) / (1.0 - gamma)
+pub fn gamma_to_z_normalized<T, U>(gamma: T, z0: U) -> T
+where
+    T: ComplexScalar,
+    <T as ComplexFloat>::Real: RealScalar,
+    U: Scalar + Into<T>,
+{
+    gamma_to_z(gamma, z0) / z0.into()
 }
 
-pub fn gamma_to_z_normalized(gamma: Complex64, z0: f64) -> Complex64 {
-    gamma_to_z(gamma, z0) / z0
-}
-
-pub fn rpcp_to_rscs(rp: f64, cp: f64, freq: &UnitValue) -> (f64, f64) {
-    if cp == 0.0 {
-        (rp, 0_f64)
+pub fn rpcp_to_rscs<T: RealScalar>(rp: T, cp: T, freq: ScalarUnitValue<T>) -> (T, T) {
+    if cp == T::ZERO {
+        (rp, T::ZERO)
     } else {
-        let q = 2.0 * std::f64::consts::PI * freq.val() * cp * rp;
-        (rp / (1.0 + q * q), cp * (1.0 + q * q) / (q * q))
+        let q = T::C2 * T::PI_C * freq.val() * cp * rp;
+        (rp / (T::ONE + q * q), cp * (T::ONE + q * q) / (q * q))
     }
 }
 
-pub fn rscs_to_rpcp(rs: f64, cs: f64, freq: &UnitValue) -> (f64, f64) {
-    if cs == 0.0 {
-        (rs, 0_f64)
+pub fn rscs_to_rpcp<T: RealScalar>(rs: T, cs: T, freq: ScalarUnitValue<T>) -> (T, T) {
+    if cs == T::ZERO {
+        (rs, T::ZERO)
     } else {
-        let q = 1.0 / (2.0 * std::f64::consts::PI * freq.val() * cs * rs);
-        (rs * (1.0 + q * q), cs * (q * q) / (1.0 + q * q))
+        let q = (T::C2 * T::PI_C * freq.val() * cs * rs).recip();
+        (rs * (T::ONE + q * q), cs * (q * q) / (T::ONE + q * q))
     }
 }
 
-pub fn rpcp_to_z(rp: f64, cp: f64, freq: &UnitValue) -> Complex64 {
-    1.0 / c64(1.0 / rp, 2.0 * std::f64::consts::PI * freq.val() * cp)
+pub fn rpcp_to_z<T: RealScalar>(rp: T, cp: T, freq: ScalarUnitValue<T>) -> Complex<T> {
+    Complex::new(rp.recip(), T::C2 * T::PI_C * freq.val() * cp).recip()
 }
 
-pub fn z_to_rpcp(z: Complex64, freq: &UnitValue) -> (f64, f64) {
-    let y = 1.0 / z;
+pub fn z_to_rpcp<T: RealScalar>(z: Complex<T>, freq: ScalarUnitValue<T>) -> (T, T) {
+    let y = z.recip();
 
-    if y.im == 0.0 {
-        (1.0 / y.re, 0_f64)
+    if y.im == T::ZERO {
+        (y.re.recip(), T::ZERO)
     } else {
-        (1.0 / y.re, y.im / (2.0 * std::f64::consts::PI * freq.val()))
+        (y.re.recip(), y.im / (T::C2 * T::PI_C * freq.val()))
     }
 }
 
-pub fn rscs_to_z(rs: f64, cs: f64, freq: &UnitValue) -> Complex64 {
-    c64(rs, -1.0 / (2.0 * std::f64::consts::PI * freq.val() * cs))
+pub fn rscs_to_z<T: RealScalar>(rs: T, cs: T, freq: ScalarUnitValue<T>) -> Complex<T> {
+    Complex::new(rs, -(T::C2 * T::PI_C * freq.val() * cs).recip())
 }
 
-pub fn z_to_rscs(z: Complex64, freq: &UnitValue) -> (f64, f64) {
-    if z.im == 0.0 {
-        (z.re, 0_f64)
+pub fn z_to_rscs<T: RealScalar>(z: Complex<T>, freq: ScalarUnitValue<T>) -> (T, T) {
+    if z.im == T::ZERO {
+        (z.re, T::ZERO)
     } else {
-        (
-            z.re,
-            -1.0 / (2.0 * std::f64::consts::PI * freq.val() * z.im),
-        )
+        (z.re, -(T::C2 * T::PI_C * freq.val() * z.im).recip())
     }
 }
 
@@ -167,40 +187,26 @@ pub fn div_vec_f64(a: &[f64], b: &[f64]) -> Vec<f64> {
     out
 }
 
-pub fn from_polar_deg(r: f64, theta: f64) -> Complex64 {
-    Complex64::from_polar(r, theta * 180.0 / PI)
+pub fn from_polar_deg<T: RealScalar>(r: T, theta: T) -> Complex<T> {
+    Complex::from_polar(r, theta.to_radians())
 }
 
-pub fn gradient(pts: Array1<f64>) -> Array1<f64> {
+pub fn gradient<T: RealScalar>(pts: &Array1<T>) -> Array1<T> {
     if pts.len() <= 1 {
         return pts.clone();
     }
 
-    let mut out = Array1::<f64>::zeros(pts.len());
+    let mut out = Array1::zeros(pts.len());
 
     for (i, pt) in out.iter_mut().enumerate() {
         if i == 0 {
-            pt.assign(pts[i + 1] - pts[i]);
+            *pt = pts[i + 1] - pts[i];
         } else if i == pts.len() - 1 {
-            pt.assign(pts[i] - pts[i - 1]);
+            *pt = pts[i] - pts[i - 1];
         } else {
-            pt.assign(pts[i + 1] - pts[i - 1]);
+            *pt = pts[i + 1] - pts[i - 1];
         }
     }
-    // match pts.len() {
-    //     0 | 1 => return pts.clone(),
-    //     2 => {
-    //         out.push(pts[1] - pts[0]);
-    //         out.push(pts[2] - pts[1]);
-    //     }
-    //     n => {
-    //         out.push(pts[1] - pts[0]);
-    //         for i in 1..(n - 1) {
-    //             out.push((pts[i + 1] - pts[i - 1]) / 2.0);
-    //         }
-    //         out.push(pts[n - 1] - pts[n - 2]);
-    //     }
-    // }
 
     out
 }
@@ -293,14 +299,18 @@ pub fn scale_vec_f64(a: f64, b: &Vec<f64>) -> Vec<f64> {
     out
 }
 
-pub fn sqrt_phase_unwrap(pts: Array1<Complex64>) -> Array1<Complex64> {
+pub fn sqrt_phase_unwrap<T: ComplexScalar>(pts: Array1<T>) -> Array1<T>
+where
+    T::Real: RealScalar + MathConst + Float,
+{
     // let mut out: Vec<Complex64> = vec![];
-    let mut phi = Array1::<f64>::from_shape_fn(pts.dim(), |i| pts[i].arg());
+    let mut phi = Array1::<T::Real>::from_shape_fn(pts.dim(), |i| pts[i].arg());
 
     phi = unwrap(&phi);
 
-    Array1::<Complex64>::from_shape_fn(phi.dim(), |i| {
-        pts[i].norm().sqrt() * Complex64::new(0.0, 0.5 * phi[i]).exp()
+    Array1::from_shape_fn(phi.dim(), |i| {
+        T::new(Float::sqrt(pts[i].norm()), T::Real::C0)
+            * ComplexFloat::exp(T::new(T::Real::C0, T::Real::C05 * phi[i]))
     })
 }
 
@@ -360,17 +370,118 @@ pub fn sub_vec_f64(a: &[f64], b: &[f64]) -> Vec<f64> {
     out
 }
 
-pub fn unwrap(phi: &Array1<f64>) -> Array1<f64> {
+/// Compute real eigenvalues of a Hermitian (self-adjoint) complex matrix
+/// using the Jacobi eigenvalue algorithm on its 2n×2n real symmetric
+/// embedding. Since the matrix is Hermitian, all eigenvalues are real.
+pub fn eig_hermitian_real<T: ComplexScalar>(mat: &Array2<T>) -> Array1<T::Real>
+where
+    T::Real: RealScalar + MathConst,
+{
+    let n = mat.nrows();
+    assert_eq!(n, mat.ncols(), "Matrix must be square");
+
+    // Build the 2n×2n real symmetric embedding:
+    //   [ Re(A)  -Im(A) ]
+    //   [ Im(A)   Re(A) ]
+    // Each eigenvalue of A appears twice in this embedding.
+    let n2 = 2 * n;
+    let zero_r: T::Real = (0.0).into();
+    let mut a = Array2::from_elem((n2, n2), zero_r);
+
+    for i in 0..n {
+        for j in 0..n {
+            let re = mat[[i, j]].re();
+            let im = mat[[i, j]].im();
+            a[[i, j]] = re;
+            a[[i, n + j]] = -im;
+            a[[n + i, j]] = im;
+            a[[n + i, n + j]] = re;
+        }
+    }
+
+    eig_symmetric_real_jacobi(&mut a, n)
+}
+
+/// Jacobi eigenvalue algorithm for a real symmetric matrix stored in `a`.
+/// Returns `n` unique eigenvalues (the 2n×2n embedding produces pairs).
+fn eig_symmetric_real_jacobi<R: RealScalar + MathConst>(
+    a: &mut Array2<R>,
+    n: usize,
+) -> Array1<R> {
+    let n2 = a.nrows();
+    let max_iter = 100;
+    let tol: R = (1e-14).into();
+    let two: R = (2.0).into();
+    let pi_4: R = From::from(std::f64::consts::FRAC_PI_4);
+
+    for _ in 0..max_iter {
+        let mut max_val: R = (0.0).into();
+        let (mut p, mut q) = (0, 1);
+
+        for i in 0..n2 {
+            for j in i + 1..n2 {
+                let v = Float::abs(a[[i, j]]);
+                if v > max_val {
+                    max_val = v;
+                    p = i;
+                    q = j;
+                }
+            }
+        }
+
+        if max_val < tol {
+            break;
+        }
+
+        let diff = a[[q, q]] - a[[p, p]];
+        let theta = if Float::abs(diff) < tol {
+            pi_4
+        } else {
+            Float::atan(two * a[[p, q]] / diff) / two
+        };
+
+        let c = Float::cos(theta);
+        let s = Float::sin(theta);
+
+        let app = a[[p, p]];
+        let aqq = a[[q, q]];
+        let apq = a[[p, q]];
+
+        a[[p, p]] = c * c * app + s * s * aqq - two * c * s * apq;
+        a[[q, q]] = s * s * app + c * c * aqq + two * c * s * apq;
+        a[[p, q]] = (0.0).into();
+        a[[q, p]] = (0.0).into();
+
+        for i in 0..n2 {
+            if i != p && i != q {
+                let aip = a[[i, p]];
+                let aiq = a[[i, q]];
+                a[[i, p]] = c * aip - s * aiq;
+                a[[p, i]] = a[[i, p]];
+                a[[i, q]] = s * aip + c * aiq;
+                a[[q, i]] = a[[i, q]];
+            }
+        }
+    }
+
+    let mut eigs: Vec<R> = (0..n2).map(|i| a[[i, i]]).collect();
+    eigs.sort_by(|a, b| a.partial_cmp(b).unwrap());
+
+    // Each eigenvalue appears twice in the 2n embedding; take every other one.
+    Array1::from_vec((0..n).map(|i| eigs[2 * i]).collect())
+}
+
+pub fn unwrap<T: RealScalar>(phi: &Array1<T>) -> Array1<T> {
     let mut out = phi.clone();
     for i in 1..out.len() {
         let diff = out[i] - out[i - 1];
-        if diff > PI {
+        if diff > T::PI_C {
             for val in out.iter_mut().skip(i) {
-                *val -= 2.0 * PI;
+                *val -= T::PI2_C;
             }
-        } else if diff < -PI {
+        } else if diff < -T::PI_C {
             for val in out.iter_mut().skip(i) {
-                *val += 2.0 * PI;
+                *val += T::PI2_C;
             }
         }
     }
@@ -380,10 +491,11 @@ pub fn unwrap(phi: &Array1<f64>) -> Array1<f64> {
 #[cfg(test)]
 mod math_tests {
     use super::*;
-    use crate::scale::Scale;
-    use crate::unit::UnitValBuilder;
-    use crate::util::{comp_f64, comp_num, comp_vec_c64, comp_vec_f64};
-    use float_cmp::F64Margin;
+    use crate::{
+        scale::Scale,
+        util::{ApproxEq, NumMargin, comp_vec_c64, comp_vec_f64},
+    };
+    use num_complex::c64;
 
     #[test]
     fn math_abs_vec() {
@@ -392,7 +504,7 @@ mod math_tests {
         comp_vec_f64(
             &exemplar,
             &abs_vec_f64(&a),
-            F64Margin::default(),
+            NumMargin::default(),
             "abs_vec_f64()",
         );
 
@@ -401,7 +513,7 @@ mod math_tests {
         comp_vec_f64(
             &exemplar,
             &abs_vec_c64(&a),
-            F64Margin::default(),
+            NumMargin::default(),
             "abs_vec_c64()",
         );
     }
@@ -414,7 +526,7 @@ mod math_tests {
         comp_vec_f64(
             &exemplar,
             &add_vec_f64(&a, &b),
-            F64Margin::default(),
+            NumMargin::default(),
             "add_vec_f64()",
         );
 
@@ -424,7 +536,7 @@ mod math_tests {
         comp_vec_c64(
             &exemplar,
             &add_vec_c64(&a, &b),
-            F64Margin::default(),
+            NumMargin::default(),
             "add_vec_c64()",
         );
     }
@@ -437,7 +549,7 @@ mod math_tests {
         comp_vec_f64(
             &exemplar,
             &div_vec_f64(&a, &b),
-            F64Margin::default(),
+            NumMargin::default(),
             "div_vec_f64()",
         );
 
@@ -451,7 +563,7 @@ mod math_tests {
         comp_vec_c64(
             &exemplar,
             &div_vec_c64(&a, &b),
-            F64Margin::default(),
+            NumMargin::default(),
             "div_vec_c64()",
         );
     }
@@ -464,7 +576,7 @@ mod math_tests {
         comp_vec_f64(
             &exemplar,
             &mul_vec_f64(&a, &b),
-            F64Margin::default(),
+            NumMargin::default(),
             "mul_vec_f64()",
         );
 
@@ -474,7 +586,7 @@ mod math_tests {
         comp_vec_c64(
             &exemplar,
             &mul_vec_c64(&a, &b),
-            F64Margin::default(),
+            NumMargin::default(),
             "mul_vec_c64()",
         );
     }
@@ -486,7 +598,7 @@ mod math_tests {
         comp_vec_f64(
             &exemplar,
             &powi_vec_f64(&a, 2),
-            F64Margin::default(),
+            NumMargin::default(),
             "powi_vec_f64()",
         );
 
@@ -495,7 +607,7 @@ mod math_tests {
         comp_vec_c64(
             &exemplar,
             &powi_vec_c64(&a, 2),
-            F64Margin::default(),
+            NumMargin::default(),
             "powi_vec_c64()",
         );
     }
@@ -507,7 +619,7 @@ mod math_tests {
         comp_vec_f64(
             &exemplar,
             &scale_vec_f64(1.41, &a),
-            F64Margin::default(),
+            NumMargin::default(),
             "scale_vec_f64()",
         );
 
@@ -517,7 +629,7 @@ mod math_tests {
         comp_vec_c64(
             &exemplar,
             &scale_vec_c64(Complex64::new(1.41, -2.36), &a),
-            F64Margin::default(),
+            NumMargin::default(),
             "scale_vec_c64()",
         );
     }
@@ -530,7 +642,7 @@ mod math_tests {
         comp_vec_f64(
             &exemplar,
             &sub_vec_f64(&a, &b),
-            F64Margin::default(),
+            NumMargin::default(),
             "sub_vec_f64()",
         );
 
@@ -540,7 +652,7 @@ mod math_tests {
         comp_vec_c64(
             &exemplar,
             &sub_vec_c64(&a, &b),
-            F64Margin::default(),
+            NumMargin::default(),
             "sub_vec_c64()",
         );
     }
@@ -550,8 +662,8 @@ mod math_tests {
         let z = c64(42.4, -19.6);
         let y = c64(0.01943242648676395, 0.008982914130673902);
 
-        comp_num(&z_to_y(z), &y, F64Margin::default(), "z_to_y()", "y");
-        comp_num(&y_to_z(z), &y, F64Margin::default(), "y_to_z()", "z");
+        z_to_y(z).assert_approx_eq(&y, NumMargin::default(), "z_to_y()", "y");
+        y_to_z(z).assert_approx_eq(&y, NumMargin::default(), "y_to_z()", "z");
     }
 
     #[test]
@@ -561,7 +673,7 @@ mod math_tests {
         let gamma = c64(-0.03565151895556114, -0.21968365553602814);
         let test = z_to_gamma(z, z0);
 
-        comp_num(&test, &gamma, F64Margin::default(), "z_to_gamma()", "gamma");
+        test.assert_approx_eq(&gamma, NumMargin::default(), "z_to_gamma()", "gamma");
     }
 
     #[test]
@@ -571,7 +683,7 @@ mod math_tests {
         let z = c64(13.096841624374102, -131.24096072255193);
         let test = gamma_to_z(gamma, z0);
 
-        comp_num(&test, &z, F64Margin::default(), "gamma_to_z()", "z");
+        test.assert_approx_eq(&z, NumMargin::default(), "gamma_to_z()", "z");
     }
 
     #[test]
@@ -580,10 +692,18 @@ mod math_tests {
         let f = 275.0;
         let rp = 51.46037735849057;
         let cp = 5.198818862788317e-15;
-        let test = z_to_rpcp(z, &UnitValBuilder::new().val_scaled(f, Scale::Giga).build());
+        let test = z_to_rpcp(
+            z,
+            ScalarUnitValue::builder()
+                .val_scaled(&f, Scale::Giga)
+                .build()
+                .unwrap(),
+        );
 
-        comp_f64(&test.0, &rp, F64Margin::default(), "z_to_rpcp()", "rp");
-        comp_f64(&test.1, &cp, F64Margin::default(), "z_to_rpcp()", "cp");
+        test.0
+            .assert_approx_eq(&rp, NumMargin::default(), "z_to_rpcp()", "rp");
+        test.1
+            .assert_approx_eq(&cp, NumMargin::default(), "z_to_rpcp()", "cp");
     }
 
     #[test]
@@ -595,10 +715,13 @@ mod math_tests {
         let test = rpcp_to_z(
             rp,
             cp,
-            &UnitValBuilder::new().val_scaled(f, Scale::Giga).build(),
+            ScalarUnitValue::builder()
+                .val_scaled(&f, Scale::Giga)
+                .build()
+                .unwrap(),
         );
 
-        comp_num(&test, &z, F64Margin::default(), "rpcp_to_z()", "z");
+        test.assert_approx_eq(&z, NumMargin::default(), "rpcp_to_z()", "z");
     }
 
     #[test]
@@ -607,10 +730,18 @@ mod math_tests {
         let f = 275.0;
         let rs = 42.4;
         let cs = 2.952781875545368e-14;
-        let test = z_to_rscs(z, &UnitValBuilder::new().val_scaled(f, Scale::Giga).build());
+        let test = z_to_rscs(
+            z,
+            ScalarUnitValue::builder()
+                .val_scaled(&f, Scale::Giga)
+                .build()
+                .unwrap(),
+        );
 
-        comp_f64(&test.0, &rs, F64Margin::default(), "z_to_rscs()", "rs");
-        comp_f64(&test.1, &cs, F64Margin::default(), "z_to_rscs()", "cs");
+        test.0
+            .assert_approx_eq(&rs, NumMargin::default(), "z_to_rscs()", "rs");
+        test.1
+            .assert_approx_eq(&cs, NumMargin::default(), "z_to_rscs()", "cs");
     }
 
     #[test]
@@ -623,10 +754,13 @@ mod math_tests {
             / rscs_to_z(
                 rs,
                 cs,
-                &UnitValBuilder::new().val_scaled(f, Scale::Giga).build(),
+                ScalarUnitValue::builder()
+                    .val_scaled(&f, Scale::Giga)
+                    .build()
+                    .unwrap(),
             );
 
-        comp_num(&test, &y, F64Margin::default(), "rscs_to_y()", "y");
+        test.assert_approx_eq(&y, NumMargin::default(), "rscs_to_y()", "y");
     }
 
     #[test]
@@ -638,10 +772,13 @@ mod math_tests {
         let test = rscs_to_z(
             rs,
             cs,
-            &UnitValBuilder::new().val_scaled(f, Scale::Giga).build(),
+            ScalarUnitValue::builder()
+                .val_scaled(&f, Scale::Giga)
+                .build()
+                .unwrap(),
         );
 
-        comp_num(&test, &z, F64Margin::default(), "rscs_to_z()", "z");
+        test.assert_approx_eq(&z, NumMargin::default(), "rscs_to_z()", "z");
     }
 
     #[test]
@@ -654,11 +791,16 @@ mod math_tests {
         let test = rpcp_to_rscs(
             rp,
             cp,
-            &UnitValBuilder::new().val_scaled(f, Scale::Giga).build(),
+            ScalarUnitValue::builder()
+                .val_scaled(&f, Scale::Giga)
+                .build()
+                .unwrap(),
         );
 
-        comp_f64(&test.0, &rs, F64Margin::default(), "rpcp_to_rscs()", "rs");
-        comp_f64(&test.1, &cs, F64Margin::default(), "rpcp_to_rscs()", "cs");
+        test.0
+            .assert_approx_eq(&rs, NumMargin::default(), "rpcp_to_rscs()", "rs");
+        test.1
+            .assert_approx_eq(&cs, NumMargin::default(), "rpcp_to_rscs()", "cs");
     }
 
     #[test]
@@ -671,10 +813,15 @@ mod math_tests {
         let test = rscs_to_rpcp(
             rs,
             cs,
-            &UnitValBuilder::new().val_scaled(f, Scale::Giga).build(),
+            ScalarUnitValue::builder()
+                .val_scaled(&f, Scale::Giga)
+                .build()
+                .unwrap(),
         );
 
-        comp_f64(&test.0, &rp, F64Margin::default(), "rscs_to_rpcp()", "rp");
-        comp_f64(&test.1, &cp, F64Margin::default(), "rscs_to_rpcp()", "cp");
+        test.0
+            .assert_approx_eq(&rp, NumMargin::default(), "rscs_to_rpcp()", "rp");
+        test.1
+            .assert_approx_eq(&cp, NumMargin::default(), "rscs_to_rpcp()", "cp");
     }
 }

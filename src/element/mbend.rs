@@ -1,8 +1,7 @@
 use crate::{
     element::{Distributed, Elem, ElemType, msub::Msub},
     frequency::{FreqArray, Frequency, new_frequency},
-    point,
-    pts::{Points, Pts},
+    pts::Points,
     scale::Scale,
     unit::{Unit, UnitValBuilder, UnitValue, Unitized},
 };
@@ -98,8 +97,7 @@ impl Elem for Mbend {
         let t = z1 * z2 + z2 * z3 + z1 * z3;
         let d = self.z0.powi(2) + q * self.z0 + t;
 
-        point![
-            Complex64,
+        points![
             [
                 -(1.0 / d) * self.z0.powi(2) + p * self.z0 + t,
                 (1.0 / d) * 2.0 * self.z0 * z3,

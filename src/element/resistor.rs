@@ -1,7 +1,6 @@
 use crate::{
     element::{Elem, ElemType, Lumped},
     frequency::{FreqArray, Frequency, new_frequency},
-    point,
     pts::{Points, Pts},
     scale::Scale,
     unit::{Unit, UnitValue, Unitized},
@@ -24,8 +23,7 @@ impl Resistor {
             id: id,
             res: res,
             nodes: nodes,
-            c: point![
-                Complex64,
+            c: points![
                 [c64(1.0 / 3.0, 0.0), c64(2.0 / 3.0, 0.0)],
                 [c64(2.0 / 3.0, 0.0), c64(1.0 / 3.0, 0.0)]
             ],
@@ -44,8 +42,7 @@ impl Default for Resistor {
             id: "R0".to_string(),
             res: UnitValue::default(),
             nodes: [1, 2],
-            c: point![
-                Complex64,
+            c: points![
                 [c64(1.0 / 3.0, 0.0), c64(2.0 / 3.0, 0.0)],
                 [c64(2.0 / 3.0, 0.0), c64(1.0 / 3.0, 0.0)]
             ],
@@ -197,8 +194,7 @@ impl ResistorBuilder {
             id: self.id,
             res: self.res,
             nodes: self.nodes,
-            c: point![
-                Complex64,
+            c: points![
                 [c64(1.0 / 3.0, 0.0), c64(2.0 / 3.0, 0.0)],
                 [c64(2.0 / 3.0, 0.0), c64(1.0 / 3.0, 0.0)]
             ],
@@ -223,17 +219,18 @@ mod element_resistor_tests {
     use super::*;
     use crate::{
         unit::UnitValBuilder,
-        util::{comp_num, comp_pts_ix2},
+        util::{ApproxEq, NumMargin, comp_pts_ix2},
     };
-    use float_cmp::*;
 
-    const DEFAULT_MARGIN: F64Margin = F64Margin {
+    const DEFAULT_MARGIN: NumMargin<f64> = NumMargin {
         epsilon: 1e-10,
+        relative: 1e-10,
         ulps: 4,
     };
 
-    const RELAXED_MARGIN: F64Margin = F64Margin {
+    const RELAXED_MARGIN: NumMargin<f64> = NumMargin {
         epsilon: 1e-6,
+        relative: 1e-6,
         ulps: 10,
     };
 
@@ -248,26 +245,25 @@ mod element_resistor_tests {
             id: "R1".to_string(),
             res: unitval,
             nodes: [1, 2],
-            c: point![
-                Complex64,
+            c: points![
                 [c64(1.0 / 3.0, 0.0), c64(2.0 / 3.0, 0.0)],
                 [c64(2.0 / 3.0, 0.0), c64(1.0 / 3.0, 0.0)]
             ],
             z0: c64(50.0, 0.0),
         };
-        let exemplar_z = unitval.val();
+        let exemplar_z: Complex<f64> = unitval.val().into();
         let calc = ResistorBuilder::new()
             .val_scaled(val_scaled, scale)
             .nodes([1, 2])
             .id("R1")
             .build();
-        let margin = F64Margin::default();
+        let margin = NumMargin::default();
 
         assert_eq!(&exemplar.id(), &calc.id());
         assert_eq!(&exemplar.scale(), &calc.scale());
         assert_eq!(&Unit::Ohm, &calc.unit());
         comp_pts_ix2(&exemplar.c(&freq), &calc.c(&freq), margin, "calc.c()");
-        comp_num(&exemplar_z.into(), &calc.z(&freq), margin, "calc.z()", "0");
+        exemplar_z.assert_approx_eq(calc.z(&freq), margin, "calc.z()", "0");
     }
 
     mod resistor_tests {
@@ -290,8 +286,7 @@ mod element_resistor_tests {
             // Resistor impedance should be constant across all frequencies
             for i in 0..freqs.len() {
                 let z = res.z_at(&freq, i);
-                assert!(approx_eq!(f64, z.re, 50.0, DEFAULT_MARGIN));
-                assert!(approx_eq!(f64, z.im, 0.0, DEFAULT_MARGIN));
+                z.assert_approx_eq(c64(50.0, 0.0), DEFAULT_MARGIN, "z", "");
             }
         }
 
@@ -303,8 +298,7 @@ mod element_resistor_tests {
             for val in values {
                 let res = ResistorBuilder::new().val(val).build();
                 let z = res.z(&freq);
-                assert!(approx_eq!(f64, z.re, val, DEFAULT_MARGIN));
-                assert!(approx_eq!(f64, z.im, 0.0, DEFAULT_MARGIN));
+                z.assert_approx_eq(c64(val, 0.0), DEFAULT_MARGIN, "z", "");
             }
         }
 
@@ -315,24 +309,15 @@ mod element_resistor_tests {
             let c_matrix = res.c(&freq);
 
             // Same structure as capacitor
-            assert!(approx_eq!(
-                f64,
-                c_matrix[[0, 0]].re,
-                1.0 / 3.0,
-                DEFAULT_MARGIN
-            ));
-            assert!(approx_eq!(
-                f64,
-                c_matrix[[1, 1]].re,
-                1.0 / 3.0,
-                DEFAULT_MARGIN
-            ));
-            assert!(approx_eq!(
-                f64,
-                c_matrix[[0, 1]].re,
-                2.0 / 3.0,
-                DEFAULT_MARGIN
-            ));
+            c_matrix[[0, 0]]
+                .re
+                .assert_approx_eq(1.0 / 3.0, DEFAULT_MARGIN, "c_matrix", "[0,0]");
+            c_matrix[[1, 1]]
+                .re
+                .assert_approx_eq(1.0 / 3.0, DEFAULT_MARGIN, "c_matrix", "[1,1]");
+            c_matrix[[0, 1]]
+                .re
+                .assert_approx_eq(2.0 / 3.0, DEFAULT_MARGIN, "c_matrix", "[0,1]");
         }
 
         #[test]

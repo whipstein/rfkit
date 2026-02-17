@@ -1,27 +1,21 @@
 #![allow(unused)]
 use crate::{
+    consts::MathConst,
     frequency::Frequency,
     impedance::ComplexNumberType,
     math::*,
     network::{NetworkPortPoints, PortPoints},
-    num::{MyComplex, MyFloat},
+    num::{ComplexScalar, RealScalar},
     parameter::RFParameter,
     pts::{Points, Pts},
     unit::Unit,
 };
 use ndarray::{OwnedRepr, prelude::*};
 use ndarray_linalg::*;
-use num::{
-    complex::{Complex64, c64},
-    zero,
-};
+use num::Float;
+use num_complex::{Complex, Complex64, ComplexFloat, c64};
 use num_traits::{ConstZero, Num, One, Zero};
 use regex::{Regex, RegexBuilder};
-use rug::{
-    Complex, Float,
-    az::UnwrappedAs,
-    ops::{Pow, PowAssign},
-};
 use simple_error::SimpleError;
 use std::{
     error::Error,
@@ -34,33 +28,33 @@ use std::{
     process::Child,
     slice::Iter,
 };
+use twofloat::TwoFloat;
 
-impl NetworkPortPoints for PortPoints<Complex64> {
-    fn db(&self) -> PortPoints<f64> {
-        Array1::<f64>::from_shape_fn(self.len(), |i| 20.0 * self[i].abs().log10())
+impl<T: ComplexScalar> NetworkPortPoints<T> for PortPoints<T>
+where
+    <T as ComplexFloat>::Real: RealScalar + MathConst,
+{
+    fn db(&self) -> PortPoints<T::Real> {
+        Points::from_shape_fn(self.len(), |i| T::Real::C20 * Float::log10(self[i].abs()))
     }
 
-    fn deg(&self) -> PortPoints<f64> {
-        Array1::<f64>::from_shape_fn(self.len(), |i| self[i].arg() * 180.0 / PI)
+    fn deg(&self) -> PortPoints<T::Real> {
+        Points::from_shape_fn(self.len(), |i| self[i].arg().to_degrees())
     }
 
-    fn im(&self) -> PortPoints<f64> {
-        Array1::<f64>::from_shape_fn(self.len(), |i| self[i].im())
+    fn im(&self) -> PortPoints<T::Real> {
+        Points::from_shape_fn(self.len(), |i| self[i].im())
     }
 
-    fn mag(&self) -> PortPoints<f64> {
-        Array1::<f64>::from_shape_fn(self.len(), |i| self[i].abs())
+    fn mag(&self) -> PortPoints<T::Real> {
+        Points::from_shape_fn(self.len(), |i| self[i].abs())
     }
 
-    // fn new_like(pt: &Points) -> PortPoints {
-    //     Array1::<Complex64>::zeros(pt.len())
-    // }
-
-    fn rad(&self) -> PortPoints<f64> {
-        Array1::<f64>::from_shape_fn(self.len(), |i| self[i].arg())
+    fn rad(&self) -> PortPoints<T::Real> {
+        Points::from_shape_fn(self.len(), |i| self[i].arg())
     }
 
-    fn re(&self) -> PortPoints<f64> {
-        Array1::<f64>::from_shape_fn(self.len(), |i| self[i].re())
+    fn re(&self) -> PortPoints<T::Real> {
+        Points::from_shape_fn(self.len(), |i| self[i].re())
     }
 }

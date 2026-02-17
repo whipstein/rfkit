@@ -1,17 +1,18 @@
-use crate::num::MyComplex;
-use core::f64;
+use crate::num::{MyComplex, MyUsize};
+use approx::{AbsDiffEq, RelativeEq, UlpsEq};
 use num_complex::Complex64;
-use num_traits::{Inv, Num, One, Pow, Signed, Zero};
+use num_traits::{ConstOne, ConstZero, Float, Inv, Num, One, Pow, Signed, ToPrimitive, Zero};
 use std::{
     convert::From,
-    fmt,
+    f64, fmt,
     fmt::Debug,
     iter::{Product, Sum},
     ops::{
-        Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Not, Rem, RemAssign, Sub, SubAssign,
+        Add, AddAssign, Deref, DerefMut, Div, DivAssign, Mul, MulAssign, Neg, Not, Rem, RemAssign,
+        Sub, SubAssign,
     },
 };
-use twofloat::{TwoFloat, TwoFloatError, consts::PI};
+use twofloat::{TwoFloat, TwoFloatError};
 
 /// Defines a multiplicative identity element for `Self`.
 ///
@@ -52,13 +53,40 @@ pub trait NegOne: Sized + Mul<Self, Output = Self> {
 }
 
 /// A float wrapper with fixed precision of 53 bits
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, PartialOrd)]
 pub struct MyFloat(TwoFloat);
 
 impl MyFloat {
+    /// Smallest finite `TwoFloat` value.
+    pub const MIN: Self = Self(TwoFloat::MIN);
+
+    /// Smallest positive normal `TwoFloat` value.
+    pub const MIN_POSITIVE: Self = Self(TwoFloat::MIN_POSITIVE);
+
+    /// Largest finite `TwoFloat` value.
+    pub const MAX: Self = Self(TwoFloat::MAX);
+
+    /// Represents an error value equivalent to `f64::NAN`.
+    pub const NAN: Self = Self(TwoFloat::NAN);
+
+    /// Represents the difference between 1.0 and the next representable normal value.
+    pub const EPSILON: Self = Self(TwoFloat::EPSILON);
+
+    /// A positive infinite value
+    pub const INFINITY: Self = Self(TwoFloat::INFINITY);
+
+    /// A negative infinite value
+    pub const NEG_INFINITY: Self = Self(TwoFloat::NEG_INFINITY);
+
+    /// A constant 0.
+    pub const ZERO: Self = Self(TwoFloat::ZERO);
+
+    /// A constant 1.
+    pub const ONE: Self = Self(TwoFloat::ONE);
+
     /// Create a new float from an f64 value
     pub fn new(value: f64) -> Self {
-        MyFloat(TwoFloat::from(value))
+        MyFloat(TwoFloat::from_f64(value))
     }
 
     /// Create a new float from an Float value
@@ -73,64 +101,27 @@ impl MyFloat {
 
     /// Get the value as f64
     pub fn to_float(&self) -> TwoFloat {
-        self.0.clone()
-    }
-
-    /// Convert the value in radians to degrees
-    pub fn to_degrees(&self) -> MyFloat {
-        MyFloat(self.0 * TwoFloat::from(180.0) / PI)
-    }
-
-    /// Convert the value in degrees to radians
-    pub fn to_radians(&self) -> MyFloat {
-        MyFloat(self.0 * PI / TwoFloat::from(180.0))
-    }
-
-    /// Get the absolute value
-    pub fn abs(&self) -> Self {
-        MyFloat(self.0.abs())
-    }
-
-    /// Get the integer power
-    pub fn powi(&self, n: isize) -> Self {
-        if n == 0 {
-            return MyFloat::zero();
-        }
-
-        let mut temp = self.clone();
-        for _ in 1..n.abs() {
-            temp *= self;
-        }
-        if n < 0 {
-            temp = 1.0 / temp;
-        }
-
-        temp
+        self.0
     }
 
     /// Get the magnitude in dB
     pub fn db(&self) -> MyFloat {
-        MyFloat(TwoFloat::from(20.0) * self.0.abs().log10())
+        MyFloat(20.0 * self.0.abs().log10())
     }
 
     /// Get the magnitude in dB
     pub fn db10(&self) -> MyFloat {
-        MyFloat(TwoFloat::from(10.0) * self.0.abs().log10())
+        MyFloat(10.0 * self.0.abs().log10())
     }
 
     /// Get the magnitude in dB
-    pub fn db2mag(&self) -> MyFloat {
-        MyFloat(TwoFloat::from(10.0).pow(self.0 / TwoFloat::from(20.0)))
+    pub fn db_to_mag(&self) -> MyFloat {
+        MyFloat(TwoFloat::from_f64(10.0).pow(self.0 / 20.0))
     }
 
     /// Get the magnitude in dB
-    pub fn db102mag(&self) -> MyFloat {
-        MyFloat(TwoFloat::from(10.0).pow(self.0 / TwoFloat::from(10.0)))
-    }
-
-    /// Get the square root
-    pub fn sqrt(&self) -> Self {
-        MyFloat(self.0.sqrt())
+    pub fn db10_to_mag(&self) -> MyFloat {
+        MyFloat(TwoFloat::from_f64(10.0).pow(self.0 / 10.0))
     }
 
     /// Get the square
@@ -138,119 +129,9 @@ impl MyFloat {
         self * self
     }
 
-    /// Calculate the exponential function
-    pub fn exp(&self) -> Self {
-        MyFloat(self.0.exp())
-    }
-
-    /// Calculate the natural logarithm
-    pub fn ln(&self) -> Self {
-        MyFloat(self.0.ln())
-    }
-
-    /// Calculate the base-10 logarithm
-    pub fn log10(&self) -> Self {
-        MyFloat(self.0.log10())
-    }
-
-    /// Calculate the base-2 logarithm
-    pub fn log2(&self) -> Self {
-        MyFloat(self.0.log2())
-    }
-
-    /// Calculate sine from self in radians
-    pub fn sin(&self) -> Self {
-        MyFloat(self.0.sin())
-    }
-
-    /// Calculate cosine from self in radians
-    pub fn cos(&self) -> Self {
-        MyFloat(self.0.cos())
-    }
-
-    /// Calculate tangent from self in radians
-    pub fn tan(&self) -> Self {
-        MyFloat(self.0.tan())
-    }
-
-    /// Calculate arcsine from self to radians
-    pub fn asin(&self) -> Self {
-        MyFloat(self.0.asin())
-    }
-
-    /// Calculate arccosine from self to radians
-    pub fn acos(&self) -> Self {
-        MyFloat(self.0.acos())
-    }
-
-    /// Calculate arctangent from self to radians
-    pub fn atan(&self) -> Self {
-        MyFloat(self.0.atan())
-    }
-
-    /// Calculate arctangent of y/x in radians
-    pub fn atan2(&self, x: &MyFloat) -> Self {
-        MyFloat(self.0.atan2(x.0))
-    }
-
-    /// Calculate hyperbolic sine from self in radians
-    pub fn sinh(&self) -> Self {
-        MyFloat(self.0.sinh())
-    }
-
-    /// Calculate hyperbolic cosine from self in radians
-    pub fn cosh(&self) -> Self {
-        MyFloat(self.0.cosh())
-    }
-
-    /// Calculate hyperbolic tangent from self in radians
-    pub fn tanh(&self) -> Self {
-        MyFloat(self.0.tanh())
-    }
-
-    /// Calculate inverse hyperbolic sine from self to radians
-    pub fn asinh(&self) -> Self {
-        MyFloat(self.0.asinh())
-    }
-
-    /// Calculate inverse hyperbolic cosine from self to radians
-    pub fn acosh(&self) -> Self {
-        MyFloat(self.0.acosh())
-    }
-
-    /// Calculate inverse hyperbolic tangent from self to radians
-    pub fn atanh(&self) -> Self {
-        MyFloat(self.0.atanh())
-    }
-
     /// Raise to a power
-    pub fn pow(&self, exp: &MyFloat) -> Self {
+    pub fn pow(&self, exp: MyFloat) -> Self {
         MyFloat(self.0.pow(exp.0))
-    }
-
-    /// Calculate the floor (largest integer less than or equal to self)
-    pub fn floor(&self) -> Self {
-        MyFloat(self.0.floor())
-    }
-
-    /// Calculate the ceiling (smallest integer greater than or equal to self)
-    pub fn ceil(&self) -> Self {
-        MyFloat(self.0.ceil())
-    }
-
-    /// Round to the nearest integer
-    pub fn round(&self) -> Self {
-        MyFloat(self.0.round())
-    }
-
-    /// Truncate towards zero
-    pub fn trunc(&self) -> Self {
-        MyFloat(self.0.trunc())
-    }
-
-    /// Get the fractional part
-    pub fn fract(&self) -> Self {
-        MyFloat(self.0.fract())
     }
 
     /// Access the inner rug::Float (for advanced operations)
@@ -263,770 +144,1232 @@ impl MyFloat {
         self.0
     }
 
-    /// Create a NaN float
-    pub fn nan() -> Self {
-        MyFloat(TwoFloat::NAN)
-    }
-
-    /// Check if the float is NaN
-    pub fn is_nan(&self) -> bool {
-        self.0 != self.0  // NaN is the only value that doesn't equal itself
-    }
-
-    /// Create an infinite float
-    pub fn infinity() -> Self {
-        MyFloat(TwoFloat::INFINITY)
-    }
-
-    /// Create a negative infinite float
-    pub fn neg_infinity() -> Self {
-        MyFloat(TwoFloat::NEG_INFINITY)
-    }
-
-    /// Check if the float is infinite
-    pub fn is_infinite(&self) -> bool {
-        if self.0 == TwoFloat::INFINITY || self.0 == TwoFloat::NEG_INFINITY {
-            true
-        } else {
-            false
+    pub fn to_bits(self) -> MyUsize {
+        MyUsize {
+            hi: self.0.hi().to_bits(),
+            lo: self.0.lo().to_bits(),
         }
-    }
-
-    /// Check if the float is finite
-    pub fn is_finite(&self) -> bool {
-        !self.is_nan() && !self.is_infinite()
-    }
-
-    /// Check if the float is normal (not zero, infinite, or NaN)
-    pub fn is_normal(&self) -> bool {
-        !self.0.is_zero() && !self.is_nan() && !self.is_infinite()
-    }
-
-    /// Check if the float is positive
-    pub fn is_sign_positive(&self) -> bool {
-        self.0.is_sign_positive()
-    }
-
-    /// Check if the float is negative
-    pub fn is_sign_negative(&self) -> bool {
-        self.0.is_sign_negative()
-    }
-
-    /// Get the minimum of two floats
-    pub fn min(&self, other: &MyFloat) -> Self {
-        MyFloat(self.0.min(other.0))
-    }
-
-    /// Get the maximum of two floats
-    pub fn max(&self, other: &MyFloat) -> Self {
-        MyFloat(self.0.max(other.0))
-    }
-
-    /// Clamp the value between min and max
-    pub fn clamp(&self, min: &MyFloat, max: &MyFloat) -> Self {
-        self.max(min).min(max)
-    }
-
-    /// Get the sign of the number (-1, 0, or 1)
-    pub fn signum(&self) -> Self {
-        if self.0.is_zero() {
-            MyFloat::zero()
-        } else {
-            MyFloat(self.0.signum())
-        }
-    }
-
-    /// Copy the sign from another float
-    pub fn copysign(&self, sign: &MyFloat) -> Self {
-        MyFloat(self.0.copysign(&sign.0))
     }
 }
 
-// Implement basic arithmetic operations
-macro_rules! impl_self_math_op(
-    ($trt:ident, $operator:tt, $mth:ident) => (
-        impl $trt for MyFloat {
-            type Output = Self;
+impl Deref for MyFloat {
+    type Target = TwoFloat;
 
-            fn $mth(self, other: Self) -> Self::Output {
-                MyFloat(self.0 $operator other.0)
-            }
-        }
-
-        impl $trt<&MyFloat> for MyFloat {
-            type Output = MyFloat;
-
-            fn $mth(self, other: &MyFloat) -> Self::Output {
-                MyFloat(self.0 $operator &other.0)
-            }
-        }
-
-        impl $trt<MyFloat> for &MyFloat {
-            type Output = MyFloat;
-
-            fn $mth(self, other: MyFloat) -> Self::Output {
-                MyFloat(&self.0 $operator other.0)
-            }
-        }
-
-        impl $trt<&MyFloat> for &MyFloat {
-            type Output = MyFloat;
-
-            fn $mth(self, other: &MyFloat) -> Self::Output {
-                MyFloat(&self.0 $operator other.0.clone())
-            }
-        }
-    );
-);
-
-macro_rules! impl_math_op(
-    ($trt:ident, $operator:tt, $mth:ident, Complex64) => (
-        impl $trt<Complex64> for MyFloat {
-            type Output = MyComplex;
-
-            fn $mth(self, other: Complex64) -> Self::Output {
-                MyComplex::from_real(self) $operator MyComplex::from_c64(other)
-            }
-        }
-
-        impl $trt<Complex64> for &MyFloat {
-            type Output = MyComplex;
-
-            fn $mth(self, other: Complex64) -> Self::Output {
-                MyComplex::from_real(self.clone()) $operator MyComplex::from_c64(other)
-            }
-        }
-
-        impl $trt<&Complex64> for MyFloat {
-            type Output = MyComplex;
-
-            fn $mth(self, other: &Complex64) -> Self::Output {
-                MyComplex::from_real(self) $operator MyComplex::from_c64(*other)
-            }
-        }
-
-        impl $trt<&Complex64> for &MyFloat {
-            type Output = MyComplex;
-
-            fn $mth(self, other: &Complex64) -> Self::Output {
-                MyComplex::from_real(self.clone()) $operator MyComplex::from_c64(*other)
-            }
-        }
-
-        impl $trt<MyFloat> for Complex64 {
-            type Output = MyComplex;
-
-            fn $mth(self, other: MyFloat) -> Self::Output {
-                MyComplex::from_c64(self) $operator MyComplex::from_real(other)
-            }
-        }
-
-        impl $trt<MyFloat> for &Complex64 {
-            type Output = MyComplex;
-
-            fn $mth(self, other: MyFloat) -> Self::Output {
-                MyComplex::from_c64(*self) $operator MyComplex::from_real(other)
-            }
-        }
-
-        impl $trt<&MyFloat> for Complex64 {
-            type Output = MyComplex;
-
-            fn $mth(self, other: &MyFloat) -> Self::Output {
-                MyComplex::from_c64(self) $operator MyComplex::from_real(other.clone())
-            }
-        }
-
-        impl $trt<&MyFloat> for &Complex64 {
-            type Output = MyComplex;
-
-            fn $mth(self, other: &MyFloat) -> Self::Output {
-                MyComplex::from_c64(*self) $operator MyComplex::from_real(other.clone())
-            }
-        }
-    );
-    ($trt:ident, $operator:tt, $mth:ident, $rhs:ident) => (
-        impl $trt<$rhs> for MyFloat {
-            type Output = MyFloat;
-
-            fn $mth(self, other: $rhs) -> Self::Output {
-                MyFloat(self.0 $operator other)
-            }
-        }
-
-        impl $trt<$rhs> for &MyFloat {
-            type Output = MyFloat;
-
-            fn $mth(self, other: $rhs) -> Self::Output {
-                MyFloat(self.0.clone() $operator other)
-            }
-        }
-
-        impl $trt<&$rhs> for MyFloat {
-            type Output = MyFloat;
-
-            fn $mth(self, other: &$rhs) -> Self::Output {
-                MyFloat(self.0 $operator *other)
-            }
-        }
-
-        impl $trt<&$rhs> for &MyFloat {
-            type Output = MyFloat;
-
-            fn $mth(self, other: &$rhs) -> Self::Output {
-                MyFloat(self.0.clone() $operator *other)
-            }
-        }
-
-        impl $trt<MyFloat> for $rhs {
-            type Output = MyFloat;
-
-            fn $mth(self, other: MyFloat) -> Self::Output {
-                MyFloat(self $operator other.0)
-            }
-        }
-
-        impl $trt<MyFloat> for &$rhs {
-            type Output = MyFloat;
-
-            fn $mth(self, other: MyFloat) -> Self::Output {
-                MyFloat(self $operator other.0.clone())
-            }
-        }
-
-        impl $trt<&MyFloat> for $rhs {
-            type Output = MyFloat;
-
-            fn $mth(self, other: &MyFloat) -> Self::Output {
-                MyFloat(self $operator other.0.clone())
-            }
-        }
-
-        impl $trt<&MyFloat> for &$rhs {
-            type Output = MyFloat;
-
-            fn $mth(self, other: &MyFloat) -> Self::Output {
-                MyFloat(*self $operator other.0.clone())
-            }
-        }
-    );
-);
-
-// Implement assignment operators
-macro_rules! impl_self_assign_math_op(
-    ($trt:ident, $operator:tt, $mth:ident) => (
-        impl $trt for MyFloat {
-            fn $mth(&mut self, other: Self) {
-                self.0 $operator other.0;
-            }
-        }
-
-        impl $trt<&MyFloat> for MyFloat {
-            fn $mth(&mut self, other: &MyFloat) {
-                self.0 $operator &other.0;
-            }
-        }
-    );
-);
-
-macro_rules! impl_assign_math_op(
-    ($trt:ident, $operator:tt, $mth:ident, $rhs:ident) => (
-        impl $trt<$rhs> for MyFloat {
-            fn $mth(&mut self, other: $rhs) {
-                self.0 $operator other;
-            }
-        }
-
-        impl $trt<&$rhs> for MyFloat {
-            fn $mth(&mut self, other: &$rhs) {
-                self.0 $operator *other;
-            }
-        }
-    );
-);
-
-impl_self_math_op!(Add, +, add);
-impl_self_math_op!(Sub, -, sub);
-impl_self_math_op!(Mul, *, mul);
-impl_self_math_op!(Div, /, div);
-impl_math_op!(Add, +, add, f64);
-impl_math_op!(Sub, -, sub, f64);
-impl_math_op!(Mul, *, mul, f64);
-impl_math_op!(Div, /, div, f64);
-impl_math_op!(Add, +, add, Complex64);
-impl_math_op!(Sub, -, sub, Complex64);
-impl_math_op!(Mul, *, mul, Complex64);
-impl_math_op!(Div, /, div, Complex64);
-impl_self_assign_math_op!(AddAssign, +=, add_assign);
-impl_self_assign_math_op!(SubAssign, -=, sub_assign);
-impl_self_assign_math_op!(MulAssign, *=, mul_assign);
-impl_self_assign_math_op!(DivAssign, /=, div_assign);
-impl_assign_math_op!(AddAssign, +=, add_assign, f64);
-impl_assign_math_op!(SubAssign, -=, sub_assign, f64);
-impl_assign_math_op!(MulAssign, *=, mul_assign, f64);
-impl_assign_math_op!(DivAssign, /=, div_assign, f64);
-
-impl Neg for MyFloat {
-    type Output = Self;
-
-    fn neg(self) -> Self {
-        MyFloat(-self.0)
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
 
-impl Neg for &MyFloat {
-    type Output = MyFloat;
-
-    fn neg(self) -> MyFloat {
-        MyFloat(-self.0.clone())
-    }
-}
-
-impl Inv for MyFloat {
-    type Output = MyFloat;
-
-    fn inv(self) -> Self::Output {
-        MyFloat(self.0.inv())
-    }
-}
-
-impl Inv for &MyFloat {
-    type Output = MyFloat;
-
-    fn inv(self) -> Self::Output {
-        MyFloat(self.0.inv())
-    }
-}
-
-// Implement Rem (modulo) operations
-impl Rem for MyFloat {
-    type Output = MyFloat;
-
-    fn rem(self, rhs: Self) -> Self::Output {
-        if rhs.0.is_zero() {
-            panic!("Division by zero in float remainder operation");
-        }
-
-        MyFloat(self.0 % rhs.0)
-    }
-}
-
-impl Rem<&MyFloat> for &MyFloat {
-    type Output = MyFloat;
-
-    fn rem(self, rhs: &MyFloat) -> Self::Output {
-        if rhs.0.is_zero() {
-            panic!("Division by zero in float remainder operation");
-        }
-
-        MyFloat(self.0 % rhs.0)
-    }
-}
-
-impl Rem<&MyFloat> for MyFloat {
-    type Output = MyFloat;
-
-    fn rem(self, rhs: &MyFloat) -> Self::Output {
-        (&self).rem(rhs)
-    }
-}
-
-impl Rem<MyFloat> for &MyFloat {
-    type Output = MyFloat;
-
-    fn rem(self, rhs: MyFloat) -> Self::Output {
-        self.rem(&rhs)
-    }
-}
-
-impl Rem<f64> for MyFloat {
-    type Output = MyFloat;
-
-    fn rem(self, rhs: f64) -> Self::Output {
-        if rhs == 0.0 {
-            panic!("Division by zero in float remainder operation");
-        }
-
-        let rhs_float = TwoFloat::from(rhs);
-        let rhs_wrapper = MyFloat(rhs_float);
-        self % rhs_wrapper
-    }
-}
-
-impl Rem<f64> for &MyFloat {
-    type Output = MyFloat;
-
-    fn rem(self, rhs: f64) -> Self::Output {
-        if rhs == 0.0 {
-            panic!("Division by zero in float remainder operation");
-        }
-
-        let rhs_float = TwoFloat::from(rhs);
-        let rhs_wrapper = MyFloat(rhs_float);
-        self % rhs_wrapper
-    }
-}
-
-impl Rem<MyFloat> for f64 {
-    type Output = MyFloat;
-
-    fn rem(self, rhs: MyFloat) -> Self::Output {
-        if rhs.0.is_zero() {
-            panic!("Division by zero in float remainder operation");
-        }
-
-        MyFloat(self % rhs.0)
-    }
-}
-
-impl Rem<&MyFloat> for f64 {
-    type Output = MyFloat;
-
-    fn rem(self, rhs: &MyFloat) -> Self::Output {
-        if rhs.0.is_zero() {
-            panic!("Division by zero in float remainder operation");
-        }
-
-        MyFloat(self % rhs.0)
-    }
-}
-
-impl RemAssign for MyFloat {
-    fn rem_assign(&mut self, rhs: Self) {
-        *self = std::mem::take(self) % rhs;
-    }
-}
-
-impl RemAssign<&MyFloat> for MyFloat {
-    fn rem_assign(&mut self, rhs: &MyFloat) {
-        let result = (&*self) % rhs;
-        *self = result;
-    }
-}
-
-impl RemAssign<f64> for MyFloat {
-    fn rem_assign(&mut self, rhs: f64) {
-        *self = std::mem::take(self) % rhs;
-    }
-}
-
-// Implement Pow trait
-impl Pow<MyFloat> for MyFloat {
-    type Output = MyFloat;
-
-    fn pow(self, exp: MyFloat) -> MyFloat {
-        MyFloat(self.0.pow(exp.0))
-    }
-}
-
-impl Pow<&MyFloat> for MyFloat {
-    type Output = MyFloat;
-
-    fn pow(self, exp: &MyFloat) -> MyFloat {
-        MyFloat(self.0.pow(&exp.0))
-    }
-}
-
-impl Pow<MyFloat> for &MyFloat {
-    type Output = MyFloat;
-
-    fn pow(self, exp: MyFloat) -> MyFloat {
-        MyFloat(self.0.pow(&exp.0))
-    }
-}
-
-impl Pow<&MyFloat> for &MyFloat {
-    type Output = MyFloat;
-
-    fn pow(self, exp: &MyFloat) -> MyFloat {
-        MyFloat(self.0.pow(&exp.0))
-    }
-}
-
-impl Pow<f64> for MyFloat {
-    type Output = MyFloat;
-
-    fn pow(self, exp: f64) -> MyFloat {
-        let exp_float = MyFloat::new(exp);
-        self.pow(exp_float)
-    }
-}
-
-impl Pow<f64> for &MyFloat {
-    type Output = MyFloat;
-
-    fn pow(self, exp: f64) -> MyFloat {
-        let exp_float = MyFloat::new(exp);
-        self.pow(&exp_float)
-    }
-}
-
-impl Pow<i32> for MyFloat {
-    type Output = MyFloat;
-
-    fn pow(self, exp: i32) -> MyFloat {
-        let exp_float = MyFloat::new(exp as f64);
-        self.pow(exp_float)
-    }
-}
-
-impl Pow<i32> for &MyFloat {
-    type Output = MyFloat;
-
-    fn pow(self, exp: i32) -> MyFloat {
-        let exp_float = MyFloat::new(exp as f64);
-        self.pow(&exp_float)
-    }
-}
-
-// Implement Num trait
-impl Zero for MyFloat {
-    fn zero() -> Self {
-        MyFloat::new(0.0)
-    }
-
-    fn is_zero(&self) -> bool {
-        self.0.is_zero()
-    }
-}
-
-impl One for MyFloat {
-    fn one() -> Self {
-        MyFloat::new(1.0)
-    }
-
-    fn is_one(&self) -> bool {
-        *self == Self::one()
-    }
-}
-
-impl NegOne for MyFloat {
-    fn neg_one() -> Self {
-        MyFloat::new(-1.0)
-    }
-
-    fn is_neg_one(&self) -> bool {
-        *self == Self::neg_one()
-    }
-}
-
-impl Num for MyFloat {
-    type FromStrRadixErr = TwoFloatError;
-
-    fn from_str_radix(_str: &str, _radix: u32) -> Result<Self, Self::FromStrRadixErr> {
-        Err(TwoFloatError::ParseError)
-    }
-}
-
-impl Signed for MyFloat {
-    fn abs(&self) -> Self {
-        MyFloat(self.0.abs())
-    }
-
-    fn abs_sub(&self, other: &Self) -> Self {
-        let diff = self.0 - other.0;
-        if diff.is_sign_positive() {
-            MyFloat(diff)
-        } else {
-            MyFloat::zero()
-        }
-    }
-
-    fn signum(&self) -> Self {
-        if self.0.is_zero() {
-            MyFloat::zero()
-        } else {
-            MyFloat(self.0.signum())
-        }
-    }
-
-    fn is_positive(&self) -> bool {
-        !self.0.is_zero() && self.0.is_sign_positive()
-    }
-
-    fn is_negative(&self) -> bool {
-        !self.0.is_zero() && self.0.is_sign_negative()
-    }
-}
-
-// Implement Traits
-impl Clone for MyFloat {
-    fn clone(&self) -> Self {
-        MyFloat(self.0.clone())
-    }
-}
-
-impl Default for MyFloat {
-    fn default() -> Self {
-        MyFloat(TwoFloat::from(0.0))
+impl DerefMut for MyFloat {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
     }
 }
 
 impl fmt::Display for MyFloat {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
+        write!(f, "{}", self.0.hi())
     }
 }
 
-// impl fmt::Debug for MyFloat {
-//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-//         write!(f, "MyFloat({})", self.0)
-//         // write!(f, "{}", self.to_f64())
+// impl ConstZero for MyFloat {
+//     const ZERO: Self = Self::ZERO;
+// }
+
+// impl ConstOne for MyFloat {
+//     const ONE: Self = Self::ONE;
+// }
+
+// impl ToPrimitive for MyFloat {
+//     #[inline]
+//     fn to_isize(&self) -> Option<isize> {
+//         (self.0).to_isize()
+//     }
+
+//     #[inline]
+//     fn to_i8(&self) -> Option<i8> {
+//         (self.0).to_i8()
+//     }
+
+//     #[inline]
+//     fn to_i16(&self) -> Option<i16> {
+//         (self.0).to_i16()
+//     }
+
+//     #[inline]
+//     fn to_i32(&self) -> Option<i32> {
+//         (self.0).to_i32()
+//     }
+
+//     #[inline]
+//     fn to_i64(&self) -> Option<i64> {
+//         (self.0).to_i64()
+//     }
+
+//     #[inline]
+//     fn to_i128(&self) -> Option<i128> {
+//         (self.0).to_i128()
+//     }
+
+//     #[inline]
+//     fn to_usize(&self) -> Option<usize> {
+//         (self.0).to_usize()
+//     }
+
+//     #[inline]
+//     fn to_u8(&self) -> Option<u8> {
+//         (self.0).to_u8()
+//     }
+
+//     #[inline]
+//     fn to_u16(&self) -> Option<u16> {
+//         (self.0).to_u16()
+//     }
+
+//     #[inline]
+//     fn to_u32(&self) -> Option<u32> {
+//         (self.0).to_u32()
+//     }
+
+//     #[inline]
+//     fn to_u64(&self) -> Option<u64> {
+//         (self.0).to_u64()
+//     }
+
+//     #[inline]
+//     fn to_u128(&self) -> Option<u128> {
+//         (self.0).to_u128()
+//     }
+
+//     #[inline]
+//     fn to_f32(&self) -> Option<f32> {
+//         (self.0).to_f32()
+//     }
+
+//     #[inline]
+//     fn to_f64(&self) -> Option<f64> {
+//         (self.0).to_f64()
 //     }
 // }
 
-// Implement PartialEq for comparisons
-impl PartialEq for MyFloat {
-    fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0
+// impl NumCast for MyFloat {
+//     fn from<U: ToPrimitive>(n: U) -> Option<Self> {
+//         match <TwoFloat as NumCast>::from(n) {
+//             Some(x) => Some(MyFloat(x)),
+//             None => None,
+//         }
+//     }
+// }
+
+// impl Float for MyFloat {
+//     #[inline]
+//     fn nan() -> Self {
+//         MyFloat::NAN
+//     }
+
+//     #[inline]
+//     fn infinity() -> Self {
+//         MyFloat::INFINITY
+//     }
+
+//     #[inline]
+//     fn neg_infinity() -> Self {
+//         MyFloat::NEG_INFINITY
+//     }
+
+//     #[inline]
+//     fn neg_zero() -> Self {
+//         MyFloat::new(-0.0)
+//     }
+
+//     #[inline]
+//     fn min_value() -> Self {
+//         MyFloat::MIN
+//     }
+
+//     #[inline]
+//     fn min_positive_value() -> Self {
+//         MyFloat::MIN_POSITIVE
+//     }
+
+//     #[inline]
+//     fn epsilon() -> Self {
+//         MyFloat::EPSILON
+//     }
+
+//     #[inline]
+//     fn max_value() -> Self {
+//         MyFloat::MAX
+//     }
+
+//     #[inline]
+//     #[allow(deprecated)]
+//     fn abs_sub(self, other: Self) -> Self {
+//         MyFloat(self.0.abs_sub(other.0))
+//     }
+
+//     #[inline]
+//     fn integer_decode(self) -> (u64, i16, i8) {
+//         let bits: MyUsize = self.to_bits();
+//         let sign: i8 = if bits.hi >> 63 == 0 { 1 } else { -1 };
+//         let mut exponent: i16 = ((bits.hi >> 52) & 0x7ff) as i16;
+//         let mantissa = if exponent == 0 {
+//             (bits.hi & 0xfffffffffffff) << 1
+//         } else {
+//             (bits.hi & 0xfffffffffffff) | 0x10000000000000
+//         };
+//         // Exponent bias + mantissa shift
+//         exponent -= 1023 + 52;
+//         (mantissa, exponent, sign)
+//     }
+
+//     #[inline]
+//     fn is_nan(self) -> bool {
+//         self.0 != self.0 // NaN is the only value that doesn't equal itself
+//     }
+
+//     #[inline]
+//     fn is_infinite(self) -> bool {
+//         if self.0 == TwoFloat::INFINITY || self.0 == TwoFloat::NEG_INFINITY {
+//             true
+//         } else {
+//             false
+//         }
+//     }
+
+//     #[inline]
+//     fn is_finite(self) -> bool {
+//         !self.is_nan() && !self.is_infinite()
+//     }
+
+//     #[inline]
+//     fn is_normal(self) -> bool {
+//         !self.0.is_zero() && !self.is_nan() && !self.is_infinite()
+//     }
+
+//     #[inline]
+//     fn is_subnormal(self) -> bool {
+//         self.0.is_subnormal()
+//     }
+
+//     #[inline]
+//     fn classify(self) -> std::num::FpCategory {
+//         self.0.classify()
+//     }
+
+//     #[inline]
+//     fn clamp(self, min: Self, max: Self) -> Self {
+//         self.max(min).min(max)
+//     }
+
+//     #[inline]
+//     fn floor(self) -> Self {
+//         MyFloat(self.0.floor())
+//     }
+
+//     #[inline]
+//     fn ceil(self) -> Self {
+//         MyFloat(self.0.ceil())
+//     }
+
+//     #[inline]
+//     fn round(self) -> Self {
+//         MyFloat(self.0.round())
+//     }
+
+//     #[inline]
+//     fn trunc(self) -> Self {
+//         MyFloat(self.0.trunc())
+//     }
+
+//     #[inline]
+//     fn fract(self) -> Self {
+//         MyFloat(self.0.fract())
+//     }
+
+//     #[inline]
+//     fn abs(self) -> Self {
+//         MyFloat(self.0.abs())
+//     }
+
+//     #[inline]
+//     fn signum(self) -> Self {
+//         if self.0.is_zero() {
+//             MyFloat::zero()
+//         } else {
+//             MyFloat(self.0.signum())
+//         }
+//     }
+
+//     #[inline]
+//     fn is_sign_positive(self) -> bool {
+//         self.0.is_sign_positive()
+//     }
+
+//     #[inline]
+//     fn is_sign_negative(self) -> bool {
+//         self.0.is_sign_negative()
+//     }
+
+//     #[inline]
+//     fn mul_add(self, a: Self, b: Self) -> Self {
+//         MyFloat(self.0.mul_add(a.0, b.0))
+//     }
+
+//     #[inline]
+//     fn recip(self) -> Self {
+//         MyFloat(self.0.recip())
+//     }
+
+//     #[inline]
+//     fn powi(self, n: i32) -> Self {
+//         MyFloat(self.0.powi(n))
+//     }
+
+//     #[inline]
+//     fn powf(self, n: Self) -> Self {
+//         MyFloat(self.0.powf(n.0))
+//     }
+
+//     #[inline]
+//     fn sqrt(self) -> Self {
+//         MyFloat(self.0.sqrt())
+//     }
+
+//     #[inline]
+//     fn exp(self) -> Self {
+//         MyFloat(self.0.exp())
+//     }
+
+//     #[inline]
+//     fn exp2(self) -> Self {
+//         MyFloat(self.0.exp2())
+//     }
+
+//     #[inline]
+//     fn ln(self) -> Self {
+//         MyFloat(self.0.ln())
+//     }
+
+//     #[inline]
+//     fn log(self, base: Self) -> Self {
+//         MyFloat(self.0.log(base.0))
+//     }
+
+//     #[inline]
+//     fn log2(self) -> Self {
+//         MyFloat(self.0.log2())
+//     }
+
+//     #[inline]
+//     fn log10(self) -> Self {
+//         MyFloat(self.0.log10())
+//     }
+
+//     #[inline]
+//     fn to_degrees(self) -> Self {
+//         MyFloat(self.0.to_degrees())
+//     }
+
+//     #[inline]
+//     fn to_radians(self) -> Self {
+//         MyFloat(self.0.to_radians())
+//     }
+
+//     #[inline]
+//     fn max(self, other: Self) -> Self {
+//         MyFloat(self.0.max(other.0))
+//     }
+
+//     #[inline]
+//     fn min(self, other: Self) -> Self {
+//         MyFloat(self.0.min(other.0))
+//     }
+
+//     #[inline]
+//     fn cbrt(self) -> Self {
+//         MyFloat(self.0.cbrt())
+//     }
+
+//     #[inline]
+//     fn hypot(self, other: Self) -> Self {
+//         MyFloat(self.0.hypot(other.0))
+//     }
+
+//     #[inline]
+//     fn sin(self) -> Self {
+//         MyFloat(self.0.sin())
+//     }
+
+//     #[inline]
+//     fn cos(self) -> Self {
+//         MyFloat(self.0.cos())
+//     }
+
+//     #[inline]
+//     fn tan(self) -> Self {
+//         MyFloat(self.0.tan())
+//     }
+
+//     #[inline]
+//     fn asin(self) -> Self {
+//         MyFloat(self.0.asin())
+//     }
+
+//     #[inline]
+//     fn acos(self) -> Self {
+//         MyFloat(self.0.acos())
+//     }
+
+//     #[inline]
+//     fn atan(self) -> Self {
+//         MyFloat(self.0.atan())
+//     }
+
+//     #[inline]
+//     fn atan2(self, other: Self) -> Self {
+//         MyFloat(self.0.atan2(other.0))
+//     }
+
+//     #[inline]
+//     fn sin_cos(self) -> (Self, Self) {
+//         let out = self.0.sin_cos();
+//         (MyFloat(out.0), MyFloat(out.1))
+//     }
+
+//     #[inline]
+//     fn exp_m1(self) -> Self {
+//         MyFloat(self.0.exp_m1())
+//     }
+
+//     #[inline]
+//     fn ln_1p(self) -> Self {
+//         MyFloat(self.0.ln_1p())
+//     }
+
+//     #[inline]
+//     fn sinh(self) -> Self {
+//         MyFloat(self.0.sinh())
+//     }
+
+//     #[inline]
+//     fn cosh(self) -> Self {
+//         MyFloat(self.0.cosh())
+//     }
+
+//     #[inline]
+//     fn tanh(self) -> Self {
+//         MyFloat(self.0.tanh())
+//     }
+
+//     #[inline]
+//     fn asinh(self) -> Self {
+//         MyFloat(self.0.asinh())
+//     }
+
+//     #[inline]
+//     fn acosh(self) -> Self {
+//         MyFloat(self.0.acosh())
+//     }
+
+//     #[inline]
+//     fn atanh(self) -> Self {
+//         MyFloat(self.0.atanh())
+//     }
+
+//     #[inline]
+//     fn copysign(self, sign: Self) -> Self {
+//         MyFloat(self.0.copysign(sign.0))
+//     }
+// }
+
+// // Implement basic arithmetic operations
+// macro_rules! impl_self_math_op(
+//     ($trt:ident, $operator:tt, $mth:ident) => (
+//         impl $trt for MyFloat {
+//             type Output = Self;
+
+//             fn $mth(self, other: Self) -> Self::Output {
+//                 MyFloat(self.0 $operator other.0)
+//             }
+//         }
+
+//         impl $trt<&MyFloat> for MyFloat {
+//             type Output = MyFloat;
+
+//             fn $mth(self, other: &MyFloat) -> Self::Output {
+//                 MyFloat(self.0 $operator &other.0)
+//             }
+//         }
+
+//         impl $trt<MyFloat> for &MyFloat {
+//             type Output = MyFloat;
+
+//             fn $mth(self, other: MyFloat) -> Self::Output {
+//                 MyFloat(&self.0 $operator other.0)
+//             }
+//         }
+
+//         impl $trt<&MyFloat> for &MyFloat {
+//             type Output = MyFloat;
+
+//             fn $mth(self, other: &MyFloat) -> Self::Output {
+//                 MyFloat(&self.0 $operator other.0.clone())
+//             }
+//         }
+//     );
+// );
+
+// macro_rules! impl_math_op(
+//     ($trt:ident, $operator:tt, $mth:ident, Complex64) => (
+//         impl $trt<Complex64> for MyFloat {
+//             type Output = MyComplex;
+
+//             fn $mth(self, other: Complex64) -> Self::Output {
+//                 MyComplex::from_real(self) $operator MyComplex::from_c64(other)
+//             }
+//         }
+
+//         impl $trt<Complex64> for &MyFloat {
+//             type Output = MyComplex;
+
+//             fn $mth(self, other: Complex64) -> Self::Output {
+//                 MyComplex::from_real(self.clone()) $operator MyComplex::from_c64(other)
+//             }
+//         }
+
+//         impl $trt<&Complex64> for MyFloat {
+//             type Output = MyComplex;
+
+//             fn $mth(self, other: &Complex64) -> Self::Output {
+//                 MyComplex::from_real(self) $operator MyComplex::from_c64(*other)
+//             }
+//         }
+
+//         impl $trt<&Complex64> for &MyFloat {
+//             type Output = MyComplex;
+
+//             fn $mth(self, other: &Complex64) -> Self::Output {
+//                 MyComplex::from_real(self.clone()) $operator MyComplex::from_c64(*other)
+//             }
+//         }
+
+//         impl $trt<MyFloat> for Complex64 {
+//             type Output = MyComplex;
+
+//             fn $mth(self, other: MyFloat) -> Self::Output {
+//                 MyComplex::from_c64(self) $operator MyComplex::from_real(other)
+//             }
+//         }
+
+//         impl $trt<MyFloat> for &Complex64 {
+//             type Output = MyComplex;
+
+//             fn $mth(self, other: MyFloat) -> Self::Output {
+//                 MyComplex::from_c64(*self) $operator MyComplex::from_real(other)
+//             }
+//         }
+
+//         impl $trt<&MyFloat> for Complex64 {
+//             type Output = MyComplex;
+
+//             fn $mth(self, other: &MyFloat) -> Self::Output {
+//                 MyComplex::from_c64(self) $operator MyComplex::from_real(other.clone())
+//             }
+//         }
+
+//         impl $trt<&MyFloat> for &Complex64 {
+//             type Output = MyComplex;
+
+//             fn $mth(self, other: &MyFloat) -> Self::Output {
+//                 MyComplex::from_c64(*self) $operator MyComplex::from_real(other.clone())
+//             }
+//         }
+//     );
+//     ($trt:ident, $operator:tt, $mth:ident, $rhs:ident) => (
+//         impl $trt<$rhs> for MyFloat {
+//             type Output = MyFloat;
+
+//             fn $mth(self, other: $rhs) -> Self::Output {
+//                 MyFloat(self.0 $operator other)
+//             }
+//         }
+
+//         impl $trt<$rhs> for &MyFloat {
+//             type Output = MyFloat;
+
+//             fn $mth(self, other: $rhs) -> Self::Output {
+//                 MyFloat(self.0.clone() $operator other)
+//             }
+//         }
+
+//         impl $trt<&$rhs> for MyFloat {
+//             type Output = MyFloat;
+
+//             fn $mth(self, other: &$rhs) -> Self::Output {
+//                 MyFloat(self.0 $operator *other)
+//             }
+//         }
+
+//         impl $trt<&$rhs> for &MyFloat {
+//             type Output = MyFloat;
+
+//             fn $mth(self, other: &$rhs) -> Self::Output {
+//                 MyFloat(self.0.clone() $operator *other)
+//             }
+//         }
+
+//         impl $trt<MyFloat> for $rhs {
+//             type Output = MyFloat;
+
+//             fn $mth(self, other: MyFloat) -> Self::Output {
+//                 MyFloat(self $operator other.0)
+//             }
+//         }
+
+//         impl $trt<MyFloat> for &$rhs {
+//             type Output = MyFloat;
+
+//             fn $mth(self, other: MyFloat) -> Self::Output {
+//                 MyFloat(self $operator other.0.clone())
+//             }
+//         }
+
+//         impl $trt<&MyFloat> for $rhs {
+//             type Output = MyFloat;
+
+//             fn $mth(self, other: &MyFloat) -> Self::Output {
+//                 MyFloat(self $operator other.0.clone())
+//             }
+//         }
+
+//         impl $trt<&MyFloat> for &$rhs {
+//             type Output = MyFloat;
+
+//             fn $mth(self, other: &MyFloat) -> Self::Output {
+//                 MyFloat(*self $operator other.0.clone())
+//             }
+//         }
+//     );
+// );
+
+// // Implement assignment operators
+// macro_rules! impl_self_assign_math_op(
+//     ($trt:ident, $operator:tt, $mth:ident) => (
+//         impl $trt for MyFloat {
+//             fn $mth(&mut self, other: Self) {
+//                 self.0 $operator other.0;
+//             }
+//         }
+
+//         impl $trt<&MyFloat> for MyFloat {
+//             fn $mth(&mut self, other: &MyFloat) {
+//                 self.0 $operator &other.0;
+//             }
+//         }
+//     );
+// );
+
+// macro_rules! impl_assign_math_op(
+//     ($trt:ident, $operator:tt, $mth:ident, $rhs:ident) => (
+//         impl $trt<$rhs> for MyFloat {
+//             fn $mth(&mut self, other: $rhs) {
+//                 self.0 $operator other;
+//             }
+//         }
+
+//         impl $trt<&$rhs> for MyFloat {
+//             fn $mth(&mut self, other: &$rhs) {
+//                 self.0 $operator *other;
+//             }
+//         }
+//     );
+// );
+
+// impl_self_math_op!(Add, +, add);
+// impl_self_math_op!(Sub, -, sub);
+// impl_self_math_op!(Mul, *, mul);
+// impl_self_math_op!(Div, /, div);
+// impl_math_op!(Add, +, add, f64);
+// impl_math_op!(Sub, -, sub, f64);
+// impl_math_op!(Mul, *, mul, f64);
+// impl_math_op!(Div, /, div, f64);
+// impl_math_op!(Add, +, add, Complex64);
+// impl_math_op!(Sub, -, sub, Complex64);
+// impl_math_op!(Mul, *, mul, Complex64);
+// impl_math_op!(Div, /, div, Complex64);
+// impl_self_assign_math_op!(AddAssign, +=, add_assign);
+// impl_self_assign_math_op!(SubAssign, -=, sub_assign);
+// impl_self_assign_math_op!(MulAssign, *=, mul_assign);
+// impl_self_assign_math_op!(DivAssign, /=, div_assign);
+// impl_assign_math_op!(AddAssign, +=, add_assign, f64);
+// impl_assign_math_op!(SubAssign, -=, sub_assign, f64);
+// impl_assign_math_op!(MulAssign, *=, mul_assign, f64);
+// impl_assign_math_op!(DivAssign, /=, div_assign, f64);
+
+// impl Neg for MyFloat {
+//     type Output = Self;
+
+//     fn neg(self) -> Self {
+//         MyFloat(-self.0)
+//     }
+// }
+
+// impl Neg for &MyFloat {
+//     type Output = MyFloat;
+
+//     fn neg(self) -> MyFloat {
+//         MyFloat(-self.0.clone())
+//     }
+// }
+
+// impl Inv for MyFloat {
+//     type Output = MyFloat;
+
+//     fn inv(self) -> Self::Output {
+//         MyFloat(self.0.inv())
+//     }
+// }
+
+// impl Inv for &MyFloat {
+//     type Output = MyFloat;
+
+//     fn inv(self) -> Self::Output {
+//         MyFloat(self.0.inv())
+//     }
+// }
+
+// // Implement Rem (modulo) operations
+// impl Rem for MyFloat {
+//     type Output = MyFloat;
+
+//     fn rem(self, rhs: Self) -> Self::Output {
+//         if rhs.0.is_zero() {
+//             panic!("Division by zero in float remainder operation");
+//         }
+
+//         MyFloat(self.0 % rhs.0)
+//     }
+// }
+
+// impl Rem<&MyFloat> for &MyFloat {
+//     type Output = MyFloat;
+
+//     fn rem(self, rhs: &MyFloat) -> Self::Output {
+//         if rhs.0.is_zero() {
+//             panic!("Division by zero in float remainder operation");
+//         }
+
+//         MyFloat(self.0 % rhs.0)
+//     }
+// }
+
+// impl Rem<&MyFloat> for MyFloat {
+//     type Output = MyFloat;
+
+//     fn rem(self, rhs: &MyFloat) -> Self::Output {
+//         (&self).rem(rhs)
+//     }
+// }
+
+// impl Rem<MyFloat> for &MyFloat {
+//     type Output = MyFloat;
+
+//     fn rem(self, rhs: MyFloat) -> Self::Output {
+//         self.rem(&rhs)
+//     }
+// }
+
+// impl Rem<f64> for MyFloat {
+//     type Output = MyFloat;
+
+//     fn rem(self, rhs: f64) -> Self::Output {
+//         if rhs == 0.0 {
+//             panic!("Division by zero in float remainder operation");
+//         }
+
+//         let rhs_float = TwoFloat::from_f64(rhs);
+//         let rhs_wrapper = MyFloat(rhs_float);
+//         self % rhs_wrapper
+//     }
+// }
+
+// impl Rem<f64> for &MyFloat {
+//     type Output = MyFloat;
+
+//     fn rem(self, rhs: f64) -> Self::Output {
+//         if rhs == 0.0 {
+//             panic!("Division by zero in float remainder operation");
+//         }
+
+//         let rhs_float = TwoFloat::from_f64(rhs);
+//         let rhs_wrapper = MyFloat(rhs_float);
+//         self % rhs_wrapper
+//     }
+// }
+
+// impl Rem<MyFloat> for f64 {
+//     type Output = MyFloat;
+
+//     fn rem(self, rhs: MyFloat) -> Self::Output {
+//         if rhs.0.is_zero() {
+//             panic!("Division by zero in float remainder operation");
+//         }
+
+//         MyFloat(self % rhs.0)
+//     }
+// }
+
+// impl Rem<&MyFloat> for f64 {
+//     type Output = MyFloat;
+
+//     fn rem(self, rhs: &MyFloat) -> Self::Output {
+//         if rhs.0.is_zero() {
+//             panic!("Division by zero in float remainder operation");
+//         }
+
+//         MyFloat(self % rhs.0)
+//     }
+// }
+
+// impl RemAssign for MyFloat {
+//     fn rem_assign(&mut self, rhs: Self) {
+//         *self = std::mem::take(self) % rhs;
+//     }
+// }
+
+// impl RemAssign<&MyFloat> for MyFloat {
+//     fn rem_assign(&mut self, rhs: &MyFloat) {
+//         let result = (&*self) % rhs;
+//         *self = result;
+//     }
+// }
+
+// impl RemAssign<f64> for MyFloat {
+//     fn rem_assign(&mut self, rhs: f64) {
+//         *self = std::mem::take(self) % rhs;
+//     }
+// }
+
+// // Implement Pow trait
+// impl Pow<MyFloat> for MyFloat {
+//     type Output = MyFloat;
+
+//     fn pow(self, exp: MyFloat) -> MyFloat {
+//         MyFloat(self.0.pow(exp.0))
+//     }
+// }
+
+// impl Pow<&MyFloat> for MyFloat {
+//     type Output = MyFloat;
+
+//     fn pow(self, exp: &MyFloat) -> MyFloat {
+//         MyFloat(self.0.pow(&exp.0))
+//     }
+// }
+
+// impl Pow<MyFloat> for &MyFloat {
+//     type Output = MyFloat;
+
+//     fn pow(self, exp: MyFloat) -> MyFloat {
+//         MyFloat(self.0.pow(&exp.0))
+//     }
+// }
+
+// impl Pow<&MyFloat> for &MyFloat {
+//     type Output = MyFloat;
+
+//     fn pow(self, exp: &MyFloat) -> MyFloat {
+//         MyFloat(self.0.pow(&exp.0))
+//     }
+// }
+
+// impl Pow<f64> for MyFloat {
+//     type Output = MyFloat;
+
+//     fn pow(self, exp: f64) -> MyFloat {
+//         let exp_float = MyFloat::new(exp);
+//         self.pow(exp_float)
+//     }
+// }
+
+// impl Pow<f64> for &MyFloat {
+//     type Output = MyFloat;
+
+//     fn pow(self, exp: f64) -> MyFloat {
+//         let exp_float = MyFloat::new(exp);
+//         self.pow(exp_float)
+//     }
+// }
+
+// impl Pow<i32> for MyFloat {
+//     type Output = MyFloat;
+
+//     fn pow(self, exp: i32) -> MyFloat {
+//         let exp_float = MyFloat::new(exp as f64);
+//         self.pow(exp_float)
+//     }
+// }
+
+// impl Pow<i32> for &MyFloat {
+//     type Output = MyFloat;
+
+//     fn pow(self, exp: i32) -> MyFloat {
+//         let exp_float = MyFloat::new(exp as f64);
+//         self.pow(exp_float)
+//     }
+// }
+
+// // Implement Num trait
+// impl Zero for MyFloat {
+//     fn zero() -> Self {
+//         MyFloat::new(0.0)
+//     }
+
+//     fn is_zero(&self) -> bool {
+//         self.0.is_zero()
+//     }
+// }
+
+// impl One for MyFloat {
+//     fn one() -> Self {
+//         MyFloat::new(1.0)
+//     }
+
+//     fn is_one(&self) -> bool {
+//         *self == Self::one()
+//     }
+// }
+
+// impl NegOne for MyFloat {
+//     fn neg_one() -> Self {
+//         MyFloat::new(-1.0)
+//     }
+
+//     fn is_neg_one(&self) -> bool {
+//         *self == Self::neg_one()
+//     }
+// }
+
+// impl Num for MyFloat {
+//     type FromStrRadixErr = TwoFloatError;
+
+//     fn from_str_radix(_str: &str, _radix: u32) -> Result<Self, Self::FromStrRadixErr> {
+//         Err(TwoFloatError::ParseError)
+//     }
+// }
+
+// impl Signed for MyFloat {
+//     fn abs(&self) -> Self {
+//         MyFloat(self.0.abs())
+//     }
+
+//     fn abs_sub(&self, other: &Self) -> Self {
+//         let diff = self.0 - other.0;
+//         if diff.is_sign_positive() {
+//             MyFloat(diff)
+//         } else {
+//             MyFloat::zero()
+//         }
+//     }
+
+//     fn signum(&self) -> Self {
+//         if self.0.is_zero() {
+//             MyFloat::zero()
+//         } else {
+//             MyFloat(self.0.signum())
+//         }
+//     }
+
+//     fn is_positive(&self) -> bool {
+//         !self.0.is_zero() && self.0.is_sign_positive()
+//     }
+
+//     fn is_negative(&self) -> bool {
+//         !self.0.is_zero() && self.0.is_sign_negative()
+//     }
+// }
+
+// // Implement Traits
+// impl Clone for MyFloat {
+//     fn clone(&self) -> Self {
+//         MyFloat(self.0.clone())
+//     }
+// }
+
+// impl Default for MyFloat {
+//     fn default() -> Self {
+//         MyFloat::ZERO
+//     }
+// }
+
+// impl fmt::Display for MyFloat {
+//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+//         write!(f, "{}", self.0.hi())
+//     }
+// }
+
+// // impl fmt::Debug for MyFloat {
+// //     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+// //         write!(f, "MyFloat({})", self.0)
+// //         // write!(f, "{}", self.to_f64())
+// //     }
+// // }
+
+// // Implement PartialEq for comparisons
+// impl PartialEq for MyFloat {
+//     fn eq(&self, other: &Self) -> bool {
+//         self.0 == other.0
+//     }
+// }
+
+// impl PartialEq<f64> for MyFloat {
+//     fn eq(&self, other: &f64) -> bool {
+//         self.0 == *other
+//     }
+// }
+
+// // Implement PartialOrd for ordering
+// impl PartialOrd for MyFloat {
+//     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+//         self.0.partial_cmp(&other.0)
+//     }
+// }
+
+// impl PartialOrd<f64> for MyFloat {
+//     fn partial_cmp(&self, other: &f64) -> Option<std::cmp::Ordering> {
+//         self.partial_cmp(&MyFloat::new(*other))
+//     }
+// }
+
+// // Implement Conversion
+// impl From<f64> for MyFloat {
+//     fn from(value: f64) -> Self {
+//         MyFloat::new(value)
+//     }
+// }
+
+// impl From<&f64> for MyFloat {
+//     fn from(value: &f64) -> Self {
+//         MyFloat::new(*value)
+//     }
+// }
+
+// impl From<TwoFloat> for MyFloat {
+//     fn from(value: TwoFloat) -> Self {
+//         MyFloat(value)
+//     }
+// }
+
+// impl From<&TwoFloat> for MyFloat {
+//     fn from(value: &TwoFloat) -> Self {
+//         MyFloat(value.clone())
+//     }
+// }
+
+// impl From<MyComplex> for MyFloat {
+//     fn from(value: MyComplex) -> Self {
+//         value.re()
+//     }
+// }
+
+// impl From<&MyComplex> for MyFloat {
+//     fn from(value: &MyComplex) -> Self {
+//         value.re()
+//     }
+// }
+
+// impl From<i32> for MyFloat {
+//     fn from(value: i32) -> Self {
+//         MyFloat::new(value as f64)
+//     }
+// }
+
+// impl From<u32> for MyFloat {
+//     fn from(value: u32) -> Self {
+//         MyFloat::new(value as f64)
+//     }
+// }
+
+// impl From<i64> for MyFloat {
+//     fn from(value: i64) -> Self {
+//         MyFloat::new(value as f64)
+//     }
+// }
+
+// impl From<u64> for MyFloat {
+//     fn from(value: u64) -> Self {
+//         MyFloat::new(value as f64)
+//     }
+// }
+
+// impl From<MyFloat> for f64 {
+//     fn from(value: MyFloat) -> f64 {
+//         value.to_f64()
+//     }
+// }
+
+// impl From<&MyFloat> for f64 {
+//     fn from(value: &MyFloat) -> f64 {
+//         value.to_f64()
+//     }
+// }
+
+// impl From<MyFloat> for TwoFloat {
+//     fn from(value: MyFloat) -> TwoFloat {
+//         value.to_float()
+//     }
+// }
+
+// impl From<MyFloat> for Complex64 {
+//     fn from(value: MyFloat) -> Complex64 {
+//         Complex64::new(value.to_f64(), 0.0)
+//     }
+// }
+
+// impl From<&MyFloat> for Complex64 {
+//     fn from(value: &MyFloat) -> Complex64 {
+//         Complex64::new(value.to_f64(), 0.0)
+//     }
+// }
+
+// // Implement Sum trait for iterating and summing MyFloat values
+// impl Sum for MyFloat {
+//     fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+//         iter.fold(MyFloat::zero(), |acc, x| acc + x)
+//     }
+// }
+
+// impl<'a> Sum<&'a MyFloat> for MyFloat {
+//     fn sum<I: Iterator<Item = &'a Self>>(iter: I) -> Self {
+//         iter.fold(MyFloat::zero(), |acc, x| acc + x)
+//     }
+// }
+
+// // Implement Product trait for iterating and summing MyFloat values
+// impl Product for MyFloat {
+//     fn product<I: Iterator<Item = Self>>(iter: I) -> Self {
+//         iter.fold(MyFloat::zero(), |acc, x| acc * x)
+//     }
+// }
+
+// impl<'a> Product<&'a MyFloat> for MyFloat {
+//     fn product<I: Iterator<Item = &'a Self>>(iter: I) -> Self {
+//         iter.fold(MyFloat::zero(), |acc, x| acc * x)
+//     }
+// }
+
+// // Implement Not trait (logical NOT: 0.0 -> 1.0, non-zero -> 0.0)
+// impl Not for MyFloat {
+//     type Output = Self;
+
+//     fn not(self) -> Self::Output {
+//         if self.0.is_zero() {
+//             MyFloat::one()
+//         } else {
+//             MyFloat::zero()
+//         }
+//     }
+// }
+
+// impl Not for &MyFloat {
+//     type Output = MyFloat;
+
+//     fn not(self) -> Self::Output {
+//         if self.0.is_zero() {
+//             MyFloat::one()
+//         } else {
+//             MyFloat::zero()
+//         }
+//     }
+// }
+
+impl AbsDiffEq for MyFloat {
+    type Epsilon = MyFloat;
+
+    fn default_epsilon() -> Self::Epsilon {
+        MyFloat::EPSILON
+    }
+
+    fn abs_diff_eq(&self, other: &Self, epsilon: Self::Epsilon) -> bool {
+        <MyFloat as Float>::abs(self - other) <= epsilon
     }
 }
 
-impl PartialEq<f64> for MyFloat {
-    fn eq(&self, other: &f64) -> bool {
-        self.0 == *other
+impl RelativeEq for MyFloat {
+    fn default_max_relative() -> Self::Epsilon {
+        MyFloat::EPSILON
     }
-}
 
-// Implement PartialOrd for ordering
-impl PartialOrd for MyFloat {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.0.partial_cmp(&other.0)
-    }
-}
-
-impl PartialOrd<f64> for MyFloat {
-    fn partial_cmp(&self, other: &f64) -> Option<std::cmp::Ordering> {
-        self.partial_cmp(&MyFloat::new(*other))
-    }
-}
-
-// Implement Conversion
-impl From<f64> for MyFloat {
-    fn from(value: f64) -> Self {
-        MyFloat::new(value)
-    }
-}
-
-impl From<&f64> for MyFloat {
-    fn from(value: &f64) -> Self {
-        MyFloat::new(*value)
-    }
-}
-
-impl From<TwoFloat> for MyFloat {
-    fn from(value: TwoFloat) -> Self {
-        MyFloat(value)
-    }
-}
-
-impl From<&TwoFloat> for MyFloat {
-    fn from(value: &TwoFloat) -> Self {
-        MyFloat(value.clone())
-    }
-}
-
-impl From<i32> for MyFloat {
-    fn from(value: i32) -> Self {
-        MyFloat::new(value as f64)
-    }
-}
-
-impl From<u32> for MyFloat {
-    fn from(value: u32) -> Self {
-        MyFloat::new(value as f64)
-    }
-}
-
-impl From<i64> for MyFloat {
-    fn from(value: i64) -> Self {
-        MyFloat::new(value as f64)
-    }
-}
-
-impl From<u64> for MyFloat {
-    fn from(value: u64) -> Self {
-        MyFloat::new(value as f64)
-    }
-}
-
-impl From<MyFloat> for f64 {
-    fn from(value: MyFloat) -> f64 {
-        value.to_f64()
-    }
-}
-
-impl From<&MyFloat> for f64 {
-    fn from(value: &MyFloat) -> f64 {
-        value.to_f64()
-    }
-}
-
-impl From<MyFloat> for TwoFloat {
-    fn from(value: MyFloat) -> TwoFloat {
-        value.to_float()
-    }
-}
-
-impl From<MyFloat> for Complex64 {
-    fn from(value: MyFloat) -> Complex64 {
-        Complex64::new(value.to_f64(), 0.0)
-    }
-}
-
-impl From<&MyFloat> for Complex64 {
-    fn from(value: &MyFloat) -> Complex64 {
-        Complex64::new(value.to_f64(), 0.0)
-    }
-}
-
-// Implement Sum trait for iterating and summing MyFloat values
-impl Sum for MyFloat {
-    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
-        iter.fold(MyFloat::zero(), |acc, x| acc + x)
-    }
-}
-
-impl<'a> Sum<&'a MyFloat> for MyFloat {
-    fn sum<I: Iterator<Item = &'a Self>>(iter: I) -> Self {
-        iter.fold(MyFloat::zero(), |acc, x| acc + x)
-    }
-}
-
-// Implement Product trait for iterating and summing MyFloat values
-impl Product for MyFloat {
-    fn product<I: Iterator<Item = Self>>(iter: I) -> Self {
-        iter.fold(MyFloat::zero(), |acc, x| acc * x)
-    }
-}
-
-impl<'a> Product<&'a MyFloat> for MyFloat {
-    fn product<I: Iterator<Item = &'a Self>>(iter: I) -> Self {
-        iter.fold(MyFloat::zero(), |acc, x| acc * x)
-    }
-}
-
-// Implement Not trait (logical NOT: 0.0 -> 1.0, non-zero -> 0.0)
-impl Not for MyFloat {
-    type Output = Self;
-
-    fn not(self) -> Self::Output {
-        if self.0.is_zero() {
-            MyFloat::one()
-        } else {
-            MyFloat::zero()
+    fn relative_eq(
+        &self,
+        other: &Self,
+        epsilon: Self::Epsilon,
+        max_relative: Self::Epsilon,
+    ) -> bool {
+        // Handle same infinities
+        if self == other {
+            return true;
         }
+
+        // Handle remaining infinities
+        if Self::is_infinite(*self) || Self::is_infinite(*other) {
+            return false;
+        }
+
+        let abs_diff = <Self as Float>::abs(self - other);
+
+        // For when the numbers are really close together
+        if abs_diff <= epsilon {
+            return true;
+        }
+
+        let abs_self = <Self as Float>::abs(*self);
+        let abs_other = <Self as Float>::abs(*other);
+
+        let largest = if abs_other > abs_self {
+            abs_other
+        } else {
+            abs_self
+        };
+
+        // Use a relative difference comparison
+        abs_diff <= largest * max_relative
     }
 }
 
-impl Not for &MyFloat {
-    type Output = MyFloat;
+impl UlpsEq for MyFloat {
+    fn default_max_ulps() -> u32 {
+        4
+    }
 
-    fn not(self) -> Self::Output {
-        if self.0.is_zero() {
-            MyFloat::one()
+    fn ulps_eq(&self, other: &Self, epsilon: Self::Epsilon, max_ulps: u32) -> bool {
+        // For when the numbers are really close together
+        if Self::abs_diff_eq(self, other, epsilon) {
+            return true;
+        }
+
+        // Trivial negative sign check
+        if self.signum() != other.signum() {
+            return false;
+        }
+
+        // ULPS difference comparison
+        let int_self: MyUsize = MyUsize {
+            hi: self.0.hi().to_bits(),
+            lo: self.0.lo().to_bits(),
+        };
+        let int_other: MyUsize = MyUsize {
+            hi: other.0.hi().to_bits(),
+            lo: other.0.lo().to_bits(),
+        };
+
+        // To be replaced with `abs_sub`, if
+        // https://github.com/rust-lang/rust/issues/62111 lands.
+        if int_self <= int_other {
+            int_other - int_self <= max_ulps.into()
         } else {
-            MyFloat::zero()
+            int_self - int_other <= max_ulps.into()
         }
     }
 }
@@ -1266,7 +1609,7 @@ mod myfloat_tests {
 
         // Test copysign
         let magnitude = MyFloat::new(5.0);
-        let with_neg_sign = magnitude.copysign(&negative);
+        let with_neg_sign = magnitude.copysign(negative);
         assert_eq!(with_neg_sign.to_f64(), -5.0);
     }
 
@@ -1275,20 +1618,20 @@ mod myfloat_tests {
         let a = MyFloat::new(3.0);
         let b = MyFloat::new(7.0);
 
-        let min_result = a.min(&b);
+        let min_result = a.min(b);
         assert_eq!(min_result.to_f64(), 3.0);
 
-        let max_result = a.max(&b);
+        let max_result = a.max(b);
         assert_eq!(max_result.to_f64(), 7.0);
 
         let value = MyFloat::new(10.0);
         let min_bound = MyFloat::new(2.0);
         let max_bound = MyFloat::new(8.0);
-        let clamped = value.clamp(&min_bound, &max_bound);
+        let clamped = value.clamp(min_bound, max_bound);
         assert_eq!(clamped.to_f64(), 8.0);
 
         let value2 = MyFloat::new(1.0);
-        let clamped2 = value2.clamp(&min_bound, &max_bound);
+        let clamped2 = value2.clamp(min_bound, max_bound);
         assert_eq!(clamped2.to_f64(), 2.0);
     }
 
@@ -1342,19 +1685,19 @@ mod myfloat_tests {
     #[test]
     fn test_conversions() {
         // Test From implementations
-        let from_f64 = MyFloat::from(3.14);
+        let from_f64 = <MyFloat as From<f64>>::from(3.14);
         assert!((from_f64.to_f64() - 3.14).abs() < 1e-10);
 
-        let from_i32 = MyFloat::from(42i32);
+        let from_i32 = <MyFloat as From<i32>>::from(42i32);
         assert_eq!(from_i32.to_f64(), 42.0);
 
-        let from_u32 = MyFloat::from(42u32);
+        let from_u32 = <MyFloat as From<u32>>::from(42u32);
         assert_eq!(from_u32.to_f64(), 42.0);
 
-        let from_i64 = MyFloat::from(42i64);
+        let from_i64 = <MyFloat as From<i64>>::from(42i64);
         assert_eq!(from_i64.to_f64(), 42.0);
 
-        let from_u64 = MyFloat::from(42u64);
+        let from_u64 = <MyFloat as From<u64>>::from(42u64);
         assert_eq!(from_u64.to_f64(), 42.0);
 
         // Test Into f64
@@ -1409,7 +1752,7 @@ mod myfloat_tests {
         let y = MyFloat::new(1.0);
         let x = MyFloat::new(1.0);
 
-        let atan2_result = y.atan2(&x);
+        let atan2_result = y.atan2(x);
         assert!((atan2_result.to_f64() - std::f64::consts::PI / 4.0).abs() < 1e-10);
     }
 
@@ -1495,12 +1838,12 @@ mod myfloat_tests {
         // Test abs_sub
         let a = MyFloat::new(10.0);
         let b = MyFloat::new(3.0);
-        let abs_sub_result = a.abs_sub(&b);
+        let abs_sub_result = a.abs_sub(b);
         assert_eq!(abs_sub_result.to_f64(), 7.0);
 
         let c = MyFloat::new(2.0);
         let d = MyFloat::new(8.0);
-        let abs_sub_result2 = c.abs_sub(&d);
+        let abs_sub_result2 = c.abs_sub(d);
         assert_eq!(abs_sub_result2.to_f64(), 0.0);
     }
 }

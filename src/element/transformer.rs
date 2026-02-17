@@ -2,7 +2,6 @@ use crate::{
     element::{Elem, ElemType, Q},
     frequency::{FreqArray, Frequency, new_frequency},
     network::NetworkPoint,
-    point,
     pts::{Points, Pts},
     scale::Scale,
     unit::{Unit, UnitValue},
@@ -176,8 +175,7 @@ impl Default for Transformer {
             q1: None,
             q2: None,
             nodes: [1, 2],
-            c: point![
-                Complex64,
+            c: points![
                 [c64(0.0, 0.0), c64(1.0, 0.0)],
                 [c64(1.0, 0.0), c64(0.0, 0.0)]
             ],
@@ -451,8 +449,7 @@ impl IdealTransformer {
             id,
             n,
             nodes,
-            c: point![
-                Complex64,
+            c: points![
                 [
                     c64((1.0 - n.powi(2)) / (1.0 + n.powi(2)), 0.0),
                     c64(2.0 * n / (1.0 + n.powi(2)), 0.0)
@@ -485,8 +482,7 @@ impl Default for IdealTransformer {
             id: "C0".to_string(),
             n: 1.0,
             nodes: [1, 2],
-            c: point![
-                Complex64,
+            c: points![
                 [c64(0.0, 0.0), c64(1.0, 0.0)],
                 [c64(1.0, 0.0), c64(0.0, 0.0)]
             ],
@@ -589,8 +585,7 @@ impl IdealTransformerBuilder {
             id: self.id,
             n: self.n,
             nodes: self.nodes,
-            c: point![
-                Complex64,
+            c: points![
                 [
                     c64((1.0 - self.n.powi(2)) / (1.0 + self.n.powi(2)), 0.0),
                     c64(2.0 * self.n / (1.0 + self.n.powi(2)), 0.0)
@@ -622,17 +617,18 @@ mod element_transformer_tests {
     use crate::{
         scale::Scale,
         unit::UnitValBuilder,
-        util::{comp_num, comp_pts_ix2},
+        util::{ApproxEq, NumMargin, comp_pts_ix2},
     };
-    use float_cmp::*;
 
-    const DEFAULT_MARGIN: F64Margin = F64Margin {
+    const DEFAULT_MARGIN: NumMargin<f64> = NumMargin {
         epsilon: 1e-10,
+        relative: 1e-10,
         ulps: 4,
     };
 
-    const RELAXED_MARGIN: F64Margin = F64Margin {
+    const RELAXED_MARGIN: NumMargin<f64> = NumMargin {
         epsilon: 1e-6,
+        relative: 1e-6,
         ulps: 10,
     };
 
@@ -652,18 +648,18 @@ mod element_transformer_tests {
             .nodes([1, 2])
             .id("T1")
             .build();
-        let margin = F64Margin::default();
+        let margin = NumMargin::default();
 
         // Verify basic properties
         assert_eq!(&calc.id(), "T1");
         assert_eq!(calc.nodes(), vec![1, 2]);
-        assert!(approx_eq!(f64, calc.n(), n, margin));
-        assert!(approx_eq!(f64, calc.km(), km, margin));
-        assert!(approx_eq!(f64, calc.l1(), 5e-12, margin));
+        calc.n().assert_approx_eq(n, margin, "n", "");
+        calc.km().assert_approx_eq(km, margin, "km", "");
+        calc.l1().assert_approx_eq(5e-12, margin, "l1", "");
 
         // Verify impedance ratio (z = n^2)
         let exemplar_z = c64(n.powi(2), 0.0);
-        comp_num(&exemplar_z, &calc.z(&freq), margin, "calc.z()", "0");
+        exemplar_z.assert_approx_eq(calc.z(&freq), margin, "calc.z()", "0");
 
         // Verify c matrix has valid structure
         let c = calc.c(&freq);
@@ -671,8 +667,7 @@ mod element_transformer_tests {
         assert!(c[[0, 0]].is_finite());
         assert!(c[[1, 1]].is_finite());
         // S12 should equal S21 for reciprocal network
-        assert!(approx_eq!(f64, c[[0, 1]].re, c[[1, 0]].re, margin));
-        assert!(approx_eq!(f64, c[[0, 1]].im, c[[1, 0]].im, margin));
+        c[[0, 1]].assert_approx_eq(c[[1, 0]], margin, "c", "[0,1]");
     }
 
     #[test]
@@ -684,8 +679,7 @@ mod element_transformer_tests {
             id: "T1".to_string(),
             n: val,
             nodes: [1, 2],
-            c: point![
-                Complex64,
+            c: points![
                 [c64(0.0, 0.0), c64(1.0, 0.0)],
                 [c64(1.0, 0.0), c64(0.0, 0.0)]
             ],
@@ -697,11 +691,11 @@ mod element_transformer_tests {
             .nodes([1, 2])
             .id("T1")
             .build();
-        let margin = F64Margin::default();
+        let margin = NumMargin::default();
 
         assert_eq!(&exemplar.id(), &calc.id());
         comp_pts_ix2(&exemplar.c(&freq), &calc.c(&freq), margin, "calc.c()");
-        comp_num(&exemplar_z, &calc.z(&freq), margin, "calc.z()", "0");
+        exemplar_z.assert_approx_eq(calc.z(&freq), margin, "calc.z()", "0");
     }
 
     mod transformer_tests {
@@ -766,8 +760,16 @@ mod element_transformer_tests {
             let z = n.z(&freq);
             let expected_z = c64(1.0, 0.0);
 
-            assert!(approx_eq!(f64, z.re, expected_z.re, epsilon = 1e-6));
-            assert!(approx_eq!(f64, z.im, expected_z.im, epsilon = 1e-6));
+            z.re.assert_approx_eq(
+                expected_z.re,
+                NumMargin {
+                    epsilon: 1e-6,
+                    relative: 1e-6,
+                    ulps: 4,
+                },
+                "z",
+                "",
+            );
         }
 
         #[test]
@@ -790,12 +792,12 @@ mod element_transformer_tests {
             assert!(c_matrix[[0, 1]].is_finite());
             assert!(c_matrix[[1, 0]].is_finite());
             // S12 should equal S21 for a reciprocal network
-            assert!(approx_eq!(
-                f64,
-                c_matrix[[0, 1]].re,
+            c_matrix[[0, 1]].re.assert_approx_eq(
                 c_matrix[[1, 0]].re,
-                DEFAULT_MARGIN
-            ));
+                DEFAULT_MARGIN,
+                "c_matrix",
+                "[0,1]",
+            );
         }
 
         #[test]
@@ -815,8 +817,7 @@ mod element_transformer_tests {
             for i in 0..freqs.len() {
                 let z = n.z_at(&freq, i);
                 let expected = c64(1.0, 0.0);
-                assert!(approx_eq!(f64, z.re, expected.re, RELAXED_MARGIN));
-                assert!(approx_eq!(f64, z.im, expected.im, RELAXED_MARGIN));
+                z.assert_approx_eq(expected, RELAXED_MARGIN, "z", "");
             }
         }
 
@@ -885,12 +886,12 @@ mod element_transformer_tests {
                 assert!(net[[i, 0, 1]].is_finite());
                 assert!(net[[i, 1, 0]].is_finite());
                 // S12 should equal S21 for a reciprocal network
-                assert!(approx_eq!(
-                    f64,
-                    net[[i, 0, 1]].re,
+                net[[i, 0, 1]].re.assert_approx_eq(
                     net[[i, 1, 0]].re,
-                    DEFAULT_MARGIN
-                ));
+                    DEFAULT_MARGIN,
+                    "net",
+                    format!("[{i},0,1]").as_str(),
+                );
             }
         }
     }
@@ -927,8 +928,16 @@ mod element_transformer_tests {
             let z = n.z(&freq);
             let expected_z = c64(1.0, 0.0);
 
-            assert!(approx_eq!(f64, z.re, expected_z.re, epsilon = 1e-6));
-            assert!(approx_eq!(f64, z.im, expected_z.im, epsilon = 1e-6));
+            z.assert_approx_eq(
+                expected_z,
+                NumMargin {
+                    epsilon: 1e-6,
+                    relative: 1e-6,
+                    ulps: 4,
+                },
+                "z",
+                "",
+            );
         }
 
         #[test]
@@ -938,10 +947,18 @@ mod element_transformer_tests {
             let c_matrix = n.c(&freq);
 
             // Check diagonal and off-diagonal elements
-            assert!(approx_eq!(f64, c_matrix[[0, 0]].re, 0.0, DEFAULT_MARGIN));
-            assert!(approx_eq!(f64, c_matrix[[1, 1]].re, 0.0, DEFAULT_MARGIN));
-            assert!(approx_eq!(f64, c_matrix[[0, 1]].re, 1.0, DEFAULT_MARGIN));
-            assert!(approx_eq!(f64, c_matrix[[1, 0]].re, 1.0, DEFAULT_MARGIN));
+            c_matrix[[0, 0]]
+                .re
+                .assert_approx_eq(0.0, DEFAULT_MARGIN, "c_matrix", "[0,0]");
+            c_matrix[[1, 1]]
+                .re
+                .assert_approx_eq(0.0, DEFAULT_MARGIN, "c_matrix", "[1,1]");
+            c_matrix[[0, 1]]
+                .re
+                .assert_approx_eq(1.0, DEFAULT_MARGIN, "c_matrix", "[0,1]");
+            c_matrix[[1, 0]]
+                .re
+                .assert_approx_eq(1.0, DEFAULT_MARGIN, "c_matrix", "[1,0]");
         }
 
         #[test]
@@ -953,8 +970,7 @@ mod element_transformer_tests {
             for i in 0..freqs.len() {
                 let z = n.z_at(&freq, i);
                 let expected = c64(1.0, 0.0);
-                assert!(approx_eq!(f64, z.re, expected.re, RELAXED_MARGIN));
-                assert!(approx_eq!(f64, z.im, expected.im, RELAXED_MARGIN));
+                z.assert_approx_eq(expected, RELAXED_MARGIN, "z", "");
             }
         }
 
@@ -992,9 +1008,24 @@ mod element_transformer_tests {
 
             // Check structure is consistent across frequencies
             for i in 0..2 {
-                assert!(approx_eq!(f64, net[[i, 0, 0]].re, 0.0, DEFAULT_MARGIN));
-                assert!(approx_eq!(f64, net[[i, 1, 1]].re, 0.0, DEFAULT_MARGIN));
-                assert!(approx_eq!(f64, net[[i, 0, 1]].re, 1.0, DEFAULT_MARGIN));
+                net[[i, 0, 0]].re.assert_approx_eq(
+                    0.0,
+                    DEFAULT_MARGIN,
+                    "net",
+                    format!("[{i},0,0]").as_str(),
+                );
+                net[[i, 1, 1]].re.assert_approx_eq(
+                    0.0,
+                    DEFAULT_MARGIN,
+                    "net",
+                    format!("[{i},1,1]").as_str(),
+                );
+                net[[i, 0, 1]].re.assert_approx_eq(
+                    1.0,
+                    DEFAULT_MARGIN,
+                    "net",
+                    format!("[{i},0,1]").as_str(),
+                );
             }
         }
     }
@@ -1035,8 +1066,8 @@ mod element_transformer_tests {
             );
 
             assert_eq!(t.id(), "T_direct");
-            assert!(approx_eq!(f64, t.km(), 0.9, DEFAULT_MARGIN));
-            assert!(approx_eq!(f64, t.n(), 1.0, DEFAULT_MARGIN)); // sqrt(l1/l2) = 1
+            t.km().assert_approx_eq(0.9, DEFAULT_MARGIN, "km", "");
+            t.n().assert_approx_eq(1.0, DEFAULT_MARGIN, "n", ""); // sqrt(l1/l2) = 1
             assert_eq!(t.nodes(), vec![1, 2]);
         }
 
@@ -1044,8 +1075,8 @@ mod element_transformer_tests {
         fn test_transformer_default() {
             let t = Transformer::default();
             assert_eq!(t.id(), "C0");
-            assert!(approx_eq!(f64, t.n(), 1.0, DEFAULT_MARGIN));
-            assert!(approx_eq!(f64, t.km(), 1.0, DEFAULT_MARGIN));
+            t.n().assert_approx_eq(1.0, DEFAULT_MARGIN, "n", "");
+            t.km().assert_approx_eq(1.0, DEFAULT_MARGIN, "km", "");
             assert_eq!(t.nodes(), vec![1, 2]);
             assert_eq!(t.z0(), c64(50.0, 0.0));
         }
@@ -1070,7 +1101,7 @@ mod element_transformer_tests {
             );
 
             // n = sqrt(100/25) = sqrt(4) = 2
-            assert!(approx_eq!(f64, t.n(), 2.0, DEFAULT_MARGIN));
+            t.n().assert_approx_eq(2.0, DEFAULT_MARGIN, "n", "");
         }
 
         #[test]
@@ -1087,7 +1118,7 @@ mod element_transformer_tests {
                 .build();
 
             let expected_m = km * l1.val();
-            assert!(approx_eq!(f64, t.m(), expected_m, DEFAULT_MARGIN));
+            t.m().assert_approx_eq(expected_m, DEFAULT_MARGIN, "m", "");
         }
 
         #[test]
@@ -1101,8 +1132,9 @@ mod element_transformer_tests {
                 .km(Some(0.9))
                 .build();
 
-            assert!(approx_eq!(f64, t.l1(), 5e-12, DEFAULT_MARGIN));
-            assert!(approx_eq!(f64, t.l1_scaled(), 5.0, DEFAULT_MARGIN));
+            t.l1().assert_approx_eq(5e-12, DEFAULT_MARGIN, "l1", "");
+            t.l1_scaled()
+                .assert_approx_eq(5.0, DEFAULT_MARGIN, "l1_scaled", "");
         }
 
         #[test]
@@ -1123,8 +1155,9 @@ mod element_transformer_tests {
                 c64(50.0, 0.0),
             );
 
-            assert!(approx_eq!(f64, t.l2(), l2.val(), DEFAULT_MARGIN));
-            assert!(approx_eq!(f64, t.l2_scaled(), 2.5, DEFAULT_MARGIN));
+            t.l2().assert_approx_eq(l2.val(), DEFAULT_MARGIN, "l2", "");
+            t.l2_scaled()
+                .assert_approx_eq(2.5, DEFAULT_MARGIN, "l2_scaled", "");
         }
 
         #[test]
@@ -1144,8 +1177,14 @@ mod element_transformer_tests {
 
             assert!(t.q1().is_some());
             assert!(t.q2().is_some());
-            assert!(approx_eq!(f64, t.q1().unwrap().q(), 100.0, DEFAULT_MARGIN));
-            assert!(approx_eq!(f64, t.q2().unwrap().q(), 150.0, DEFAULT_MARGIN));
+            t.q1()
+                .unwrap()
+                .q()
+                .assert_approx_eq(100.0, DEFAULT_MARGIN, "q1", "");
+            t.q2()
+                .unwrap()
+                .q()
+                .assert_approx_eq(150.0, DEFAULT_MARGIN, "q2", "");
         }
 
         #[test]
@@ -1177,7 +1216,7 @@ mod element_transformer_tests {
                 .build();
 
             t.set_km(0.95);
-            assert!(approx_eq!(f64, t.km(), 0.95, DEFAULT_MARGIN));
+            t.km().assert_approx_eq(0.95, DEFAULT_MARGIN, "km", "");
         }
 
         #[test]
@@ -1192,7 +1231,7 @@ mod element_transformer_tests {
 
             let new_l1 = UnitValue::new(20e-9, Scale::Nano, Unit::Henry);
             t.set_l1(new_l1);
-            assert!(approx_eq!(f64, t.l1(), 20e-9, DEFAULT_MARGIN));
+            t.l1().assert_approx_eq(20e-9, DEFAULT_MARGIN, "l1", "");
         }
 
         #[test]
@@ -1206,7 +1245,7 @@ mod element_transformer_tests {
                 .build();
 
             t.set_l1_val(15e-9);
-            assert!(approx_eq!(f64, t.l1(), 15e-9, DEFAULT_MARGIN));
+            t.l1().assert_approx_eq(15e-9, DEFAULT_MARGIN, "l1", "");
         }
 
         #[test]
@@ -1220,7 +1259,8 @@ mod element_transformer_tests {
                 .build();
 
             t.set_l1_val_scaled(25.0);
-            assert!(approx_eq!(f64, t.l1_scaled(), 25.0, DEFAULT_MARGIN));
+            t.l1_scaled()
+                .assert_approx_eq(25.0, DEFAULT_MARGIN, "l1_scaled", "");
         }
 
         #[test]
@@ -1235,7 +1275,7 @@ mod element_transformer_tests {
 
             let new_l2 = UnitValue::new(5e-9, Scale::Nano, Unit::Henry);
             t.set_l2(new_l2);
-            assert!(approx_eq!(f64, t.l2(), 5e-9, DEFAULT_MARGIN));
+            t.l2().assert_approx_eq(5e-9, DEFAULT_MARGIN, "l2", "");
         }
 
         #[test]
@@ -1249,7 +1289,7 @@ mod element_transformer_tests {
                 .build();
 
             t.set_l2_val(8e-9);
-            assert!(approx_eq!(f64, t.l2(), 8e-9, DEFAULT_MARGIN));
+            t.l2().assert_approx_eq(8e-9, DEFAULT_MARGIN, "l2", "");
         }
 
         #[test]
@@ -1263,7 +1303,8 @@ mod element_transformer_tests {
                 .build();
 
             t.set_l2_val_scaled(12.0);
-            assert!(approx_eq!(f64, t.l2_scaled(), 12.0, DEFAULT_MARGIN));
+            t.l2_scaled()
+                .assert_approx_eq(12.0, DEFAULT_MARGIN, "l2_scaled", "");
         }
 
         #[test]
@@ -1280,7 +1321,10 @@ mod element_transformer_tests {
             t.set_q1(q);
 
             assert!(t.q1().is_some());
-            assert!(approx_eq!(f64, t.q1().unwrap().q(), 200.0, DEFAULT_MARGIN));
+            t.q1()
+                .unwrap()
+                .q()
+                .assert_approx_eq(200.0, DEFAULT_MARGIN, "q1", "");
         }
 
         #[test]
@@ -1297,7 +1341,10 @@ mod element_transformer_tests {
             t.set_q2(q);
 
             assert!(t.q2().is_some());
-            assert!(approx_eq!(f64, t.q2().unwrap().q(), 250.0, DEFAULT_MARGIN));
+            t.q2()
+                .unwrap()
+                .q()
+                .assert_approx_eq(250.0, DEFAULT_MARGIN, "q2", "");
         }
 
         #[test]
@@ -1352,10 +1399,10 @@ mod element_transformer_tests {
                 .build();
 
             assert_eq!(t.id(), "T_test");
-            assert!(approx_eq!(f64, t.n(), 2.0, DEFAULT_MARGIN));
-            assert!(approx_eq!(f64, t.km(), 0.9, DEFAULT_MARGIN));
+            t.n().assert_approx_eq(2.0, DEFAULT_MARGIN, "n", "");
+            t.km().assert_approx_eq(0.9, DEFAULT_MARGIN, "km", "");
             // l2 = l1 / n^2 = 10e-9 / 4 = 2.5e-9
-            assert!(approx_eq!(f64, t.l2(), 2.5e-9, DEFAULT_MARGIN));
+            t.l2().assert_approx_eq(2.5e-9, DEFAULT_MARGIN, "l2", "");
             assert_eq!(t.nodes(), vec![1, 3]);
         }
 
@@ -1371,8 +1418,8 @@ mod element_transformer_tests {
 
             // n = sqrt(l1/l2) = sqrt(10/5) = sqrt(2)
             let expected_n = (10.0 / 5.0_f64).sqrt();
-            assert!(approx_eq!(f64, t.n(), expected_n, DEFAULT_MARGIN));
-            assert!(approx_eq!(f64, t.l2(), 5e-9, DEFAULT_MARGIN));
+            t.n().assert_approx_eq(expected_n, DEFAULT_MARGIN, "n", "");
+            t.l2().assert_approx_eq(5e-9, DEFAULT_MARGIN, "l2", "");
         }
 
         #[test]
@@ -1390,7 +1437,8 @@ mod element_transformer_tests {
                 .m_val(m_val)
                 .build();
 
-            assert!(approx_eq!(f64, t.km(), expected_km, DEFAULT_MARGIN));
+            t.km()
+                .assert_approx_eq(expected_km, DEFAULT_MARGIN, "km", "");
         }
 
         #[test]
@@ -1408,7 +1456,8 @@ mod element_transformer_tests {
                 .m_val_scaled(m_scaled, Scale::Nano)
                 .build();
 
-            assert!(approx_eq!(f64, t.km(), expected_km, DEFAULT_MARGIN));
+            t.km()
+                .assert_approx_eq(expected_km, DEFAULT_MARGIN, "km", "");
         }
 
         #[test]
@@ -1421,7 +1470,7 @@ mod element_transformer_tests {
                 .km(Some(0.9))
                 .build();
 
-            assert!(approx_eq!(f64, t.l1(), 15e-9, DEFAULT_MARGIN));
+            t.l1().assert_approx_eq(15e-9, DEFAULT_MARGIN, "l1", "");
         }
 
         #[test]
@@ -1434,7 +1483,7 @@ mod element_transformer_tests {
                 .km(Some(0.9))
                 .build();
 
-            assert!(approx_eq!(f64, t.l2(), 5e-9, DEFAULT_MARGIN));
+            t.l2().assert_approx_eq(5e-9, DEFAULT_MARGIN, "l2", "");
         }
 
         #[test]
@@ -1559,8 +1608,7 @@ mod element_transformer_tests {
 
             let z = t.z(&freq);
             // z = n^2
-            assert!(approx_eq!(f64, z.re, n.powi(2), DEFAULT_MARGIN));
-            assert!(approx_eq!(f64, z.im, 0.0, DEFAULT_MARGIN));
+            z.assert_approx_eq(c64(n.powi(2), 0.0), DEFAULT_MARGIN, "z", "");
         }
 
         #[test]
@@ -1576,7 +1624,7 @@ mod element_transformer_tests {
 
             for i in 0..3 {
                 let z = t.z_at(&freq, i);
-                assert!(approx_eq!(f64, z.re, n.powi(2), DEFAULT_MARGIN));
+                z.re.assert_approx_eq(n.powi(2), DEFAULT_MARGIN, "z.re", format!("({i})").as_str());
             }
         }
 
@@ -1613,8 +1661,12 @@ mod element_transformer_tests {
                 for k in 0..2 {
                     let c_at = t.c_at(&freq, j, k);
                     // c_at should match corresponding element in c matrix
-                    assert!(approx_eq!(f64, c_at.re, c[[j, k]].re, DEFAULT_MARGIN));
-                    assert!(approx_eq!(f64, c_at.im, c[[j, k]].im, DEFAULT_MARGIN));
+                    c_at.assert_approx_eq(
+                        c[[j, k]],
+                        DEFAULT_MARGIN,
+                        "c_at",
+                        format!("[{j},{k}]").as_str(),
+                    );
                 }
             }
         }
@@ -1653,7 +1705,7 @@ mod element_transformer_tests {
                     .build();
 
                 let z = t.z(&freq);
-                assert!(approx_eq!(f64, z.re, n.powi(2), DEFAULT_MARGIN));
+                z.re.assert_approx_eq(n.powi(2), DEFAULT_MARGIN, "z.re", "");
             }
         }
 
@@ -1671,7 +1723,7 @@ mod element_transformer_tests {
                     .km(Some(km))
                     .build();
 
-                assert!(approx_eq!(f64, t.km(), km, DEFAULT_MARGIN));
+                t.km().assert_approx_eq(km, DEFAULT_MARGIN, "km", "");
             }
         }
 
@@ -1693,9 +1745,9 @@ mod element_transformer_tests {
             let t2 = t1.clone();
 
             assert_eq!(t1.id(), t2.id());
-            assert!(approx_eq!(f64, t1.n(), t2.n(), DEFAULT_MARGIN));
-            assert!(approx_eq!(f64, t1.km(), t2.km(), DEFAULT_MARGIN));
-            assert!(approx_eq!(f64, t1.l1(), t2.l1(), DEFAULT_MARGIN));
+            t1.n().assert_approx_eq(t2.n(), DEFAULT_MARGIN, "n", "");
+            t1.km().assert_approx_eq(t2.km(), DEFAULT_MARGIN, "km", "");
+            t1.l1().assert_approx_eq(t2.l1(), DEFAULT_MARGIN, "l1", "");
         }
 
         #[test]
@@ -1769,7 +1821,7 @@ mod element_transformer_tests {
             let t = IdealTransformer::new("IT_direct".to_string(), 2.0, [1, 2], c64(50.0, 0.0));
 
             assert_eq!(t.id(), "IT_direct");
-            assert!(approx_eq!(f64, t.val(), 2.0, DEFAULT_MARGIN));
+            t.val().assert_approx_eq(2.0, DEFAULT_MARGIN, "t", "");
             assert_eq!(t.nodes(), vec![1, 2]);
             assert_eq!(t.z0(), c64(50.0, 0.0));
         }
@@ -1778,7 +1830,7 @@ mod element_transformer_tests {
         fn test_ideal_transformer_default() {
             let t = IdealTransformer::default();
             assert_eq!(t.id(), "C0");
-            assert!(approx_eq!(f64, t.val(), 1.0, DEFAULT_MARGIN));
+            t.val().assert_approx_eq(1.0, DEFAULT_MARGIN, "t", "");
             assert_eq!(t.nodes(), vec![1, 2]);
             assert_eq!(t.z0(), c64(50.0, 0.0));
         }
@@ -1787,7 +1839,7 @@ mod element_transformer_tests {
         fn test_ideal_transformer_set_val() {
             let mut t = IdealTransformer::default();
             t.set_val(5.0);
-            assert!(approx_eq!(f64, t.val(), 5.0, DEFAULT_MARGIN));
+            t.val().assert_approx_eq(5.0, DEFAULT_MARGIN, "t", "");
         }
 
         #[test]
@@ -1809,16 +1861,14 @@ mod element_transformer_tests {
             let c = t.c(&freq);
 
             // S11 = (1-n^2)/(1+n^2) = 0 when n=1
-            assert!(approx_eq!(f64, c[[0, 0]].re, 0.0, DEFAULT_MARGIN));
-            assert!(approx_eq!(f64, c[[0, 0]].im, 0.0, DEFAULT_MARGIN));
+            c[[0, 0]].assert_approx_eq(c64(0.0, 0.0), DEFAULT_MARGIN, "c", "[0,0]");
 
             // S22 = (n^2-1)/(1+n^2) = 0 when n=1
-            assert!(approx_eq!(f64, c[[1, 1]].re, 0.0, DEFAULT_MARGIN));
-            assert!(approx_eq!(f64, c[[1, 1]].im, 0.0, DEFAULT_MARGIN));
+            c[[1, 1]].assert_approx_eq(c64(0.0, 0.0), DEFAULT_MARGIN, "c", "[1,1]");
 
             // S12 = S21 = 2n/(1+n^2) = 1 when n=1
-            assert!(approx_eq!(f64, c[[0, 1]].re, 1.0, DEFAULT_MARGIN));
-            assert!(approx_eq!(f64, c[[1, 0]].re, 1.0, DEFAULT_MARGIN));
+            c[[0, 1]].assert_approx_eq(c64(1.0, 0.0), DEFAULT_MARGIN, "c", "[0,1]");
+            c[[1, 0]].assert_approx_eq(c64(1.0, 0.0), DEFAULT_MARGIN, "c", "[1,0]");
         }
 
         #[test]
@@ -1831,10 +1881,18 @@ mod element_transformer_tests {
 
             let c = t.c(&freq);
 
-            assert!(approx_eq!(f64, c[[0, 0]].re, -0.6, DEFAULT_MARGIN));
-            assert!(approx_eq!(f64, c[[1, 1]].re, 0.6, DEFAULT_MARGIN));
-            assert!(approx_eq!(f64, c[[0, 1]].re, 0.8, DEFAULT_MARGIN));
-            assert!(approx_eq!(f64, c[[1, 0]].re, 0.8, DEFAULT_MARGIN));
+            c[[0, 0]]
+                .re
+                .assert_approx_eq(-0.6, DEFAULT_MARGIN, "c.re", "[0,0]");
+            c[[1, 1]]
+                .re
+                .assert_approx_eq(0.6, DEFAULT_MARGIN, "c.re", "[1,1]");
+            c[[0, 1]]
+                .re
+                .assert_approx_eq(0.8, DEFAULT_MARGIN, "c.re", "[0,1]");
+            c[[1, 0]]
+                .re
+                .assert_approx_eq(0.8, DEFAULT_MARGIN, "c.re", "[1,0]");
         }
 
         #[test]
@@ -1848,10 +1906,18 @@ mod element_transformer_tests {
 
             let c = t.c(&freq);
 
-            assert!(approx_eq!(f64, c[[0, 0]].re, 0.6, DEFAULT_MARGIN));
-            assert!(approx_eq!(f64, c[[1, 1]].re, -0.6, DEFAULT_MARGIN));
-            assert!(approx_eq!(f64, c[[0, 1]].re, 0.8, DEFAULT_MARGIN));
-            assert!(approx_eq!(f64, c[[1, 0]].re, 0.8, DEFAULT_MARGIN));
+            c[[0, 0]]
+                .re
+                .assert_approx_eq(0.6, DEFAULT_MARGIN, "c.re", "[0,0]");
+            c[[1, 1]]
+                .re
+                .assert_approx_eq(-0.6, DEFAULT_MARGIN, "c.re", "[1,1]");
+            c[[0, 1]]
+                .re
+                .assert_approx_eq(0.8, DEFAULT_MARGIN, "c.re", "[0,1]");
+            c[[1, 0]]
+                .re
+                .assert_approx_eq(0.8, DEFAULT_MARGIN, "c.re", "[1,0]");
         }
 
         #[test]
@@ -1878,11 +1944,11 @@ mod element_transformer_tests {
 
             for j in 0..2 {
                 for k in 0..2 {
-                    assert!(
-                        approx_eq!(f64, c[[j, k]].im, 0.0, DEFAULT_MARGIN),
-                        "S[{},{}] imaginary part should be 0",
-                        j,
-                        k
+                    c[[j, k]].im.assert_approx_eq(
+                        0.0,
+                        DEFAULT_MARGIN,
+                        format!("S[{j},{k}] imaginary part should be 0").as_str(),
+                        "",
                     );
                 }
             }
@@ -1898,7 +1964,7 @@ mod element_transformer_tests {
             let t = builder.build();
 
             assert_eq!(t.id(), "T0");
-            assert!(approx_eq!(f64, t.val(), 1.0, DEFAULT_MARGIN));
+            t.val().assert_approx_eq(1.0, DEFAULT_MARGIN, "t", "");
         }
 
         #[test]
@@ -1912,14 +1978,14 @@ mod element_transformer_tests {
         fn test_ideal_transformer_builder_n() {
             let t = IdealTransformerBuilder::new().n(3.0).build();
 
-            assert!(approx_eq!(f64, t.val(), 3.0, DEFAULT_MARGIN));
+            t.val().assert_approx_eq(3.0, DEFAULT_MARGIN, "t", "");
         }
 
         #[test]
         fn test_ideal_transformer_builder_val() {
             let t = IdealTransformerBuilder::new().val(4.0).build();
 
-            assert!(approx_eq!(f64, t.val(), 4.0, DEFAULT_MARGIN));
+            t.val().assert_approx_eq(4.0, DEFAULT_MARGIN, "t", "");
         }
 
         #[test]
@@ -1946,7 +2012,7 @@ mod element_transformer_tests {
                 .build();
 
             assert_eq!(t.id(), "IT_chain");
-            assert!(approx_eq!(f64, t.val(), 2.5, DEFAULT_MARGIN));
+            t.val().assert_approx_eq(2.5, DEFAULT_MARGIN, "t", "");
             assert_eq!(t.nodes(), vec![3, 7]);
             assert_eq!(t.z0(), c64(100.0, 0.0));
         }
@@ -1957,7 +2023,7 @@ mod element_transformer_tests {
             let t = builder.build();
 
             assert_eq!(t.id(), "T0");
-            assert!(approx_eq!(f64, t.val(), 1.0, DEFAULT_MARGIN));
+            t.val().assert_approx_eq(1.0, DEFAULT_MARGIN, "t", "");
             assert_eq!(t.nodes(), vec![1, 2]);
             assert_eq!(t.z0(), c64(50.0, 0.0));
         }
@@ -1972,7 +2038,8 @@ mod element_transformer_tests {
             let t2 = builder2.build();
 
             assert_eq!(t1.id(), t2.id());
-            assert!(approx_eq!(f64, t1.val(), t2.val(), DEFAULT_MARGIN));
+            t1.val()
+                .assert_approx_eq(t2.val(), DEFAULT_MARGIN, "t1", "");
         }
 
         // ----------------------------------------------------------
@@ -2023,8 +2090,7 @@ mod element_transformer_tests {
 
             let z = t.z(&freq);
             // z = n^2
-            assert!(approx_eq!(f64, z.re, n.powi(2), DEFAULT_MARGIN));
-            assert!(approx_eq!(f64, z.im, 0.0, DEFAULT_MARGIN));
+            z.assert_approx_eq(c64(n.powi(2), 0.0), DEFAULT_MARGIN, "z", "");
         }
 
         #[test]
@@ -2035,7 +2101,7 @@ mod element_transformer_tests {
 
             for i in 0..3 {
                 let z = t.z_at(&freq, i);
-                assert!(approx_eq!(f64, z.re, n.powi(2), DEFAULT_MARGIN));
+                z.re.assert_approx_eq(n.powi(2), DEFAULT_MARGIN, "z", format!("[{i}]").as_str());
             }
         }
 
@@ -2076,30 +2142,30 @@ mod element_transformer_tests {
             let expected_s12 = 2.0 * n / (1.0 + n.powi(2));
 
             for i in 0..3 {
-                assert!(approx_eq!(
-                    f64,
-                    net[[i, 0, 0]].re,
+                net[[i, 0, 0]].re.assert_approx_eq(
                     expected_s11,
-                    DEFAULT_MARGIN
-                ));
-                assert!(approx_eq!(
-                    f64,
-                    net[[i, 1, 1]].re,
+                    DEFAULT_MARGIN,
+                    "net",
+                    format!("[{i},0,0]").as_str(),
+                );
+                net[[i, 1, 1]].re.assert_approx_eq(
                     expected_s22,
-                    DEFAULT_MARGIN
-                ));
-                assert!(approx_eq!(
-                    f64,
-                    net[[i, 0, 1]].re,
+                    DEFAULT_MARGIN,
+                    "net",
+                    format!("[{i},1,1]").as_str(),
+                );
+                net[[i, 0, 1]].re.assert_approx_eq(
                     expected_s12,
-                    DEFAULT_MARGIN
-                ));
-                assert!(approx_eq!(
-                    f64,
-                    net[[i, 1, 0]].re,
+                    DEFAULT_MARGIN,
+                    "net",
+                    format!("[{i},0,1]").as_str(),
+                );
+                net[[i, 1, 0]].re.assert_approx_eq(
                     expected_s12,
-                    DEFAULT_MARGIN
-                ));
+                    DEFAULT_MARGIN,
+                    "net",
+                    format!("[{i},1,0]").as_str(),
+                );
             }
         }
 
@@ -2117,10 +2183,11 @@ mod element_transformer_tests {
                 let t = IdealTransformerBuilder::new().n(n).build();
                 let z = t.z(&freq);
 
-                assert!(
-                    approx_eq!(f64, z.re, n.powi(2), DEFAULT_MARGIN),
-                    "z should be n^2 for n={}",
-                    n
+                z.re.assert_approx_eq(
+                    n.powi(2),
+                    DEFAULT_MARGIN,
+                    format!("z should be n^2 for n={n}").as_str(),
+                    "",
                 );
             }
         }
@@ -2141,7 +2208,8 @@ mod element_transformer_tests {
             let t2 = t1.clone();
 
             assert_eq!(t1.id(), t2.id());
-            assert!(approx_eq!(f64, t1.val(), t2.val(), DEFAULT_MARGIN));
+            t1.val()
+                .assert_approx_eq(t2.val(), DEFAULT_MARGIN, "t1", "");
             assert_eq!(t1.nodes(), t2.nodes());
             assert_eq!(t1.z0(), t2.z0());
         }
@@ -2192,7 +2260,7 @@ mod element_transformer_tests {
 
             let z = t.z(&freq);
             assert!(z.is_finite());
-            assert!(approx_eq!(f64, z.re, n.powi(2), DEFAULT_MARGIN));
+            z.re.assert_approx_eq(n.powi(2), DEFAULT_MARGIN, "z.re", "");
         }
 
         #[test]
@@ -2203,7 +2271,7 @@ mod element_transformer_tests {
 
             let z = t.z(&freq);
             assert!(z.is_finite());
-            assert!(approx_eq!(f64, z.re, n.powi(2), RELAXED_MARGIN));
+            z.re.assert_approx_eq(n.powi(2), RELAXED_MARGIN, "z.re", "");
         }
 
         #[test]

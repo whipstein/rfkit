@@ -1,6 +1,7 @@
+use crate::num::RealScalar;
+use ndarray::Array1;
 use serde::Serialize;
-use std::fmt;
-use std::str::FromStr;
+use std::{fmt, str::FromStr};
 
 /// Descriptor of scaling
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize)]
@@ -57,29 +58,40 @@ impl Scale {
 
     /// Provides multiplier for scale
     /// Scale::Pico = 1e-12
-    pub fn multiplier(&self) -> f64 {
+    pub fn multiplier<T>(&self) -> T
+    where
+        T: RealScalar,
+    {
         match self {
-            Scale::Atto => 1e-18,
-            Scale::Femto => 1e-15,
-            Scale::Pico => 1e-12,
-            Scale::Nano => 1e-9,
-            Scale::Micro => 1e-6,
-            Scale::Milli => 1e-3,
-            Scale::Centi => 1e-2,
-            Scale::Base => 1.0,
-            Scale::Kilo => 1e3,
-            Scale::Mega => 1e6,
-            Scale::Giga => 1e9,
-            Scale::Tera => 1e12,
+            Scale::Atto => 1e-18.into(),
+            Scale::Femto => 1e-15.into(),
+            Scale::Pico => 1e-12.into(),
+            Scale::Nano => 1e-9.into(),
+            Scale::Micro => 1e-6.into(),
+            Scale::Milli => 1e-3.into(),
+            Scale::Centi => 1e-2.into(),
+            Scale::Base => 1.0.into(),
+            Scale::Kilo => 1e3.into(),
+            Scale::Mega => 1e6.into(),
+            Scale::Giga => 1e9.into(),
+            Scale::Tera => 1e12.into(),
         }
     }
 
-    pub fn scale(&self, val: f64) -> f64 {
+    pub fn scale<T: RealScalar>(&self, val: T) -> T {
         val / self.multiplier()
     }
 
-    pub fn unscale(&self, val: f64) -> f64 {
+    pub fn scale_array<T: RealScalar>(&self, val: &Array1<T>) -> Array1<T> {
+        val.map(|&x| x / self.multiplier())
+    }
+
+    pub fn unscale<T: RealScalar>(&self, val: T) -> T {
         val * self.multiplier()
+    }
+
+    pub fn unscale_array<T: RealScalar>(&self, val: &Array1<T>) -> Array1<T> {
+        val.map(|&x| x * self.multiplier())
     }
 }
 
@@ -115,8 +127,7 @@ impl fmt::Display for Scale {
 #[cfg(test)]
 mod scale_tests {
     use super::*;
-    use crate::util::comp_f64;
-    use float_cmp::F64Margin;
+    use crate::util::{ApproxEq, NumMargin};
 
     #[test]
     fn test_parse_scale() {
@@ -227,182 +238,158 @@ mod scale_tests {
     fn test_scale_unscale() {
         let val: f64 = 3.24;
 
-        comp_f64(
-            &Scale::Tera.scale(val),
+        Scale::Tera.scale(val).assert_approx_eq(
             &(val * 1e-12),
-            F64Margin::default(),
+            NumMargin::default(),
             "scale()",
             "Scale::Tera",
         );
-        comp_f64(
-            &Scale::Tera.unscale(val),
+        Scale::Tera.unscale(val).assert_approx_eq(
             &(val * 1e12),
-            F64Margin::default(),
+            NumMargin::default(),
             "unscale()",
             "Scale::Tera",
         );
 
-        comp_f64(
-            &Scale::Giga.scale(val),
+        Scale::Giga.scale(val).assert_approx_eq(
             &(val * 1e-9),
-            F64Margin::default(),
+            NumMargin::default(),
             "scale()",
             "Scale::Giga",
         );
-        comp_f64(
-            &Scale::Giga.unscale(val),
+        Scale::Giga.unscale(val).assert_approx_eq(
             &(val * 1e9),
-            F64Margin::default(),
+            NumMargin::default(),
             "unscale()",
             "Scale::Giga",
         );
 
-        comp_f64(
-            &Scale::Mega.scale(val),
+        Scale::Mega.scale(val).assert_approx_eq(
             &(val * 1e-6),
-            F64Margin::default(),
+            NumMargin::default(),
             "scale()",
             "Scale::Mega",
         );
-        comp_f64(
-            &Scale::Mega.unscale(val),
+        Scale::Mega.unscale(val).assert_approx_eq(
             &(val * 1e6),
-            F64Margin::default(),
+            NumMargin::default(),
             "unscale()",
             "Scale::Mega",
         );
 
-        comp_f64(
-            &Scale::Kilo.scale(val),
+        Scale::Kilo.scale(val).assert_approx_eq(
             &(val * 1e-3),
-            F64Margin::default(),
+            NumMargin::default(),
             "scale()",
             "Scale::Kilo",
         );
-        comp_f64(
-            &Scale::Kilo.unscale(val),
+        Scale::Kilo.unscale(val).assert_approx_eq(
             &(val * 1e3),
-            F64Margin::default(),
+            NumMargin::default(),
             "unscale()",
             "Scale::Kilo",
         );
 
-        comp_f64(
-            &Scale::Centi.scale(val),
+        Scale::Centi.scale(val).assert_approx_eq(
             &(val * 1e2),
-            F64Margin::default(),
+            NumMargin::default(),
             "scale()",
             "Scale::Centi",
         );
-        comp_f64(
-            &Scale::Centi.unscale(val),
+        Scale::Centi.unscale(val).assert_approx_eq(
             &(val * 1e-2),
-            F64Margin::default(),
+            NumMargin::default(),
             "unscale()",
             "Scale::Centi",
         );
 
-        comp_f64(
-            &Scale::Milli.scale(val),
+        Scale::Milli.scale(val).assert_approx_eq(
             &(val * 1e3),
-            F64Margin::default(),
+            NumMargin::default(),
             "scale()",
             "Scale::Milli",
         );
-        comp_f64(
-            &Scale::Milli.unscale(val),
+        Scale::Milli.unscale(val).assert_approx_eq(
             &(val * 1e-3),
-            F64Margin::default(),
+            NumMargin::default(),
             "unscale()",
             "Scale::Milli",
         );
 
-        comp_f64(
-            &Scale::Micro.scale(val),
+        Scale::Micro.scale(val).assert_approx_eq(
             &(val * 1e6),
-            F64Margin::default(),
+            NumMargin::default(),
             "scale()",
             "Scale::Micro",
         );
-        comp_f64(
-            &Scale::Micro.unscale(val),
+        Scale::Micro.unscale(val).assert_approx_eq(
             &(val * 1e-6),
-            F64Margin::default(),
+            NumMargin::default(),
             "unscale()",
             "Scale::Micro",
         );
 
-        comp_f64(
-            &Scale::Nano.scale(val),
+        Scale::Nano.scale(val).assert_approx_eq(
             &(val * 1e9),
-            F64Margin::default(),
+            NumMargin::default(),
             "scale()",
             "Scale::Nano",
         );
-        comp_f64(
-            &Scale::Nano.unscale(val),
+        Scale::Nano.unscale(val).assert_approx_eq(
             &(val * 1e-9),
-            F64Margin::default(),
+            NumMargin::default(),
             "unscale()",
             "Scale::Nano",
         );
 
-        comp_f64(
-            &Scale::Pico.scale(val),
+        Scale::Pico.scale(val).assert_approx_eq(
             &(val * 1e12),
-            F64Margin::default(),
+            NumMargin::default(),
             "scale()",
             "Scale::Pico",
         );
-        comp_f64(
-            &Scale::Pico.unscale(val),
+        Scale::Pico.unscale(val).assert_approx_eq(
             &(val * 1e-12),
-            F64Margin::default(),
+            NumMargin::default(),
             "unscale()",
             "Scale::Pico",
         );
 
-        comp_f64(
-            &Scale::Femto.scale(val),
+        Scale::Femto.scale(val).assert_approx_eq(
             &(val * 1e15),
-            F64Margin::default(),
+            NumMargin::default(),
             "scale()",
             "Scale::Femto",
         );
-        comp_f64(
-            &Scale::Femto.unscale(val),
+        Scale::Femto.unscale(val).assert_approx_eq(
             &(val * 1e-15),
-            F64Margin::default(),
+            NumMargin::default(),
             "unscale()",
             "Scale::Femto",
         );
 
-        comp_f64(
-            &Scale::Atto.scale(val),
+        Scale::Atto.scale(val).assert_approx_eq(
             &(val * 1e18),
-            F64Margin::default(),
+            NumMargin::default(),
             "scale()",
             "Scale::Atto",
         );
-        comp_f64(
-            &Scale::Atto.unscale(val),
+        Scale::Atto.unscale(val).assert_approx_eq(
             &(val * 1e-18),
-            F64Margin::default(),
+            NumMargin::default(),
             "unscale()",
             "Scale::Atto",
         );
 
-        comp_f64(
-            &Scale::Base.scale(val),
+        Scale::Base.scale(val).assert_approx_eq(
             &(val * 1.0),
-            F64Margin::default(),
+            NumMargin::default(),
             "scale()",
             "Scale::Base",
         );
-        comp_f64(
-            &Scale::Base.unscale(val),
+        Scale::Base.unscale(val).assert_approx_eq(
             &(val * 1.0),
-            F64Margin::default(),
+            NumMargin::default(),
             "unscale()",
             "Scale::Base",
         );

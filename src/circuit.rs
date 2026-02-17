@@ -568,20 +568,19 @@ mod circuit_tests {
         element::{ElementBuilder, QBuilder, QMode, msub::MsubBuilder},
         frequency::FrequencyBuilder,
         impedance::{ComplexNumberType, ImpedanceBuilder, ImpedanceMode, ImpedanceType},
-        points,
         scale::Scale,
         unit::{Unit, UnitValBuilder},
-        util::{comp_pts_ix3, comp_vec_c64},
+        util::{NumMargin, comp_pts_ix3, comp_vec_c64},
     };
-    use float_cmp::F64Margin;
     use num::complex::c64;
 
-    // const MARGIN: F64Margin = F64Margin {
+    // const MARGIN: NumMargin = NumMargin {
     //     epsilon: f64::EPSILON,
     //     ulps: 10,
     // };
-    const MARGIN: F64Margin = F64Margin {
+    const MARGIN: NumMargin<f64> = NumMargin {
         epsilon: 1e-14,
+        relative: 1.0,
         ulps: 10,
     };
 
@@ -592,7 +591,7 @@ mod circuit_tests {
             .freqs_scaled(Array1::from_vec(freq_points), Scale::Giga)
             .build();
         let mut node = Node::new(&freq, false);
-        let margin = F64Margin::default();
+        let margin = NumMargin::default();
 
         let p1 = ElementBuilder::new()
             .elem(ElemType::Port)
@@ -639,7 +638,7 @@ mod circuit_tests {
         let x22 = 2.0 / (z_r1 * y) - 1.0;
         let x12 = 2.0 / ((z_p1 * z_r1).sqrt() * y);
         let exemplar_y = vec![y];
-        let exemplar_x = points![Complex64, [[x11, x12], [x12, x22]]];
+        let exemplar_x = points![[[x11, x12], [x12, x22]]];
         node = node.add_elem(&r1, &freq);
         comp_vec_c64(&exemplar_y, &node.y(), margin, "node.y(r1)");
         comp_pts_ix3(&exemplar_x, &node.x, margin, "node.x(r1)");
@@ -652,10 +651,7 @@ mod circuit_tests {
         let x13 = 2.0 / ((z_p1 * z_c1).sqrt() * y);
         let x23 = 2.0 / ((z_r1 * z_c1).sqrt() * y);
         let exemplar_y = vec![y];
-        let exemplar_x = points![
-            Complex64,
-            [[x11, x12, x13], [x12, x22, x23], [x13, x23, x33]]
-        ];
+        let exemplar_x = points![[[x11, x12, x13], [x12, x22, x23], [x13, x23, x33]]];
         node = node.add_elem(&c1, &freq);
         comp_vec_c64(&exemplar_y, &node.y(), margin, "node.y(c1)");
         comp_pts_ix3(&exemplar_x, &node.x, margin, "node.x(c1)");
@@ -672,15 +668,12 @@ mod circuit_tests {
         let x24 = 2.0 / ((z_r1 * z_l1).sqrt() * y);
         let x34 = 2.0 / ((z_c1 * z_l1).sqrt() * y);
         let exemplar_y = vec![y];
-        let exemplar_x = points![
-            Complex64,
-            [
-                [x11, x12, x13, x14],
-                [x12, x22, x23, x24],
-                [x13, x23, x33, x34],
-                [x14, x24, x34, x44]
-            ]
-        ];
+        let exemplar_x = points![[
+            [x11, x12, x13, x14],
+            [x12, x22, x23, x24],
+            [x13, x23, x33, x34],
+            [x14, x24, x34, x44]
+        ]];
         node = node.add_elem(&l1, &freq);
         comp_vec_c64(&exemplar_y, &node.y(), margin, "node.y(l1)");
         comp_pts_ix3(&exemplar_x, &node.x, margin, "node.x(l1)");
@@ -1406,13 +1399,10 @@ mod circuit_tests {
         let margin = MARGIN;
 
         let exemplar_c = Points::<Complex64, Ix3>::zeros((1, 2, 2));
-        let exemplar_x = points![
-            Complex64,
-            [
-                [Complex64::ZERO, Complex64::ZERO],
-                [Complex64::ZERO, Complex64::ONE]
-            ]
-        ];
+        let exemplar_x = points![[
+            [Complex64::ZERO, Complex64::ZERO],
+            [Complex64::ZERO, Complex64::ONE]
+        ]];
         let exemplar_s = Points::<Complex64, Ix3>::zeros((1, 1, 1));
         cir.add_elem(&p1, &freq);
         comp_pts_ix3(&exemplar_c, &cir.c, margin, "cir.c(1)");
@@ -1439,46 +1429,43 @@ mod circuit_tests {
                 (2, 4) | (4, 2) => 0.6666666666666667.into(),
                 _ => Complex64::ZERO,
             });
-        let exemplar_x = points![
-            Complex64,
+        let exemplar_x = points![[
             [
-                [
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                ],
-                [
-                    Complex64::ZERO,
-                    c64(-0.4285714285714286, 0.0),
-                    c64(0.9035079029052513, 0.0),
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                ],
-                [
-                    Complex64::ZERO,
-                    c64(0.9035079029052513, 0.0),
-                    c64(0.4285714285714284, 0.0),
-                    Complex64::ZERO,
-                    Complex64::ZERO
-                ],
-                [
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    c64(-0.4285714285714286, 0.0),
-                    c64(0.9035079029052513, 0.0),
-                ],
-                [
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    c64(0.9035079029052513, 0.0),
-                    c64(0.4285714285714284, 0.0),
-                ]
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+            ],
+            [
+                Complex64::ZERO,
+                c64(-0.4285714285714286, 0.0),
+                c64(0.9035079029052513, 0.0),
+                Complex64::ZERO,
+                Complex64::ZERO,
+            ],
+            [
+                Complex64::ZERO,
+                c64(0.9035079029052513, 0.0),
+                c64(0.4285714285714284, 0.0),
+                Complex64::ZERO,
+                Complex64::ZERO
+            ],
+            [
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                c64(-0.4285714285714286, 0.0),
+                c64(0.9035079029052513, 0.0),
+            ],
+            [
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                c64(0.9035079029052513, 0.0),
+                c64(0.4285714285714284, 0.0),
             ]
-        ];
+        ]];
         let exemplar_s =
             Points::<Complex64, Ix3>::from_shape_fn((1, 2, 2), |(_, j, k)| match (j, k) {
                 (0, 0) | (1, 1) => 0.1666666666666659.into(),
@@ -1514,13 +1501,10 @@ mod circuit_tests {
             .unwrap();
 
         let exemplar2_c = Points::<Complex64, Ix3>::zeros((1, 2, 2));
-        let exemplar2_x = points![
-            Complex64,
-            [
-                [Complex64::ZERO, Complex64::ZERO],
-                [Complex64::ZERO, Complex64::ONE]
-            ]
-        ];
+        let exemplar2_x = points![[
+            [Complex64::ZERO, Complex64::ZERO],
+            [Complex64::ZERO, Complex64::ONE]
+        ]];
         let exemplar2_s = Points::<Complex64, Ix3>::zeros((1, 1, 1));
         cir2.add_elem(&p1, &freq);
         comp_pts_ix3(&exemplar2_c, &cir2.c, margin, "cir2.c(1)");
@@ -1547,53 +1531,47 @@ mod circuit_tests {
                 (2, 4) | (4, 2) => 0.6666666666666667.into(),
                 _ => Complex64::ZERO,
             });
-        let exemplar2_x = points![
-            Complex64,
+        let exemplar2_x = points![[
             [
-                [
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                ],
-                [
-                    Complex64::ZERO,
-                    c64(-0.4285714285714286, 0.0),
-                    c64(0.9035079029052513, 0.0),
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                ],
-                [
-                    Complex64::ZERO,
-                    c64(0.9035079029052513, 0.0),
-                    c64(0.4285714285714284, 0.0),
-                    Complex64::ZERO,
-                    Complex64::ZERO
-                ],
-                [
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    c64(0.33333333333333304, 0.0),
-                    c64(0.9428090415820632, 0.0),
-                ],
-                [
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    c64(0.9428090415820632, 0.0),
-                    c64(-0.3333333333333335, 0.0),
-                ]
-            ]
-        ];
-        let exemplar2_s = points![
-            Complex64,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+            ],
             [
-                [c64(-0.25, 0.0), c64(0.5590169943749473, 0.0)],
-                [c64(0.5590169943749473, 0.0), c64(0.75, 0.0)]
+                Complex64::ZERO,
+                c64(-0.4285714285714286, 0.0),
+                c64(0.9035079029052513, 0.0),
+                Complex64::ZERO,
+                Complex64::ZERO,
+            ],
+            [
+                Complex64::ZERO,
+                c64(0.9035079029052513, 0.0),
+                c64(0.4285714285714284, 0.0),
+                Complex64::ZERO,
+                Complex64::ZERO
+            ],
+            [
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                c64(0.33333333333333304, 0.0),
+                c64(0.9428090415820632, 0.0),
+            ],
+            [
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                c64(0.9428090415820632, 0.0),
+                c64(-0.3333333333333335, 0.0),
             ]
-        ];
+        ]];
+        let exemplar2_s = points![[
+            [c64(-0.25, 0.0), c64(0.5590169943749473, 0.0)],
+            [c64(0.5590169943749473, 0.0), c64(0.75, 0.0)]
+        ]];
         cir2.add_elem(&r1, &freq);
         comp_pts_ix3(&exemplar2_c, &cir2.c, margin, "cir2.c(3)");
         comp_pts_ix3(&exemplar2_x, &cir2.x, margin, "cir2.x(3)");
@@ -1633,13 +1611,10 @@ mod circuit_tests {
 
         cir.add_elem(&p1, &freq);
         let exemplar_c = Points::<Complex64, Ix3>::zeros((1, 2, 2));
-        let exemplar_x = points![
-            Complex64,
-            [
-                [Complex64::ZERO, Complex64::ZERO],
-                [Complex64::ZERO, Complex64::ONE]
-            ]
-        ];
+        let exemplar_x = points![[
+            [Complex64::ZERO, Complex64::ZERO],
+            [Complex64::ZERO, Complex64::ONE]
+        ]];
         let exemplar_s = Points::<Complex64, Ix3>::zeros((1, 1, 1));
         comp_pts_ix3(&exemplar_c, &cir.c, margin, "cir.c(1)");
         comp_pts_ix3(&exemplar_x, &cir.x, margin, "cir.x(1)");
@@ -1647,14 +1622,11 @@ mod circuit_tests {
 
         cir.add_elem(&p2, &freq);
         let exemplar_c = Points::<Complex64, Ix3>::zeros((1, 3, 3));
-        let exemplar_x = points![
-            Complex64,
-            [
-                [Complex64::ZERO, Complex64::ZERO, Complex64::ZERO],
-                [Complex64::ZERO, Complex64::ONE, Complex64::ZERO],
-                [Complex64::ZERO, Complex64::ZERO, Complex64::ONE]
-            ]
-        ];
+        let exemplar_x = points![[
+            [Complex64::ZERO, Complex64::ZERO, Complex64::ZERO],
+            [Complex64::ZERO, Complex64::ONE, Complex64::ZERO],
+            [Complex64::ZERO, Complex64::ZERO, Complex64::ONE]
+        ]];
         let exemplar_s = Points::<Complex64, Ix3>::zeros((1, 2, 2));
         comp_pts_ix3(&exemplar_c, &cir.c, margin, "cir.c(2)");
         comp_pts_ix3(&exemplar_x, &cir.x, margin, "cir.x(2)");
@@ -1667,46 +1639,43 @@ mod circuit_tests {
                 (2, 4) | (4, 2) => 0.6666666666666667.into(),
                 _ => Complex64::ZERO,
             });
-        let exemplar_x = points![
-            Complex64,
+        let exemplar_x = points![[
             [
-                [
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                ],
-                [
-                    Complex64::ZERO,
-                    c64(0.8203396752925509, -0.5718765750937107),
-                    c64(0.9481135966932567, 0.4948067885071891),
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                ],
-                [
-                    Complex64::ZERO,
-                    c64(0.9481135966932567, 0.4948067885071891),
-                    c64(-0.8203396752925507, 0.5718765750937107),
-                    Complex64::ZERO,
-                    Complex64::ZERO
-                ],
-                [
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    c64(0.8203396752925509, -0.5718765750937107),
-                    c64(0.9481135966932567, 0.4948067885071891),
-                ],
-                [
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    c64(0.9481135966932567, 0.4948067885071891),
-                    c64(-0.8203396752925507, 0.5718765750937107),
-                ]
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+            ],
+            [
+                Complex64::ZERO,
+                c64(0.8203396752925509, -0.5718765750937107),
+                c64(0.9481135966932567, 0.4948067885071891),
+                Complex64::ZERO,
+                Complex64::ZERO,
+            ],
+            [
+                Complex64::ZERO,
+                c64(0.9481135966932567, 0.4948067885071891),
+                c64(-0.8203396752925507, 0.5718765750937107),
+                Complex64::ZERO,
+                Complex64::ZERO
+            ],
+            [
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                c64(0.8203396752925509, -0.5718765750937107),
+                c64(0.9481135966932567, 0.4948067885071891),
+            ],
+            [
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                c64(0.9481135966932567, 0.4948067885071891),
+                c64(-0.8203396752925507, 0.5718765750937107),
             ]
-        ];
+        ]];
         let exemplar_s =
             Points::<Complex64, Ix3>::from_shape_fn((1, 2, 2), |(_, j, k)| match (j, k) {
                 (0, 0) | (1, 1) => c64(0.7169568003248977, -0.4504772433683886),
@@ -1742,13 +1711,10 @@ mod circuit_tests {
 
         cir2.add_elem(&p1, &freq);
         let exemplar_c = Points::<Complex64, Ix3>::zeros((1, 2, 2));
-        let exemplar_x = points![
-            Complex64,
-            [
-                [Complex64::ZERO, Complex64::ZERO],
-                [Complex64::ZERO, Complex64::ONE]
-            ]
-        ];
+        let exemplar_x = points![[
+            [Complex64::ZERO, Complex64::ZERO],
+            [Complex64::ZERO, Complex64::ONE]
+        ]];
         let exemplar_s = Points::<Complex64, Ix3>::zeros((1, 1, 1));
         comp_pts_ix3(&exemplar_c, &cir2.c, margin, "cir2.c(1)");
         comp_pts_ix3(&exemplar_x, &cir2.x, margin, "cir2.x(1)");
@@ -1756,14 +1722,11 @@ mod circuit_tests {
 
         cir2.add_elem(&p2, &freq);
         let exemplar_c = Points::<Complex64, Ix3>::zeros((1, 3, 3));
-        let exemplar_x = points![
-            Complex64,
-            [
-                [Complex64::ZERO, Complex64::ZERO, Complex64::ZERO],
-                [Complex64::ZERO, Complex64::ONE, Complex64::ZERO],
-                [Complex64::ZERO, Complex64::ZERO, Complex64::ONE]
-            ]
-        ];
+        let exemplar_x = points![[
+            [Complex64::ZERO, Complex64::ZERO, Complex64::ZERO],
+            [Complex64::ZERO, Complex64::ONE, Complex64::ZERO],
+            [Complex64::ZERO, Complex64::ZERO, Complex64::ONE]
+        ]];
         let exemplar_s = Points::<Complex64, Ix3>::zeros((1, 2, 2));
         comp_pts_ix3(&exemplar_c, &cir2.c, margin, "cir2.c(2)");
         comp_pts_ix3(&exemplar_x, &cir2.x, margin, "cir2.x(2)");
@@ -1776,59 +1739,53 @@ mod circuit_tests {
                 (2, 4) | (4, 2) => 0.6666666666666667.into(),
                 _ => Complex64::ZERO,
             });
-        let exemplar_x = points![
-            Complex64,
+        let exemplar_x = points![[
             [
-                [
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                ],
-                [
-                    Complex64::ZERO,
-                    c64(0.8203396752925509, -0.5718765750937107),
-                    c64(0.9481135966932567, 0.4948067885071891),
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                ],
-                [
-                    Complex64::ZERO,
-                    c64(0.9481135966932567, 0.4948067885071891),
-                    c64(-0.8203396752925507, 0.5718765750937107),
-                    Complex64::ZERO,
-                    Complex64::ZERO
-                ],
-                [
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    c64(0.9921353648143452, -0.1251695565411434),
-                    c64(0.37528252613977364, 0.3309110736382766),
-                ],
-                [
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    c64(0.37528252613977364, 0.3309110736382766),
-                    c64(-0.992135364814345, 0.1251695565411434),
-                ]
-            ]
-        ];
-        let exemplar_s = points![
-            Complex64,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+            ],
             [
-                [
-                    c64(0.7926049557687088, -0.5501324410362041),
-                    c64(0.0927498834195485, 0.2460267069569694)
-                ],
-                [
-                    c64(0.0927498834195484, 0.2460267069569693),
-                    c64(0.9585209911537415, -0.1100264882072408)
-                ]
+                Complex64::ZERO,
+                c64(0.8203396752925509, -0.5718765750937107),
+                c64(0.9481135966932567, 0.4948067885071891),
+                Complex64::ZERO,
+                Complex64::ZERO,
+            ],
+            [
+                Complex64::ZERO,
+                c64(0.9481135966932567, 0.4948067885071891),
+                c64(-0.8203396752925507, 0.5718765750937107),
+                Complex64::ZERO,
+                Complex64::ZERO
+            ],
+            [
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                c64(0.9921353648143452, -0.1251695565411434),
+                c64(0.37528252613977364, 0.3309110736382766),
+            ],
+            [
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                c64(0.37528252613977364, 0.3309110736382766),
+                c64(-0.992135364814345, 0.1251695565411434),
             ]
-        ];
+        ]];
+        let exemplar_s = points![[
+            [
+                c64(0.7926049557687088, -0.5501324410362041),
+                c64(0.0927498834195485, 0.2460267069569694)
+            ],
+            [
+                c64(0.0927498834195484, 0.2460267069569693),
+                c64(0.9585209911537415, -0.1100264882072408)
+            ]
+        ]];
         comp_pts_ix3(&exemplar_c, &cir2.c, margin, "cir2.c(3)");
         comp_pts_ix3(&exemplar_x, &cir2.x, margin, "cir2.x(3)");
         comp_pts_ix3(&exemplar_s, &cir2.s, margin, "cir2.s(3)");
@@ -1867,13 +1824,10 @@ mod circuit_tests {
 
         cir.add_elem(&p1, &freq);
         let exemplar_c = Points::<Complex64, Ix3>::zeros((1, 2, 2));
-        let exemplar_x = points![
-            Complex64,
-            [
-                [Complex64::ZERO, Complex64::ZERO],
-                [Complex64::ZERO, Complex64::ONE]
-            ]
-        ];
+        let exemplar_x = points![[
+            [Complex64::ZERO, Complex64::ZERO],
+            [Complex64::ZERO, Complex64::ONE]
+        ]];
         let exemplar_s = Points::<Complex64, Ix3>::zeros((1, 1, 1));
         comp_pts_ix3(&exemplar_c, &cir.c, margin, "cir.c(1)");
         comp_pts_ix3(&exemplar_x, &cir.x, margin, "cir.x(1)");
@@ -1881,14 +1835,11 @@ mod circuit_tests {
 
         cir.add_elem(&p2, &freq);
         let exemplar_c = Points::<Complex64, Ix3>::zeros((1, 3, 3));
-        let exemplar_x = points![
-            Complex64,
-            [
-                [Complex64::ZERO, Complex64::ZERO, Complex64::ZERO],
-                [Complex64::ZERO, Complex64::ONE, Complex64::ZERO],
-                [Complex64::ZERO, Complex64::ZERO, Complex64::ONE]
-            ]
-        ];
+        let exemplar_x = points![[
+            [Complex64::ZERO, Complex64::ZERO, Complex64::ZERO],
+            [Complex64::ZERO, Complex64::ONE, Complex64::ZERO],
+            [Complex64::ZERO, Complex64::ZERO, Complex64::ONE]
+        ]];
         let exemplar_s = Points::<Complex64, Ix3>::zeros((1, 2, 2));
         comp_pts_ix3(&exemplar_c, &cir.c, margin, "cir.c(2)");
         comp_pts_ix3(&exemplar_x, &cir.x, margin, "cir.x(2)");
@@ -1901,46 +1852,43 @@ mod circuit_tests {
                 (2, 4) | (4, 2) => 0.6666666666666667.into(),
                 _ => Complex64::ZERO,
             });
-        let exemplar_x = points![
-            Complex64,
+        let exemplar_x = points![[
             [
-                [
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                ],
-                [
-                    Complex64::ZERO,
-                    c64(-0.9689082471969974, 0.24742030739945778),
-                    c64(0.5555511820823532, 0.43151303443327826),
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                ],
-                [
-                    Complex64::ZERO,
-                    c64(0.5555511820823532, 0.43151303443327826),
-                    c64(0.9689082471969976, -0.24742030739945778),
-                    Complex64::ZERO,
-                    Complex64::ZERO
-                ],
-                [
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    c64(-0.9689082471969974, 0.24742030739945778),
-                    c64(0.5555511820823532, 0.43151303443327826)
-                ],
-                [
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    c64(0.5555511820823532, 0.43151303443327826),
-                    c64(0.9689082471969976, -0.24742030739945778)
-                ]
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+            ],
+            [
+                Complex64::ZERO,
+                c64(-0.9689082471969974, 0.24742030739945778),
+                c64(0.5555511820823532, 0.43151303443327826),
+                Complex64::ZERO,
+                Complex64::ZERO,
+            ],
+            [
+                Complex64::ZERO,
+                c64(0.5555511820823532, 0.43151303443327826),
+                c64(0.9689082471969976, -0.24742030739945778),
+                Complex64::ZERO,
+                Complex64::ZERO
+            ],
+            [
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                c64(-0.9689082471969974, 0.24742030739945778),
+                c64(0.5555511820823532, 0.43151303443327826)
+            ],
+            [
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                c64(0.5555511820823532, 0.43151303443327826),
+                c64(0.9689082471969976, -0.24742030739945778)
             ]
-        ];
+        ]];
         let exemplar_s =
             Points::<Complex64, Ix3>::from_shape_fn((1, 2, 2), |(_, j, k)| match (j, k) {
                 (0, 0) | (1, 1) => c64(0.0039323175928275, 0.0625847782705717),
@@ -1976,13 +1924,10 @@ mod circuit_tests {
 
         cir2.add_elem(&p1, &freq);
         let exemplar_c = Points::<Complex64, Ix3>::zeros((1, 2, 2));
-        let exemplar_x = points![
-            Complex64,
-            [
-                [Complex64::ZERO, Complex64::ZERO],
-                [Complex64::ZERO, Complex64::ONE]
-            ]
-        ];
+        let exemplar_x = points![[
+            [Complex64::ZERO, Complex64::ZERO],
+            [Complex64::ZERO, Complex64::ONE]
+        ]];
         let exemplar_s = Points::<Complex64, Ix3>::zeros((1, 1, 1));
         comp_pts_ix3(&exemplar_c, &cir2.c, margin, "cir2.c(1)");
         comp_pts_ix3(&exemplar_x, &cir2.x, margin, "cir2.x(1)");
@@ -1990,14 +1935,11 @@ mod circuit_tests {
 
         cir2.add_elem(&p2, &freq);
         let exemplar_c = Points::<Complex64, Ix3>::zeros((1, 3, 3));
-        let exemplar_x = points![
-            Complex64,
-            [
-                [Complex64::ZERO, Complex64::ZERO, Complex64::ZERO],
-                [Complex64::ZERO, Complex64::ONE, Complex64::ZERO],
-                [Complex64::ZERO, Complex64::ZERO, Complex64::ONE]
-            ]
-        ];
+        let exemplar_x = points![[
+            [Complex64::ZERO, Complex64::ZERO, Complex64::ZERO],
+            [Complex64::ZERO, Complex64::ONE, Complex64::ZERO],
+            [Complex64::ZERO, Complex64::ZERO, Complex64::ONE]
+        ]];
         let exemplar_s = Points::<Complex64, Ix3>::zeros((1, 2, 2));
         comp_pts_ix3(&exemplar_c, &cir2.c, margin, "cir2.c(2)");
         comp_pts_ix3(&exemplar_x, &cir2.x, margin, "cir2.x(2)");
@@ -2010,59 +1952,53 @@ mod circuit_tests {
                 (2, 4) | (4, 2) => 0.6666666666666667.into(),
                 _ => Complex64::ZERO,
             });
-        let exemplar_x = points![
-            Complex64,
+        let exemplar_x = points![[
             [
-                [
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                ],
-                [
-                    Complex64::ZERO,
-                    c64(-0.9689082471969974, 0.24742030739945778),
-                    c64(0.5555511820823532, 0.43151303443327826),
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                ],
-                [
-                    Complex64::ZERO,
-                    c64(0.5555511820823532, 0.43151303443327826),
-                    c64(0.9689082471969976, -0.24742030739945778),
-                    Complex64::ZERO,
-                    Complex64::ZERO
-                ],
-                [
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    c64(-0.43391360064979534, 0.9009544867367774),
-                    c64(1.3086915121249574, 0.298723115218169)
-                ],
-                [
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    c64(1.3086915121249574, 0.298723115218169),
-                    c64(0.43391360064979545, -0.9009544867367774)
-                ]
-            ]
-        ];
-        let exemplar_s = points![
-            Complex64,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+            ],
             [
-                [
-                    c64(-0.6485878775864338, 0.172639718834091),
-                    c64(0.7372709122330735, -0.0772068293858956),
-                ],
-                [
-                    c64(0.7372709122330735, -0.0772068293858956),
-                    c64(0.6702824244827131, 0.0345279437668182),
-                ],
+                Complex64::ZERO,
+                c64(-0.9689082471969974, 0.24742030739945778),
+                c64(0.5555511820823532, 0.43151303443327826),
+                Complex64::ZERO,
+                Complex64::ZERO,
+            ],
+            [
+                Complex64::ZERO,
+                c64(0.5555511820823532, 0.43151303443327826),
+                c64(0.9689082471969976, -0.24742030739945778),
+                Complex64::ZERO,
+                Complex64::ZERO
+            ],
+            [
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                c64(-0.43391360064979534, 0.9009544867367774),
+                c64(1.3086915121249574, 0.298723115218169)
+            ],
+            [
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                c64(1.3086915121249574, 0.298723115218169),
+                c64(0.43391360064979545, -0.9009544867367774)
             ]
-        ];
+        ]];
+        let exemplar_s = points![[
+            [
+                c64(-0.6485878775864338, 0.172639718834091),
+                c64(0.7372709122330735, -0.0772068293858956),
+            ],
+            [
+                c64(0.7372709122330735, -0.0772068293858956),
+                c64(0.6702824244827131, 0.0345279437668182),
+            ],
+        ]];
         comp_pts_ix3(&exemplar_c, &cir2.c, margin, "cir2.c(3)");
         comp_pts_ix3(&exemplar_x, &cir2.x, margin, "cir2.x(3)");
         comp_pts_ix3(&exemplar_s, &cir2.s, margin, "cir2.s(3)");
@@ -2126,19 +2062,16 @@ mod circuit_tests {
         cir.add_elem(&ls, &freq);
         cir.add_elem(&short, &freq);
 
-        let exemplar_s = points![
-            Complex64,
+        let exemplar_s = points![[
             [
-                [
-                    c64(-0.9214835975613086, 0.14295557061866743),
-                    c64(0.1738588301058095, 0.3165464475308452)
-                ],
-                [
-                    c64(0.1738588301058095, 0.3165464475308452),
-                    c64(-0.6150244806572353, 0.7009286382528254)
-                ]
+                c64(-0.9214835975613086, 0.14295557061866743),
+                c64(0.1738588301058095, 0.3165464475308452)
+            ],
+            [
+                c64(0.1738588301058095, 0.3165464475308452),
+                c64(-0.6150244806572353, 0.7009286382528254)
             ]
-        ];
+        ]];
         comp_pts_ix3(&exemplar_s, &cir.s, margin, "cir.s(1)");
 
         let src = ImpedanceBuilder::new()
@@ -2179,19 +2112,16 @@ mod circuit_tests {
         cir.add_elem(&ls, &freq);
         cir.add_elem(&short, &freq);
 
-        let exemplar_s = points![
-            Complex64,
+        let exemplar_s = points![[
             [
-                [
-                    c64(-0.8761891493750931, 0.1631491116557464),
-                    c64(0.27415425099996193, 0.3612609256905665)
-                ],
-                [
-                    c64(0.27415425099996193, 0.3612609256905665),
-                    c64(-0.3929404978481734, 0.7999397306323501)
-                ]
+                c64(-0.8761891493750931, 0.1631491116557464),
+                c64(0.27415425099996193, 0.3612609256905665)
+            ],
+            [
+                c64(0.27415425099996193, 0.3612609256905665),
+                c64(-0.3929404978481734, 0.7999397306323501)
             ]
-        ];
+        ]];
         comp_pts_ix3(&exemplar_s, &cir.s, margin, "cir.s(2)");
 
         let load = ImpedanceBuilder::new()
@@ -2241,19 +2171,16 @@ mod circuit_tests {
         cir.add_elem(&ls, &freq);
         cir.add_elem(&short, &freq);
 
-        let exemplar_s = points![
-            Complex64,
+        let exemplar_s = points![[
             [
-                [
-                    c64(-0.8357881602107229, 0.1693191357519407),
-                    c64(0.36361373893745236, 0.3749228076576333)
-                ],
-                [
-                    c64(0.36361373893745236, 0.3749228076576333),
-                    c64(-0.1948512889585977, 0.8301903448634361)
-                ]
+                c64(-0.8357881602107229, 0.1693191357519407),
+                c64(0.36361373893745236, 0.3749228076576333)
+            ],
+            [
+                c64(0.36361373893745236, 0.3749228076576333),
+                c64(-0.1948512889585977, 0.8301903448634361)
             ]
-        ];
+        ]];
         comp_pts_ix3(&exemplar_s, &cir.s, margin, "cir.s(3)");
 
         let mut cir = Circuit::new(&freq);
@@ -2276,19 +2203,16 @@ mod circuit_tests {
         cir.add_elem(&ls, &freq);
         cir.add_elem(&short, &freq);
 
-        let exemplar_s = points![
-            Complex64,
+        let exemplar_s = points![[
             [
-                [
-                    c64(-0.835105153421519, 0.15050653480106269),
-                    c64(0.36512611863346456, 0.33326612699645153)
-                ],
-                [
-                    c64(0.36512611863346456, 0.33326612699645153),
-                    c64(-0.19150243155181312, 0.7379500933299726)
-                ]
+                c64(-0.835105153421519, 0.15050653480106269),
+                c64(0.36512611863346456, 0.33326612699645153)
+            ],
+            [
+                c64(0.36512611863346456, 0.33326612699645153),
+                c64(-0.19150243155181312, 0.7379500933299726)
             ]
-        ];
+        ]];
         comp_pts_ix3(&exemplar_s, &cir.s, margin, "cir.s(4)");
 
         let mut cir = Circuit::new(&freq);
@@ -2311,19 +2235,16 @@ mod circuit_tests {
         cir.add_elem(&ls, &freq);
         cir.add_elem(&short, &freq);
 
-        let exemplar_s = points![
-            Complex64,
+        let exemplar_s = points![[
             [
-                [
-                    c64(-0.6781331823072998, -0.00000023520389949955467),
-                    c64(0.712708640079339, -0.0000005208112242055668)
-                ],
-                [
-                    c64(0.712708640079339, -0.0000005208112242055668),
-                    c64(0.5781484071113706, -0.0000011532305877395315)
-                ]
+                c64(-0.6781331823072998, -0.00000023520389949955467),
+                c64(0.712708640079339, -0.0000005208112242055668)
+            ],
+            [
+                c64(0.712708640079339, -0.0000005208112242055668),
+                c64(0.5781484071113706, -0.0000011532305877395315)
             ]
-        ];
+        ]];
         comp_pts_ix3(&exemplar_s, &cir.s, margin, "cir.s(5)");
     }
 
@@ -2366,13 +2287,10 @@ mod circuit_tests {
             .unwrap();
 
         let exemplar_c = Points::<Complex64, Ix3>::zeros((1, 2, 2));
-        let exemplar_x = points![
-            Complex64,
-            [
-                [Complex64::ZERO, Complex64::ZERO],
-                [Complex64::ZERO, Complex64::ONE]
-            ]
-        ];
+        let exemplar_x = points![[
+            [Complex64::ZERO, Complex64::ZERO],
+            [Complex64::ZERO, Complex64::ONE]
+        ]];
         let exemplar_s = Points::<Complex64, Ix3>::zeros((1, 1, 1));
         cir.add_elem(&p1, &freq);
         comp_pts_ix3(&exemplar_c, &cir.c, margin, "cir.c(p1)");
@@ -2399,46 +2317,43 @@ mod circuit_tests {
                 (2, 4) | (4, 2) => 0.6666666666666667.into(),
                 _ => Complex64::ZERO,
             });
-        let exemplar_x = points![
-            Complex64,
+        let exemplar_x = points![[
             [
-                [
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                ],
-                [
-                    Complex64::ZERO,
-                    c64(-0.4285714285714286, 0.0),
-                    c64(0.9035079029052513, 0.0),
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                ],
-                [
-                    Complex64::ZERO,
-                    c64(0.9035079029052513, 0.0),
-                    c64(0.4285714285714284, 0.0),
-                    Complex64::ZERO,
-                    Complex64::ZERO
-                ],
-                [
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    c64(-0.4285714285714286, 0.0),
-                    c64(0.9035079029052513, 0.0),
-                ],
-                [
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    c64(0.9035079029052513, 0.0),
-                    c64(0.4285714285714284, 0.0),
-                ]
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+            ],
+            [
+                Complex64::ZERO,
+                c64(-0.4285714285714286, 0.0),
+                c64(0.9035079029052513, 0.0),
+                Complex64::ZERO,
+                Complex64::ZERO,
+            ],
+            [
+                Complex64::ZERO,
+                c64(0.9035079029052513, 0.0),
+                c64(0.4285714285714284, 0.0),
+                Complex64::ZERO,
+                Complex64::ZERO
+            ],
+            [
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                c64(-0.4285714285714286, 0.0),
+                c64(0.9035079029052513, 0.0),
+            ],
+            [
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                c64(0.9035079029052513, 0.0),
+                c64(0.4285714285714284, 0.0),
             ]
-        ];
+        ]];
         let exemplar_s =
             Points::<Complex64, Ix3>::from_shape_fn((1, 2, 2), |(_, j, k)| match (j, k) {
                 (0, 0) | (1, 1) => 0.1666666666666659.into(),
@@ -2456,74 +2371,71 @@ mod circuit_tests {
                 (2, 5) | (3, 6) | (5, 2) | (6, 3) => 0.6666666666666667.into(),
                 _ => Complex64::ZERO,
             });
-        let exemplar_x = points![
-            Complex64,
+        let exemplar_x = points![[
             [
-                [
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                ],
-                [
-                    Complex64::ZERO,
-                    c64(-0.4331385293595438, -0.050881366621918944),
-                    c64(0.8962866825082543, -0.08045050449366568),
-                    c64(0.24483170498225598, 0.20449980312782579),
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                ],
-                [
-                    Complex64::ZERO,
-                    c64(0.8962866825082543, -0.08045050449366568),
-                    c64(0.4171536766011408, -0.12720341655479742),
-                    c64(0.3871129155831617, 0.32334257946997763),
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                ],
-                [
-                    Complex64::ZERO,
-                    c64(0.24483170498225598, 0.20449980312782579),
-                    c64(0.3871129155831617, 0.32334257946997763),
-                    c64(-0.984015147241597, 0.1780847831767164),
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                ],
-                [
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    c64(-0.4331385293595438, -0.050881366621918944),
-                    c64(0.8962866825082543, -0.08045050449366568),
-                    c64(0.24483170498225598, 0.20449980312782579),
-                ],
-                [
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    c64(0.8962866825082543, -0.08045050449366568),
-                    c64(0.4171536766011408, -0.12720341655479742),
-                    c64(0.3871129155831617, 0.32334257946997763),
-                ],
-                [
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    c64(0.24483170498225598, 0.20449980312782579),
-                    c64(0.3871129155831617, 0.32334257946997763),
-                    c64(-0.984015147241597, 0.1780847831767164),
-                ],
-            ]
-        ];
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+            ],
+            [
+                Complex64::ZERO,
+                c64(-0.4331385293595438, -0.050881366621918944),
+                c64(0.8962866825082543, -0.08045050449366568),
+                c64(0.24483170498225598, 0.20449980312782579),
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+            ],
+            [
+                Complex64::ZERO,
+                c64(0.8962866825082543, -0.08045050449366568),
+                c64(0.4171536766011408, -0.12720341655479742),
+                c64(0.3871129155831617, 0.32334257946997763),
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+            ],
+            [
+                Complex64::ZERO,
+                c64(0.24483170498225598, 0.20449980312782579),
+                c64(0.3871129155831617, 0.32334257946997763),
+                c64(-0.984015147241597, 0.1780847831767164),
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+            ],
+            [
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                c64(-0.4331385293595438, -0.050881366621918944),
+                c64(0.8962866825082543, -0.08045050449366568),
+                c64(0.24483170498225598, 0.20449980312782579),
+            ],
+            [
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                c64(0.8962866825082543, -0.08045050449366568),
+                c64(0.4171536766011408, -0.12720341655479742),
+                c64(0.3871129155831617, 0.32334257946997763),
+            ],
+            [
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                c64(0.24483170498225598, 0.20449980312782579),
+                c64(0.3871129155831617, 0.32334257946997763),
+                c64(-0.984015147241597, 0.1780847831767164),
+            ],
+        ]];
         let exemplar_s =
             Points::<Complex64, Ix3>::from_shape_fn((1, 2, 2), |(_, j, k)| match (j, k) {
                 (0, 0) | (1, 1) => c64(0.1648587877586434, -0.0172639718834091),
@@ -2566,13 +2478,10 @@ mod circuit_tests {
             .unwrap();
 
         let exemplar2_c = Points::<Complex64, Ix3>::zeros((1, 2, 2));
-        let exemplar2_x = points![
-            Complex64,
-            [
-                [Complex64::ZERO, Complex64::ZERO],
-                [Complex64::ZERO, Complex64::ONE]
-            ]
-        ];
+        let exemplar2_x = points![[
+            [Complex64::ZERO, Complex64::ZERO],
+            [Complex64::ZERO, Complex64::ONE]
+        ]];
         let exemplar2_s = Points::<Complex64, Ix3>::zeros((1, 1, 1));
         cir2.add_elem(&p1, &freq);
         comp_pts_ix3(&exemplar2_c, &cir2.c, margin, "cir2.c(1)");
@@ -2599,53 +2508,47 @@ mod circuit_tests {
                 (2, 4) | (4, 2) => 0.6666666666666667.into(),
                 _ => Complex64::ZERO,
             });
-        let exemplar2_x = points![
-            Complex64,
+        let exemplar2_x = points![[
             [
-                [
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                ],
-                [
-                    Complex64::ZERO,
-                    c64(-0.4285714285714286, 0.0),
-                    c64(0.9035079029052513, 0.0),
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                ],
-                [
-                    Complex64::ZERO,
-                    c64(0.9035079029052513, 0.0),
-                    c64(0.4285714285714284, 0.0),
-                    Complex64::ZERO,
-                    Complex64::ZERO
-                ],
-                [
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    c64(0.33333333333333304, 0.0),
-                    c64(0.9428090415820632, 0.0),
-                ],
-                [
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    c64(0.9428090415820632, 0.0),
-                    c64(-0.3333333333333335, 0.0),
-                ]
-            ]
-        ];
-        let exemplar2_s = points![
-            Complex64,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+            ],
             [
-                [c64(-0.25, 0.0), c64(0.5590169943749473, 0.0)],
-                [c64(0.5590169943749473, 0.0), c64(0.75, 0.0)]
+                Complex64::ZERO,
+                c64(-0.4285714285714286, 0.0),
+                c64(0.9035079029052513, 0.0),
+                Complex64::ZERO,
+                Complex64::ZERO,
+            ],
+            [
+                Complex64::ZERO,
+                c64(0.9035079029052513, 0.0),
+                c64(0.4285714285714284, 0.0),
+                Complex64::ZERO,
+                Complex64::ZERO
+            ],
+            [
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                c64(0.33333333333333304, 0.0),
+                c64(0.9428090415820632, 0.0),
+            ],
+            [
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                c64(0.9428090415820632, 0.0),
+                c64(-0.3333333333333335, 0.0),
             ]
-        ];
+        ]];
+        let exemplar2_s = points![[
+            [c64(-0.25, 0.0), c64(0.5590169943749473, 0.0)],
+            [c64(0.5590169943749473, 0.0), c64(0.75, 0.0)]
+        ]];
         cir2.add_elem(&r1, &freq);
         comp_pts_ix3(&exemplar2_c, &cir2.c, margin, "cir2.c(3)");
         comp_pts_ix3(&exemplar2_x, &cir2.x, margin, "cir2.x(3)");
@@ -2657,87 +2560,81 @@ mod circuit_tests {
                 (2, 5) | (3, 6) | (5, 2) | (6, 3) => 0.6666666666666667.into(),
                 _ => Complex64::ZERO,
             });
-        let exemplar_x = points![
-            Complex64,
+        let exemplar_x = points![[
             [
-                [
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                ],
-                [
-                    Complex64::ZERO,
-                    c64(-0.4331385293595438, -0.050881366621918944),
-                    c64(0.8962866825082543, -0.08045050449366568),
-                    c64(0.24483170498225598, 0.20449980312782579),
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                ],
-                [
-                    Complex64::ZERO,
-                    c64(0.8962866825082543, -0.08045050449366568),
-                    c64(0.4171536766011408, -0.12720341655479742),
-                    c64(0.3871129155831617, 0.32334257946997763),
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                ],
-                [
-                    Complex64::ZERO,
-                    c64(0.24483170498225598, 0.20449980312782579),
-                    c64(0.3871129155831617, 0.32334257946997763),
-                    c64(-0.984015147241597, 0.1780847831767164),
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                ],
-                [
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    c64(0.3309979691707785, -0.055752712558531356),
-                    c64(0.9411576897461811, -0.03942312111968192),
-                    c64(0.24579515860769652, 0.22603133659313707),
-                ],
-                [
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    c64(0.9411576897461811, -0.03942312111968192),
-                    c64(-0.33450101541461075, -0.027876356279265678),
-                    c64(0.17380342343432525, 0.15982829086566624),
-                ],
-                [
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    c64(0.24579515860769652, 0.22603133659313707),
-                    c64(0.17380342343432525, 0.15982829086566624),
-                    c64(-0.9964969537561683, 0.08362906883779705),
-                ],
-            ]
-        ];
-        let exemplar_s = points![
-            Complex64,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+            ],
             [
-                [
-                    c64(-0.253668515533063, -0.0389241587264249),
-                    c64(0.5606576043966359, 0.0174074129758555)
-                ],
-                [
-                    c64(0.5606576043966359, 0.0174074129758555),
-                    c64(0.7492662968933874, -0.007784831745285)
-                ]
+                Complex64::ZERO,
+                c64(-0.4331385293595438, -0.050881366621918944),
+                c64(0.8962866825082543, -0.08045050449366568),
+                c64(0.24483170498225598, 0.20449980312782579),
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+            ],
+            [
+                Complex64::ZERO,
+                c64(0.8962866825082543, -0.08045050449366568),
+                c64(0.4171536766011408, -0.12720341655479742),
+                c64(0.3871129155831617, 0.32334257946997763),
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+            ],
+            [
+                Complex64::ZERO,
+                c64(0.24483170498225598, 0.20449980312782579),
+                c64(0.3871129155831617, 0.32334257946997763),
+                c64(-0.984015147241597, 0.1780847831767164),
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+            ],
+            [
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                c64(0.3309979691707785, -0.055752712558531356),
+                c64(0.9411576897461811, -0.03942312111968192),
+                c64(0.24579515860769652, 0.22603133659313707),
+            ],
+            [
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                c64(0.9411576897461811, -0.03942312111968192),
+                c64(-0.33450101541461075, -0.027876356279265678),
+                c64(0.17380342343432525, 0.15982829086566624),
+            ],
+            [
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                c64(0.24579515860769652, 0.22603133659313707),
+                c64(0.17380342343432525, 0.15982829086566624),
+                c64(-0.9964969537561683, 0.08362906883779705),
+            ],
+        ]];
+        let exemplar_s = points![[
+            [
+                c64(-0.253668515533063, -0.0389241587264249),
+                c64(0.5606576043966359, 0.0174074129758555)
+            ],
+            [
+                c64(0.5606576043966359, 0.0174074129758555),
+                c64(0.7492662968933874, -0.007784831745285)
             ]
-        ];
+        ]];
         cir2.add_elem(&c1, &freq);
         comp_pts_ix3(&exemplar_c, &cir2.c, margin, "cir2.c(c1)");
         comp_pts_ix3(&exemplar_x, &cir2.x, margin, "cir2.x(c1)");
@@ -2792,74 +2689,71 @@ mod circuit_tests {
                 (2, 5) | (3, 6) | (5, 2) | (6, 3) => 0.6666666666666667.into(),
                 _ => Complex64::ZERO,
             });
-        let exemplar_x = points![
-            Complex64,
+        let exemplar_x = points![[
             [
-                [
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                ],
-                [
-                    Complex64::ZERO,
-                    c64(-0.9073776846815567, 0.2105899903363776),
-                    c64(0.14644873928229243, 0.33297201094790096),
-                    c64(0.6048210433185525, 0.23531146642654904),
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                ],
-                [
-                    Complex64::ZERO,
-                    c64(0.14644873928229243, 0.33297201094790096),
-                    c64(-0.7684442117038917, 0.526474975840944),
-                    c64(0.9563060368429952, 0.3720600967310689),
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                ],
-                [
-                    Complex64::ZERO,
-                    c64(0.6048210433185525, 0.23531146642654904),
-                    c64(0.9563060368429952, 0.3720600967310689),
-                    c64(0.6758218963854483, -0.7370649661773218),
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                ],
-                [
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    c64(-0.9073776846815567, 0.2105899903363776),
-                    c64(0.14644873928229243, 0.33297201094790096),
-                    c64(0.6048210433185525, 0.23531146642654904),
-                ],
-                [
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    c64(0.14644873928229243, 0.33297201094790096),
-                    c64(-0.7684442117038917, 0.526474975840944),
-                    c64(0.9563060368429952, 0.3720600967310689),
-                ],
-                [
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    c64(0.6048210433185525, 0.23531146642654904),
-                    c64(0.9563060368429952, 0.3720600967310689),
-                    c64(0.6758218963854483, -0.7370649661773218),
-                ]
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+            ],
+            [
+                Complex64::ZERO,
+                c64(-0.9073776846815567, 0.2105899903363776),
+                c64(0.14644873928229243, 0.33297201094790096),
+                c64(0.6048210433185525, 0.23531146642654904),
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+            ],
+            [
+                Complex64::ZERO,
+                c64(0.14644873928229243, 0.33297201094790096),
+                c64(-0.7684442117038917, 0.526474975840944),
+                c64(0.9563060368429952, 0.3720600967310689),
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+            ],
+            [
+                Complex64::ZERO,
+                c64(0.6048210433185525, 0.23531146642654904),
+                c64(0.9563060368429952, 0.3720600967310689),
+                c64(0.6758218963854483, -0.7370649661773218),
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+            ],
+            [
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                c64(-0.9073776846815567, 0.2105899903363776),
+                c64(0.14644873928229243, 0.33297201094790096),
+                c64(0.6048210433185525, 0.23531146642654904),
+            ],
+            [
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                c64(0.14644873928229243, 0.33297201094790096),
+                c64(-0.7684442117038917, 0.526474975840944),
+                c64(0.9563060368429952, 0.3720600967310689),
+            ],
+            [
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                c64(0.6048210433185525, 0.23531146642654904),
+                c64(0.9563060368429952, 0.3720600967310689),
+                c64(0.6758218963854483, -0.7370649661773218),
             ]
-        ];
+        ]];
         let exemplar_s =
             Points::<Complex64, Ix3>::from_shape_fn((1, 2, 2), |(_, j, k)| match (j, k) {
                 (0, 0) | (1, 1) => c64(0.0207395044231295, 0.0550132441036204),
@@ -2910,87 +2804,81 @@ mod circuit_tests {
                 (2, 5) | (3, 6) | (5, 2) | (6, 3) => 0.6666666666666667.into(),
                 _ => Complex64::ZERO,
             });
-        let exemplar_x = points![
-            Complex64,
+        let exemplar_x = points![[
             [
-                [
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                ],
-                [
-                    Complex64::ZERO,
-                    c64(-0.9073776846815567, 0.2105899903363776),
-                    c64(0.14644873928229243, 0.33297201094790096),
-                    c64(0.6048210433185525, 0.23531146642654904),
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                ],
-                [
-                    Complex64::ZERO,
-                    c64(0.14644873928229243, 0.33297201094790096),
-                    c64(-0.7684442117038917, 0.526474975840944),
-                    c64(0.9563060368429952, 0.3720600967310689),
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                ],
-                [
-                    Complex64::ZERO,
-                    c64(0.6048210433185525, 0.23531146642654904),
-                    c64(0.9563060368429952, 0.3720600967310689),
-                    c64(0.6758218963854483, -0.7370649661773218),
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                ],
-                [
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    c64(-0.3727824712587392, 0.6654984672870303),
-                    c64(0.44350976785201374, 0.4705784790879129),
-                    c64(1.153182891925262, 0.03414897282423488),
-                ],
-                [
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    c64(0.44350976785201374, 0.4705784790879129),
-                    c64(-0.6863912356293695, 0.33274923364351516),
-                    c64(0.8154234428286663, 0.024146970254571586),
-                ],
-                [
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    c64(1.153182891925262, 0.03414897282423488),
-                    c64(0.8154234428286663, 0.024146970254571586),
-                    c64(0.05917370688810886, -0.9982477009305457),
-                ]
-            ]
-        ];
-        let exemplar_s = points![
-            Complex64,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+            ],
             [
-                [
-                    c64(-0.6044712678228586, 0.1484805774534605),
-                    c64(0.7175413645594365, -0.0664025329048721)
-                ],
-                [
-                    c64(0.7175413645594366, -0.066402532904872),
-                    c64(0.6791057464354284, 0.0296961154906921)
-                ]
+                Complex64::ZERO,
+                c64(-0.9073776846815567, 0.2105899903363776),
+                c64(0.14644873928229243, 0.33297201094790096),
+                c64(0.6048210433185525, 0.23531146642654904),
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+            ],
+            [
+                Complex64::ZERO,
+                c64(0.14644873928229243, 0.33297201094790096),
+                c64(-0.7684442117038917, 0.526474975840944),
+                c64(0.9563060368429952, 0.3720600967310689),
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+            ],
+            [
+                Complex64::ZERO,
+                c64(0.6048210433185525, 0.23531146642654904),
+                c64(0.9563060368429952, 0.3720600967310689),
+                c64(0.6758218963854483, -0.7370649661773218),
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+            ],
+            [
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                c64(-0.3727824712587392, 0.6654984672870303),
+                c64(0.44350976785201374, 0.4705784790879129),
+                c64(1.153182891925262, 0.03414897282423488),
+            ],
+            [
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                c64(0.44350976785201374, 0.4705784790879129),
+                c64(-0.6863912356293695, 0.33274923364351516),
+                c64(0.8154234428286663, 0.024146970254571586),
+            ],
+            [
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                c64(1.153182891925262, 0.03414897282423488),
+                c64(0.8154234428286663, 0.024146970254571586),
+                c64(0.05917370688810886, -0.9982477009305457),
             ]
-        ];
+        ]];
+        let exemplar_s = points![[
+            [
+                c64(-0.6044712678228586, 0.1484805774534605),
+                c64(0.7175413645594365, -0.0664025329048721)
+            ],
+            [
+                c64(0.7175413645594366, -0.066402532904872),
+                c64(0.6791057464354284, 0.0296961154906921)
+            ]
+        ]];
         comp_pts_ix3(&exemplar_c, &cir2.c, margin, "cir2.c(l1)");
         comp_pts_ix3(&exemplar_x, &cir2.x, margin, "cir2.x(l1)");
         comp_pts_ix3(&exemplar_s, &cir2.s, margin, "cir2.s(l1)");
@@ -3044,74 +2932,71 @@ mod circuit_tests {
                 (2, 5) | (3, 6) | (5, 2) | (6, 3) => 0.6666666666666667.into(),
                 _ => Complex64::ZERO,
             });
-        let exemplar_x = points![
-            Complex64,
+        let exemplar_x = points![[
             [
-                [
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                ],
-                [
-                    Complex64::ZERO,
-                    c64(-0.966343811726842, 0.25725403308255007),
-                    c64(-0.08861914420189358, 0.11529724214516848),
-                    c64(0.5802819354986586, 0.44601317050552247),
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                ],
-                [
-                    Complex64::ZERO,
-                    c64(-0.08861914420189358, 0.11529724214516848),
-                    c64(-1.0808187380438485, 0.010573403382678814),
-                    c64(0.05321510615131428, 0.4067543409025826),
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                ],
-                [
-                    Complex64::ZERO,
-                    c64(0.5802819354986586, 0.44601317050552247),
-                    c64(0.05321510615131428, 0.4067543409025826),
-                    c64(1.0471625497706905, -0.26782743646522883),
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                ],
-                [
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    c64(-0.966343811726842, 0.25725403308255007),
-                    c64(-0.08861914420189358, 0.11529724214516848),
-                    c64(0.5802819354986586, 0.44601317050552247),
-                ],
-                [
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    c64(-0.08861914420189358, 0.11529724214516848),
-                    c64(-1.0808187380438485, 0.010573403382678814),
-                    c64(0.05321510615131428, 0.4067543409025826),
-                ],
-                [
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    c64(0.5802819354986586, 0.44601317050552247),
-                    c64(0.05321510615131428, 0.4067543409025826),
-                    c64(1.0471625497706905, -0.26782743646522883),
-                ]
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+            ],
+            [
+                Complex64::ZERO,
+                c64(-0.966343811726842, 0.25725403308255007),
+                c64(-0.08861914420189358, 0.11529724214516848),
+                c64(0.5802819354986586, 0.44601317050552247),
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+            ],
+            [
+                Complex64::ZERO,
+                c64(-0.08861914420189358, 0.11529724214516848),
+                c64(-1.0808187380438485, 0.010573403382678814),
+                c64(0.05321510615131428, 0.4067543409025826),
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+            ],
+            [
+                Complex64::ZERO,
+                c64(0.5802819354986586, 0.44601317050552247),
+                c64(0.05321510615131428, 0.4067543409025826),
+                c64(1.0471625497706905, -0.26782743646522883),
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+            ],
+            [
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                c64(-0.966343811726842, 0.25725403308255007),
+                c64(-0.08861914420189358, 0.11529724214516848),
+                c64(0.5802819354986586, 0.44601317050552247),
+            ],
+            [
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                c64(-0.08861914420189358, 0.11529724214516848),
+                c64(-1.0808187380438485, 0.010573403382678814),
+                c64(0.05321510615131428, 0.4067543409025826),
+            ],
+            [
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                c64(0.5802819354986586, 0.44601317050552247),
+                c64(0.05321510615131428, 0.4067543409025826),
+                c64(1.0471625497706905, -0.26782743646522883),
             ]
-        ];
+        ]];
         let exemplar_s =
             Points::<Complex64, Ix3>::from_shape_fn((1, 2, 2), |(_, j, k)| match (j, k) {
                 (0, 0) | (1, 1) => c64(0.0042607993839932, 0.0651355891399034),
@@ -3162,87 +3047,81 @@ mod circuit_tests {
                 (1, 3) | (4, 6) | (3, 1) | (6, 4) => 0.6666666666666667.into(),
                 _ => Complex64::ZERO,
             });
-        let exemplar_x = points![
-            Complex64,
+        let exemplar_x = points![[
             [
-                [
-                    -Complex64::ONE,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                ],
-                [
-                    Complex64::ZERO,
-                    -Complex64::ONE,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                ],
-                [
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    c64(-0.966343811726842, 0.25725403308255007),
-                    c64(-0.08861914420189358, 0.11529724214516848),
-                    c64(0.5802819354986586, 0.44601317050552247),
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                ],
-                [
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    c64(-0.08861914420189358, 0.11529724214516848),
-                    c64(-1.0808187380438485, 0.010573403382678814),
-                    c64(0.05321510615131428, 0.4067543409025826),
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                ],
-                [
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    c64(0.5802819354986586, 0.44601317050552247),
-                    c64(0.05321510615131428, 0.4067543409025826),
-                    c64(1.0471625497706905, -0.26782743646522883),
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                ],
-                [
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    c64(-0.9689082471969974, 0.24742030739945778),
-                    c64(0.5555511820823532, 0.43151303443327826)
-                ],
-                [
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    c64(0.5555511820823532, 0.43151303443327826),
-                    c64(0.9689082471969976, -0.24742030739945778)
-                ]
-            ]
-        ];
-        let exemplar_s = points![
-            Complex64,
+                -Complex64::ONE,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+            ],
             [
-                [
-                    c64(-0.0013639498786209, -0.0958396298280963),
-                    c64(0.9712550421795498, -0.217891138039029)
-                ],
-                [
-                    c64(0.9712550421795499, -0.2178911380390291),
-                    c64(-0.0397075620341229, -0.0872376324883029)
-                ]
+                Complex64::ZERO,
+                -Complex64::ONE,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+            ],
+            [
+                Complex64::ZERO,
+                Complex64::ZERO,
+                c64(-0.966343811726842, 0.25725403308255007),
+                c64(-0.08861914420189358, 0.11529724214516848),
+                c64(0.5802819354986586, 0.44601317050552247),
+                Complex64::ZERO,
+                Complex64::ZERO,
+            ],
+            [
+                Complex64::ZERO,
+                Complex64::ZERO,
+                c64(-0.08861914420189358, 0.11529724214516848),
+                c64(-1.0808187380438485, 0.010573403382678814),
+                c64(0.05321510615131428, 0.4067543409025826),
+                Complex64::ZERO,
+                Complex64::ZERO,
+            ],
+            [
+                Complex64::ZERO,
+                Complex64::ZERO,
+                c64(0.5802819354986586, 0.44601317050552247),
+                c64(0.05321510615131428, 0.4067543409025826),
+                c64(1.0471625497706905, -0.26782743646522883),
+                Complex64::ZERO,
+                Complex64::ZERO,
+            ],
+            [
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                c64(-0.9689082471969974, 0.24742030739945778),
+                c64(0.5555511820823532, 0.43151303443327826)
+            ],
+            [
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                c64(0.5555511820823532, 0.43151303443327826),
+                c64(0.9689082471969976, -0.24742030739945778)
             ]
-        ];
+        ]];
+        let exemplar_s = points![[
+            [
+                c64(-0.0013639498786209, -0.0958396298280963),
+                c64(0.9712550421795498, -0.217891138039029)
+            ],
+            [
+                c64(0.9712550421795499, -0.2178911380390291),
+                c64(-0.0397075620341229, -0.0872376324883029)
+            ]
+        ]];
         comp_pts_ix3(&exemplar_c, &cir2.c, margin, "cir2.c()");
         comp_pts_ix3(&exemplar_x, &cir2.x, margin, "cir2.x()");
         comp_pts_ix3(&exemplar_s, &cir2.s, margin, "cir2.s()");
@@ -3287,87 +3166,81 @@ mod circuit_tests {
                 (1, 5) | (3, 6) | (5, 1) | (6, 3) => 0.6666666666666667.into(),
                 _ => Complex64::ZERO,
             });
-        let exemplar_x = points![
-            Complex64,
+        let exemplar_x = points![[
             [
-                [
-                    -Complex64::ONE,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                ],
-                [
-                    Complex64::ZERO,
-                    -Complex64::ONE,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                ],
-                [
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    c64(-0.9689082471969974, 0.24742030739945778),
-                    c64(0.5555511820823532, 0.43151303443327826),
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                ],
-                [
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    c64(0.5555511820823532, 0.43151303443327826),
-                    c64(0.9689082471969976, -0.24742030739945778),
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                ],
-                [
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    c64(-0.966343811726842, 0.25725403308255007),
-                    c64(-0.08861914420189358, 0.11529724214516848),
-                    c64(0.5802819354986586, 0.44601317050552247),
-                ],
-                [
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    c64(-0.08861914420189358, 0.11529724214516848),
-                    c64(-1.0808187380438485, 0.010573403382678814),
-                    c64(0.05321510615131428, 0.4067543409025826),
-                ],
-                [
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    c64(0.5802819354986586, 0.44601317050552247),
-                    c64(0.05321510615131428, 0.4067543409025826),
-                    c64(1.0471625497706905, -0.26782743646522883),
-                ]
-            ]
-        ];
-        let exemplar_s = points![
-            Complex64,
+                -Complex64::ONE,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+            ],
             [
-                [
-                    c64(-0.0397075620341229, -0.0872376324883029),
-                    c64(0.9712550421795499, -0.2178911380390291)
-                ],
-                [
-                    c64(0.9712550421795498, -0.217891138039029),
-                    c64(-0.0013639498786209, -0.0958396298280963)
-                ]
+                Complex64::ZERO,
+                -Complex64::ONE,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+            ],
+            [
+                Complex64::ZERO,
+                Complex64::ZERO,
+                c64(-0.9689082471969974, 0.24742030739945778),
+                c64(0.5555511820823532, 0.43151303443327826),
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+            ],
+            [
+                Complex64::ZERO,
+                Complex64::ZERO,
+                c64(0.5555511820823532, 0.43151303443327826),
+                c64(0.9689082471969976, -0.24742030739945778),
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+            ],
+            [
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                c64(-0.966343811726842, 0.25725403308255007),
+                c64(-0.08861914420189358, 0.11529724214516848),
+                c64(0.5802819354986586, 0.44601317050552247),
+            ],
+            [
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                c64(-0.08861914420189358, 0.11529724214516848),
+                c64(-1.0808187380438485, 0.010573403382678814),
+                c64(0.05321510615131428, 0.4067543409025826),
+            ],
+            [
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                c64(0.5802819354986586, 0.44601317050552247),
+                c64(0.05321510615131428, 0.4067543409025826),
+                c64(1.0471625497706905, -0.26782743646522883),
             ]
-        ];
+        ]];
+        let exemplar_s = points![[
+            [
+                c64(-0.0397075620341229, -0.0872376324883029),
+                c64(0.9712550421795499, -0.2178911380390291)
+            ],
+            [
+                c64(0.9712550421795498, -0.217891138039029),
+                c64(-0.0013639498786209, -0.0958396298280963)
+            ]
+        ]];
         comp_pts_ix3(&exemplar_c, &cir3.c, margin, "cir3.c()");
         comp_pts_ix3(&exemplar_x, &cir3.x, margin, "cir3.x()");
         comp_pts_ix3(&exemplar_s, &cir3.s, margin, "cir3.s()");
@@ -3412,87 +3285,81 @@ mod circuit_tests {
                 (1, 6) | (3, 5) | (6, 1) | (5, 3) => 0.6666666666666667.into(),
                 _ => Complex64::ZERO,
             });
-        let exemplar_x = points![
-            Complex64,
+        let exemplar_x = points![[
             [
-                [
-                    -Complex64::ONE,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                ],
-                [
-                    Complex64::ZERO,
-                    -Complex64::ONE,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                ],
-                [
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    c64(0.8203396752925509, -0.5718765750937107),
-                    c64(0.9481135966932567, 0.4948067885071891),
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                ],
-                [
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    c64(0.9481135966932567, 0.4948067885071891),
-                    c64(-0.8203396752925507, 0.5718765750937107),
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                ],
-                [
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    c64(-0.966343811726842, 0.25725403308255007),
-                    c64(-0.08861914420189358, 0.11529724214516848),
-                    c64(0.5802819354986586, 0.44601317050552247),
-                ],
-                [
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    c64(-0.08861914420189358, 0.11529724214516848),
-                    c64(-1.0808187380438485, 0.010573403382678814),
-                    c64(0.05321510615131428, 0.4067543409025826),
-                ],
-                [
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    c64(0.5802819354986586, 0.44601317050552247),
-                    c64(0.05321510615131428, 0.4067543409025826),
-                    c64(1.0471625497706905, -0.26782743646522883),
-                ]
-            ]
-        ];
-        let exemplar_s = points![
-            Complex64,
+                -Complex64::ONE,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+            ],
             [
-                [
-                    c64(0.804537187163662, -0.5888426474354541),
-                    c64(-0.0698071736897519, 0.033334809635529)
-                ],
-                [
-                    c64(-0.0698071736897518, 0.033334809635529),
-                    c64(-0.9636991790793161, 0.2555379447554992)
-                ]
+                Complex64::ZERO,
+                -Complex64::ONE,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+            ],
+            [
+                Complex64::ZERO,
+                Complex64::ZERO,
+                c64(0.8203396752925509, -0.5718765750937107),
+                c64(0.9481135966932567, 0.4948067885071891),
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+            ],
+            [
+                Complex64::ZERO,
+                Complex64::ZERO,
+                c64(0.9481135966932567, 0.4948067885071891),
+                c64(-0.8203396752925507, 0.5718765750937107),
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+            ],
+            [
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                c64(-0.966343811726842, 0.25725403308255007),
+                c64(-0.08861914420189358, 0.11529724214516848),
+                c64(0.5802819354986586, 0.44601317050552247),
+            ],
+            [
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                c64(-0.08861914420189358, 0.11529724214516848),
+                c64(-1.0808187380438485, 0.010573403382678814),
+                c64(0.05321510615131428, 0.4067543409025826),
+            ],
+            [
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                c64(0.5802819354986586, 0.44601317050552247),
+                c64(0.05321510615131428, 0.4067543409025826),
+                c64(1.0471625497706905, -0.26782743646522883),
             ]
-        ];
+        ]];
+        let exemplar_s = points![[
+            [
+                c64(0.804537187163662, -0.5888426474354541),
+                c64(-0.0698071736897519, 0.033334809635529)
+            ],
+            [
+                c64(-0.0698071736897518, 0.033334809635529),
+                c64(-0.9636991790793161, 0.2555379447554992)
+            ]
+        ]];
         comp_pts_ix3(&exemplar_c, &cir4.c, margin, "cir4.c()");
         comp_pts_ix3(&exemplar_x, &cir4.x, margin, "cir4.x()");
         comp_pts_ix3(&exemplar_s, &cir4.s, margin, "cir4.s()");
@@ -3554,123 +3421,117 @@ mod circuit_tests {
                 (2, 6) | (3, 7) | (4, 8) | (6, 2) | (7, 3) | (8, 4) => 0.6666666666666667.into(),
                 _ => Complex64::ZERO,
             });
-        let exemplar_x = points![
-            Complex64,
+        let exemplar_x = points![[
             [
-                [
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO
-                ],
-                [
-                    Complex64::ZERO,
-                    c64(-0.9009542853970355, 0.2163041784628353),
-                    c64(0.15660502531218384, 0.3420069356770492),
-                    c64(-0.04647336706911738, 0.12498348394848209),
-                    c64(0.6290320273200906, 0.2338967948431292),
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO
-                ],
-                [
-                    Complex64::ZERO,
-                    c64(0.15660502531218384, 0.3420069356770492),
-                    c64(-0.7523857134925888, 0.5407604461570882),
-                    c64(-0.07348084523773735, 0.1976162395901491),
-                    c64(0.9945869637623739, 0.3698233045587068),
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO
-                ],
-                [
-                    Complex64::ZERO,
-                    c64(-0.04647336706911738, 0.12498348394848209),
-                    c64(-0.07348084523773735, 0.1976162395901491),
-                    c64(-1.0679539617999618, 0.031116128936622463),
-                    c64(0.15660502531218382, 0.34200693567704915),
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO
-                ],
-                [
-                    Complex64::ZERO,
-                    c64(0.6290320273200906, 0.2338967948431292),
-                    c64(0.9945869637623739, 0.3698233045587068),
-                    c64(0.15660502531218382, 0.34200693567704915),
-                    c64(0.7212939606895861, -0.788180753556546),
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO
-                ],
-                [
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    c64(-0.7643540849057923, 0.395935120823352),
-                    c64(0.2602794204440981, 0.437324634887758),
-                    c64(-0.04437865404125869, 0.17486340495920796),
-                    c64(0.8800737397504786, 0.2233542692154159),
-                ],
-                [
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    c64(0.2602794204440981, 0.437324634887758),
-                    c64(-0.7125119835850666, 0.48304084740448944),
-                    c64(-0.04901782553425585, 0.1931429436469065),
-                    c64(0.9720732177290143, 0.24670285382143028),
-                ],
-                [
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    c64(-0.04437865404125869, 0.17486340495920796),
-                    c64(-0.04901782553425585, 0.1931429436469065),
-                    c64(-1.0607007031035893, 0.03612680961457026),
-                    c64(0.1818233863750128, 0.305501856139204),
-                ],
-                [
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    Complex64::ZERO,
-                    c64(0.8800737397504786, 0.2233542692154159),
-                    c64(0.9720732177290143, 0.24670285382143028),
-                    c64(0.1818233863750128, 0.305501856139204),
-                    c64(0.5375667715944483, -0.9151027778424118),
-                ]
-            ]
-        ];
-        let exemplar_s = points![
-            Complex64,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO
+            ],
             [
-                [
-                    c64(-0.3022491170600611, 0.1008132787157404),
-                    c64(0.9097121238541618, -0.0704251288726103)
-                ],
-                [
-                    c64(0.9097121238541618, -0.0704251288726103),
-                    c64(0.36450243087469, 0.0491968800132813)
-                ]
+                Complex64::ZERO,
+                c64(-0.9009542853970355, 0.2163041784628353),
+                c64(0.15660502531218384, 0.3420069356770492),
+                c64(-0.04647336706911738, 0.12498348394848209),
+                c64(0.6290320273200906, 0.2338967948431292),
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO
+            ],
+            [
+                Complex64::ZERO,
+                c64(0.15660502531218384, 0.3420069356770492),
+                c64(-0.7523857134925888, 0.5407604461570882),
+                c64(-0.07348084523773735, 0.1976162395901491),
+                c64(0.9945869637623739, 0.3698233045587068),
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO
+            ],
+            [
+                Complex64::ZERO,
+                c64(-0.04647336706911738, 0.12498348394848209),
+                c64(-0.07348084523773735, 0.1976162395901491),
+                c64(-1.0679539617999618, 0.031116128936622463),
+                c64(0.15660502531218382, 0.34200693567704915),
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO
+            ],
+            [
+                Complex64::ZERO,
+                c64(0.6290320273200906, 0.2338967948431292),
+                c64(0.9945869637623739, 0.3698233045587068),
+                c64(0.15660502531218382, 0.34200693567704915),
+                c64(0.7212939606895861, -0.788180753556546),
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO
+            ],
+            [
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                c64(-0.7643540849057923, 0.395935120823352),
+                c64(0.2602794204440981, 0.437324634887758),
+                c64(-0.04437865404125869, 0.17486340495920796),
+                c64(0.8800737397504786, 0.2233542692154159),
+            ],
+            [
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                c64(0.2602794204440981, 0.437324634887758),
+                c64(-0.7125119835850666, 0.48304084740448944),
+                c64(-0.04901782553425585, 0.1931429436469065),
+                c64(0.9720732177290143, 0.24670285382143028),
+            ],
+            [
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                c64(-0.04437865404125869, 0.17486340495920796),
+                c64(-0.04901782553425585, 0.1931429436469065),
+                c64(-1.0607007031035893, 0.03612680961457026),
+                c64(0.1818233863750128, 0.305501856139204),
+            ],
+            [
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                Complex64::ZERO,
+                c64(0.8800737397504786, 0.2233542692154159),
+                c64(0.9720732177290143, 0.24670285382143028),
+                c64(0.1818233863750128, 0.305501856139204),
+                c64(0.5375667715944483, -0.9151027778424118),
             ]
-        ];
+        ]];
+        let exemplar_s = points![[
+            [
+                c64(-0.3022491170600611, 0.1008132787157404),
+                c64(0.9097121238541618, -0.0704251288726103)
+            ],
+            [
+                c64(0.9097121238541618, -0.0704251288726103),
+                c64(0.36450243087469, 0.0491968800132813)
+            ]
+        ]];
         comp_pts_ix3(&exemplar_c, &cir.c, margin, "cir.c()");
         comp_pts_ix3(&exemplar_x, &cir.x, margin, "cir.x()");
         comp_pts_ix3(&exemplar_s, &cir.s, margin, "cir.s()");
@@ -3682,8 +3543,9 @@ mod circuit_tests {
         let freq = FrequencyBuilder::new()
             .freqs_scaled(Array1::from_vec(freq_points), Scale::Giga)
             .build();
-        let margin = F64Margin {
+        let margin = NumMargin {
             epsilon: 1e-4,
+            relative: 1.0,
             ulps: 10,
         };
 
@@ -3772,26 +3634,23 @@ mod circuit_tests {
         cir.add_elem(&ml1, &freq);
         cir.add_elem(&ml2, &freq);
         cir.add_elem(&r1, &freq);
-        let exemplar_s = points![
-            Complex64,
+        let exemplar_s = points![[
             [
-                [
-                    c64(-1.3112230673462122e-07, -5.685569916314089e-17),
-                    c64(-1.2060919872574568e-16, -7.071067811865412e-01),
-                    c64(-1.2060919872574566e-16, -7.071067811865414e-01)
-                ],
-                [
-                    c64(-1.2060919872574566e-16, -7.071067811865414e-01),
-                    c64(-6.5561153783644244e-08, 7.455052910997203e-24),
-                    c64(-6.5561153621858092e-08, 5.685573643840818e-17)
-                ],
-                [
-                    c64(-1.2060919872574566e-16, -7.071067811865414e-01),
-                    c64(-6.5561153662869508e-08, 5.685573643840819e-17),
-                    c64(-6.5561153783644244e-08, 7.455052905639125e-24)
-                ]
+                c64(-1.3112230673462122e-07, -5.685569916314089e-17),
+                c64(-1.2060919872574568e-16, -7.071067811865412e-01),
+                c64(-1.2060919872574566e-16, -7.071067811865414e-01)
+            ],
+            [
+                c64(-1.2060919872574566e-16, -7.071067811865414e-01),
+                c64(-6.5561153783644244e-08, 7.455052910997203e-24),
+                c64(-6.5561153621858092e-08, 5.685573643840818e-17)
+            ],
+            [
+                c64(-1.2060919872574566e-16, -7.071067811865414e-01),
+                c64(-6.5561153662869508e-08, 5.685573643840819e-17),
+                c64(-6.5561153783644244e-08, 7.455052905639125e-24)
             ]
-        ];
+        ]];
         let exemplar_x =
             Points::<Complex64, Ix3>::from_shape_fn((1, 10, 10), |(_, j, k)| match (j, k) {
                 (1, 1) => (-0.17157293888502256).into(),
@@ -3825,8 +3684,9 @@ mod circuit_tests {
         let freq = FrequencyBuilder::new()
             .freqs_scaled(Array1::from_vec(freq_points), Scale::Giga)
             .build();
-        let margin = F64Margin {
+        let margin = NumMargin {
             epsilon: 1e-11,
+            relative: 1.0,
             ulps: 10,
         };
 
@@ -4061,159 +3921,153 @@ mod circuit_tests {
                     }
                     _ => Complex64::ZERO,
                 });
-            let exemplar_x = points![
-                Complex64,
+            let exemplar_x = points![[
                 [
-                    [
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                    ],
-                    [
-                        Complex64::ZERO,
-                        c64(-0.9009542853970355, 0.2163041784628353),
-                        c64(0.15660502531218384, 0.3420069356770492),
-                        c64(-0.04647336706911738, 0.12498348394848209),
-                        c64(0.6290320273200906, 0.2338967948431292),
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO
-                    ],
-                    [
-                        Complex64::ZERO,
-                        c64(0.15660502531218384, 0.3420069356770492),
-                        c64(-0.7523857134925888, 0.5407604461570882),
-                        c64(-0.07348084523773735, 0.1976162395901491),
-                        c64(0.9945869637623739, 0.3698233045587068),
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO
-                    ],
-                    [
-                        Complex64::ZERO,
-                        c64(-0.04647336706911738, 0.12498348394848209),
-                        c64(-0.07348084523773735, 0.1976162395901491),
-                        c64(-1.0679539617999618, 0.031116128936622463),
-                        c64(0.15660502531218382, 0.34200693567704915),
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO
-                    ],
-                    [
-                        Complex64::ZERO,
-                        c64(0.6290320273200906, 0.2338967948431292),
-                        c64(0.9945869637623739, 0.3698233045587068),
-                        c64(0.15660502531218382, 0.34200693567704915),
-                        c64(0.7212939606895861, -0.788180753556546),
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO
-                    ],
-                    [
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        c64(-0.7643540849057923, 0.395935120823352),
-                        c64(0.2602794204440981, 0.437324634887758),
-                        c64(-0.04437865404125869, 0.17486340495920796),
-                        c64(0.8800737397504786, 0.2233542692154159),
-                    ],
-                    [
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        c64(0.2602794204440981, 0.437324634887758),
-                        c64(-0.7125119835850666, 0.48304084740448944),
-                        c64(-0.04901782553425585, 0.1931429436469065),
-                        c64(0.9720732177290143, 0.24670285382143028),
-                    ],
-                    [
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        c64(-0.04437865404125869, 0.17486340495920796),
-                        c64(-0.04901782553425585, 0.1931429436469065),
-                        c64(-1.0607007031035893, 0.03612680961457026),
-                        c64(0.1818233863750128, 0.305501856139204),
-                    ],
-                    [
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        c64(0.8800737397504786, 0.2233542692154159),
-                        c64(0.9720732177290143, 0.24670285382143028),
-                        c64(0.1818233863750128, 0.305501856139204),
-                        c64(0.5375667715944483, -0.9151027778424118),
-                    ]
-                ]
-            ];
-            let exemplar_s = points![
-                Complex64,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                ],
                 [
-                    [
-                        c64(-0.3022491170600611, 0.1008132787157404),
-                        c64(0.9097121238541618, -0.0704251288726103)
-                    ],
-                    [
-                        c64(0.9097121238541618, -0.0704251288726103),
-                        c64(0.36450243087469, 0.0491968800132813)
-                    ]
+                    Complex64::ZERO,
+                    c64(-0.9009542853970355, 0.2163041784628353),
+                    c64(0.15660502531218384, 0.3420069356770492),
+                    c64(-0.04647336706911738, 0.12498348394848209),
+                    c64(0.6290320273200906, 0.2338967948431292),
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO
+                ],
+                [
+                    Complex64::ZERO,
+                    c64(0.15660502531218384, 0.3420069356770492),
+                    c64(-0.7523857134925888, 0.5407604461570882),
+                    c64(-0.07348084523773735, 0.1976162395901491),
+                    c64(0.9945869637623739, 0.3698233045587068),
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO
+                ],
+                [
+                    Complex64::ZERO,
+                    c64(-0.04647336706911738, 0.12498348394848209),
+                    c64(-0.07348084523773735, 0.1976162395901491),
+                    c64(-1.0679539617999618, 0.031116128936622463),
+                    c64(0.15660502531218382, 0.34200693567704915),
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO
+                ],
+                [
+                    Complex64::ZERO,
+                    c64(0.6290320273200906, 0.2338967948431292),
+                    c64(0.9945869637623739, 0.3698233045587068),
+                    c64(0.15660502531218382, 0.34200693567704915),
+                    c64(0.7212939606895861, -0.788180753556546),
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO
+                ],
+                [
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    c64(-0.7643540849057923, 0.395935120823352),
+                    c64(0.2602794204440981, 0.437324634887758),
+                    c64(-0.04437865404125869, 0.17486340495920796),
+                    c64(0.8800737397504786, 0.2233542692154159),
+                ],
+                [
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    c64(0.2602794204440981, 0.437324634887758),
+                    c64(-0.7125119835850666, 0.48304084740448944),
+                    c64(-0.04901782553425585, 0.1931429436469065),
+                    c64(0.9720732177290143, 0.24670285382143028),
+                ],
+                [
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    c64(-0.04437865404125869, 0.17486340495920796),
+                    c64(-0.04901782553425585, 0.1931429436469065),
+                    c64(-1.0607007031035893, 0.03612680961457026),
+                    c64(0.1818233863750128, 0.305501856139204),
+                ],
+                [
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    c64(0.8800737397504786, 0.2233542692154159),
+                    c64(0.9720732177290143, 0.24670285382143028),
+                    c64(0.1818233863750128, 0.305501856139204),
+                    c64(0.5375667715944483, -0.9151027778424118),
                 ]
-            ];
+            ]];
+            let exemplar_s = points![[
+                [
+                    c64(-0.3022491170600611, 0.1008132787157404),
+                    c64(0.9097121238541618, -0.0704251288726103)
+                ],
+                [
+                    c64(0.9097121238541618, -0.0704251288726103),
+                    c64(0.36450243087469, 0.0491968800132813)
+                ]
+            ]];
             let sparms = cir.net().s_db();
             println!(
                 "s11={:.3}\ts12={:.3}\ns21={:.3}\ts22={:.3}\n",
@@ -4342,159 +4196,153 @@ mod circuit_tests {
                     }
                     _ => Complex64::ZERO,
                 });
-            let exemplar_x = points![
-                Complex64,
+            let exemplar_x = points![[
                 [
-                    [
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                    ],
-                    [
-                        Complex64::ZERO,
-                        c64(-0.9009542853970355, 0.2163041784628353),
-                        c64(0.15660502531218384, 0.3420069356770492),
-                        c64(-0.04647336706911738, 0.12498348394848209),
-                        c64(0.6290320273200906, 0.2338967948431292),
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO
-                    ],
-                    [
-                        Complex64::ZERO,
-                        c64(0.15660502531218384, 0.3420069356770492),
-                        c64(-0.7523857134925888, 0.5407604461570882),
-                        c64(-0.07348084523773735, 0.1976162395901491),
-                        c64(0.9945869637623739, 0.3698233045587068),
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO
-                    ],
-                    [
-                        Complex64::ZERO,
-                        c64(-0.04647336706911738, 0.12498348394848209),
-                        c64(-0.07348084523773735, 0.1976162395901491),
-                        c64(-1.0679539617999618, 0.031116128936622463),
-                        c64(0.15660502531218382, 0.34200693567704915),
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO
-                    ],
-                    [
-                        Complex64::ZERO,
-                        c64(0.6290320273200906, 0.2338967948431292),
-                        c64(0.9945869637623739, 0.3698233045587068),
-                        c64(0.15660502531218382, 0.34200693567704915),
-                        c64(0.7212939606895861, -0.788180753556546),
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO
-                    ],
-                    [
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        c64(-0.7643540849057923, 0.395935120823352),
-                        c64(0.2602794204440981, 0.437324634887758),
-                        c64(-0.04437865404125869, 0.17486340495920796),
-                        c64(0.8800737397504786, 0.2233542692154159),
-                    ],
-                    [
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        c64(0.2602794204440981, 0.437324634887758),
-                        c64(-0.7125119835850666, 0.48304084740448944),
-                        c64(-0.04901782553425585, 0.1931429436469065),
-                        c64(0.9720732177290143, 0.24670285382143028),
-                    ],
-                    [
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        c64(-0.04437865404125869, 0.17486340495920796),
-                        c64(-0.04901782553425585, 0.1931429436469065),
-                        c64(-1.0607007031035893, 0.03612680961457026),
-                        c64(0.1818233863750128, 0.305501856139204),
-                    ],
-                    [
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        c64(0.8800737397504786, 0.2233542692154159),
-                        c64(0.9720732177290143, 0.24670285382143028),
-                        c64(0.1818233863750128, 0.305501856139204),
-                        c64(0.5375667715944483, -0.9151027778424118),
-                    ]
-                ]
-            ];
-            let exemplar_s = points![
-                Complex64,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                ],
                 [
-                    [
-                        c64(-0.3022491170600611, 0.1008132787157404),
-                        c64(0.9097121238541618, -0.0704251288726103)
-                    ],
-                    [
-                        c64(0.9097121238541618, -0.0704251288726103),
-                        c64(0.36450243087469, 0.0491968800132813)
-                    ]
+                    Complex64::ZERO,
+                    c64(-0.9009542853970355, 0.2163041784628353),
+                    c64(0.15660502531218384, 0.3420069356770492),
+                    c64(-0.04647336706911738, 0.12498348394848209),
+                    c64(0.6290320273200906, 0.2338967948431292),
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO
+                ],
+                [
+                    Complex64::ZERO,
+                    c64(0.15660502531218384, 0.3420069356770492),
+                    c64(-0.7523857134925888, 0.5407604461570882),
+                    c64(-0.07348084523773735, 0.1976162395901491),
+                    c64(0.9945869637623739, 0.3698233045587068),
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO
+                ],
+                [
+                    Complex64::ZERO,
+                    c64(-0.04647336706911738, 0.12498348394848209),
+                    c64(-0.07348084523773735, 0.1976162395901491),
+                    c64(-1.0679539617999618, 0.031116128936622463),
+                    c64(0.15660502531218382, 0.34200693567704915),
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO
+                ],
+                [
+                    Complex64::ZERO,
+                    c64(0.6290320273200906, 0.2338967948431292),
+                    c64(0.9945869637623739, 0.3698233045587068),
+                    c64(0.15660502531218382, 0.34200693567704915),
+                    c64(0.7212939606895861, -0.788180753556546),
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO
+                ],
+                [
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    c64(-0.7643540849057923, 0.395935120823352),
+                    c64(0.2602794204440981, 0.437324634887758),
+                    c64(-0.04437865404125869, 0.17486340495920796),
+                    c64(0.8800737397504786, 0.2233542692154159),
+                ],
+                [
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    c64(0.2602794204440981, 0.437324634887758),
+                    c64(-0.7125119835850666, 0.48304084740448944),
+                    c64(-0.04901782553425585, 0.1931429436469065),
+                    c64(0.9720732177290143, 0.24670285382143028),
+                ],
+                [
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    c64(-0.04437865404125869, 0.17486340495920796),
+                    c64(-0.04901782553425585, 0.1931429436469065),
+                    c64(-1.0607007031035893, 0.03612680961457026),
+                    c64(0.1818233863750128, 0.305501856139204),
+                ],
+                [
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    c64(0.8800737397504786, 0.2233542692154159),
+                    c64(0.9720732177290143, 0.24670285382143028),
+                    c64(0.1818233863750128, 0.305501856139204),
+                    c64(0.5375667715944483, -0.9151027778424118),
                 ]
-            ];
+            ]];
+            let exemplar_s = points![[
+                [
+                    c64(-0.3022491170600611, 0.1008132787157404),
+                    c64(0.9097121238541618, -0.0704251288726103)
+                ],
+                [
+                    c64(0.9097121238541618, -0.0704251288726103),
+                    c64(0.36450243087469, 0.0491968800132813)
+                ]
+            ]];
             let sparms = cir.net().s_db();
             println!(
                 "s11={:.3}\ts12={:.3}\ns21={:.3}\ts22={:.3}\n",
@@ -4650,159 +4498,153 @@ mod circuit_tests {
                     }
                     _ => Complex64::ZERO,
                 });
-            let exemplar_x = points![
-                Complex64,
+            let exemplar_x = points![[
                 [
-                    [
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                    ],
-                    [
-                        Complex64::ZERO,
-                        c64(-0.9009542853970355, 0.2163041784628353),
-                        c64(0.15660502531218384, 0.3420069356770492),
-                        c64(-0.04647336706911738, 0.12498348394848209),
-                        c64(0.6290320273200906, 0.2338967948431292),
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO
-                    ],
-                    [
-                        Complex64::ZERO,
-                        c64(0.15660502531218384, 0.3420069356770492),
-                        c64(-0.7523857134925888, 0.5407604461570882),
-                        c64(-0.07348084523773735, 0.1976162395901491),
-                        c64(0.9945869637623739, 0.3698233045587068),
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO
-                    ],
-                    [
-                        Complex64::ZERO,
-                        c64(-0.04647336706911738, 0.12498348394848209),
-                        c64(-0.07348084523773735, 0.1976162395901491),
-                        c64(-1.0679539617999618, 0.031116128936622463),
-                        c64(0.15660502531218382, 0.34200693567704915),
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO
-                    ],
-                    [
-                        Complex64::ZERO,
-                        c64(0.6290320273200906, 0.2338967948431292),
-                        c64(0.9945869637623739, 0.3698233045587068),
-                        c64(0.15660502531218382, 0.34200693567704915),
-                        c64(0.7212939606895861, -0.788180753556546),
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO
-                    ],
-                    [
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        c64(-0.7643540849057923, 0.395935120823352),
-                        c64(0.2602794204440981, 0.437324634887758),
-                        c64(-0.04437865404125869, 0.17486340495920796),
-                        c64(0.8800737397504786, 0.2233542692154159),
-                    ],
-                    [
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        c64(0.2602794204440981, 0.437324634887758),
-                        c64(-0.7125119835850666, 0.48304084740448944),
-                        c64(-0.04901782553425585, 0.1931429436469065),
-                        c64(0.9720732177290143, 0.24670285382143028),
-                    ],
-                    [
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        c64(-0.04437865404125869, 0.17486340495920796),
-                        c64(-0.04901782553425585, 0.1931429436469065),
-                        c64(-1.0607007031035893, 0.03612680961457026),
-                        c64(0.1818233863750128, 0.305501856139204),
-                    ],
-                    [
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        Complex64::ZERO,
-                        c64(0.8800737397504786, 0.2233542692154159),
-                        c64(0.9720732177290143, 0.24670285382143028),
-                        c64(0.1818233863750128, 0.305501856139204),
-                        c64(0.5375667715944483, -0.9151027778424118),
-                    ]
-                ]
-            ];
-            let exemplar_s = points![
-                Complex64,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                ],
                 [
-                    [
-                        c64(-0.3022491170600611, 0.1008132787157404),
-                        c64(0.9097121238541618, -0.0704251288726103)
-                    ],
-                    [
-                        c64(0.9097121238541618, -0.0704251288726103),
-                        c64(0.36450243087469, 0.0491968800132813)
-                    ]
+                    Complex64::ZERO,
+                    c64(-0.9009542853970355, 0.2163041784628353),
+                    c64(0.15660502531218384, 0.3420069356770492),
+                    c64(-0.04647336706911738, 0.12498348394848209),
+                    c64(0.6290320273200906, 0.2338967948431292),
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO
+                ],
+                [
+                    Complex64::ZERO,
+                    c64(0.15660502531218384, 0.3420069356770492),
+                    c64(-0.7523857134925888, 0.5407604461570882),
+                    c64(-0.07348084523773735, 0.1976162395901491),
+                    c64(0.9945869637623739, 0.3698233045587068),
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO
+                ],
+                [
+                    Complex64::ZERO,
+                    c64(-0.04647336706911738, 0.12498348394848209),
+                    c64(-0.07348084523773735, 0.1976162395901491),
+                    c64(-1.0679539617999618, 0.031116128936622463),
+                    c64(0.15660502531218382, 0.34200693567704915),
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO
+                ],
+                [
+                    Complex64::ZERO,
+                    c64(0.6290320273200906, 0.2338967948431292),
+                    c64(0.9945869637623739, 0.3698233045587068),
+                    c64(0.15660502531218382, 0.34200693567704915),
+                    c64(0.7212939606895861, -0.788180753556546),
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO
+                ],
+                [
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    c64(-0.7643540849057923, 0.395935120823352),
+                    c64(0.2602794204440981, 0.437324634887758),
+                    c64(-0.04437865404125869, 0.17486340495920796),
+                    c64(0.8800737397504786, 0.2233542692154159),
+                ],
+                [
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    c64(0.2602794204440981, 0.437324634887758),
+                    c64(-0.7125119835850666, 0.48304084740448944),
+                    c64(-0.04901782553425585, 0.1931429436469065),
+                    c64(0.9720732177290143, 0.24670285382143028),
+                ],
+                [
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    c64(-0.04437865404125869, 0.17486340495920796),
+                    c64(-0.04901782553425585, 0.1931429436469065),
+                    c64(-1.0607007031035893, 0.03612680961457026),
+                    c64(0.1818233863750128, 0.305501856139204),
+                ],
+                [
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    c64(0.8800737397504786, 0.2233542692154159),
+                    c64(0.9720732177290143, 0.24670285382143028),
+                    c64(0.1818233863750128, 0.305501856139204),
+                    c64(0.5375667715944483, -0.9151027778424118),
                 ]
-            ];
+            ]];
+            let exemplar_s = points![[
+                [
+                    c64(-0.3022491170600611, 0.1008132787157404),
+                    c64(0.9097121238541618, -0.0704251288726103)
+                ],
+                [
+                    c64(0.9097121238541618, -0.0704251288726103),
+                    c64(0.36450243087469, 0.0491968800132813)
+                ]
+            ]];
             let sparms = cir.net().s_db();
             println!(
                 "s11={:.3}\ts12={:.3}\ns21={:.3}\ts22={:.3}\n",

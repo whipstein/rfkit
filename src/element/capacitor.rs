@@ -1,7 +1,6 @@
 use crate::{
     element::{Elem, ElemType, Lumped, Q, QMode},
     frequency::{FreqArray, Frequency, new_frequency},
-    point,
     pts::{Points, Pts},
     scale::Scale,
     unit::{Unit, UnitValue, Unitized},
@@ -32,8 +31,7 @@ impl Capacitor {
             cap: cap,
             q,
             nodes: nodes,
-            c: point![
-                Complex64,
+            c: points![
                 [c64(1.0 / 3.0, 0.0), c64(2.0 / 3.0, 0.0)],
                 [c64(2.0 / 3.0, 0.0), c64(1.0 / 3.0, 0.0)]
             ],
@@ -61,8 +59,7 @@ impl Default for Capacitor {
             cap: UnitValue::default(),
             q: None,
             nodes: [1, 2],
-            c: point![
-                Complex64,
+            c: points![
                 [c64(1.0 / 3.0, 0.0), c64(2.0 / 3.0, 0.0)],
                 [c64(2.0 / 3.0, 0.0), c64(1.0 / 3.0, 0.0)]
             ],
@@ -250,8 +247,7 @@ impl CapacitorBuilder {
             cap: self.cap,
             q: self.q,
             nodes: self.nodes,
-            c: point![
-                Complex64,
+            c: points![
                 [c64(1.0 / 3.0, 0.0), c64(2.0 / 3.0, 0.0)],
                 [c64(2.0 / 3.0, 0.0), c64(1.0 / 3.0, 0.0)]
             ],
@@ -277,18 +273,19 @@ mod element_capacitor_tests {
     use super::*;
     use crate::{
         unit::UnitValBuilder,
-        util::{comp_num, comp_pts_ix2},
+        util::{ApproxEq, NumMargin, comp_pts_ix2},
     };
-    use float_cmp::*;
     use std::f64::consts::PI;
 
-    const DEFAULT_MARGIN: F64Margin = F64Margin {
+    const DEFAULT_MARGIN: NumMargin<f64> = NumMargin {
         epsilon: 1e-10,
+        relative: 1e-10,
         ulps: 4,
     };
 
-    const RELAXED_MARGIN: F64Margin = F64Margin {
+    const RELAXED_MARGIN: NumMargin<f64> = NumMargin {
         epsilon: 1e-6,
+        relative: 1e-6,
         ulps: 10,
     };
 
@@ -307,8 +304,7 @@ mod element_capacitor_tests {
             cap: unitval,
             q: None,
             nodes: [1, 2],
-            c: point![
-                Complex64,
+            c: points![
                 [c64(1.0 / 3.0, 0.0), c64(2.0 / 3.0, 0.0)],
                 [c64(2.0 / 3.0, 0.0), c64(1.0 / 3.0, 0.0)]
             ],
@@ -320,13 +316,13 @@ mod element_capacitor_tests {
             .nodes([1, 2])
             .id("C1")
             .build();
-        let margin = F64Margin::default();
+        let margin = NumMargin::default();
 
         assert_eq!(&exemplar.id(), &calc.id());
         assert_eq!(&exemplar.scale(), &calc.scale());
         assert_eq!(&Unit::Farad, &calc.unit());
         comp_pts_ix2(&exemplar.c(&freq), &calc.c(&freq), margin, "calc.c()");
-        comp_num(&exemplar_z, &calc.z(&freq), margin, "calc.z()", "0");
+        exemplar_z.assert_approx_eq(calc.z(&freq), margin, "calc.z()", "0");
     }
 
     mod capacitor_tests {
@@ -363,8 +359,16 @@ mod element_capacitor_tests {
             let z = cap.z(&freq);
             let expected_z = 1.0 / (Complex64::I * 2.0 * PI * 1e9 * 1e-12);
 
-            assert!(approx_eq!(f64, z.re, expected_z.re, epsilon = 1e-6));
-            assert!(approx_eq!(f64, z.im, expected_z.im, epsilon = 1e-6));
+            z.assert_approx_eq(
+                expected_z,
+                NumMargin {
+                    epsilon: 1e-6,
+                    relative: 1e-6,
+                    ulps: 4,
+                },
+                "z",
+                "",
+            );
         }
 
         #[test]
@@ -374,30 +378,18 @@ mod element_capacitor_tests {
             let c_matrix = cap.c(&freq);
 
             // Check diagonal and off-diagonal elements
-            assert!(approx_eq!(
-                f64,
-                c_matrix[[0, 0]].re,
-                1.0 / 3.0,
-                DEFAULT_MARGIN
-            ));
-            assert!(approx_eq!(
-                f64,
-                c_matrix[[1, 1]].re,
-                1.0 / 3.0,
-                DEFAULT_MARGIN
-            ));
-            assert!(approx_eq!(
-                f64,
-                c_matrix[[0, 1]].re,
-                2.0 / 3.0,
-                DEFAULT_MARGIN
-            ));
-            assert!(approx_eq!(
-                f64,
-                c_matrix[[1, 0]].re,
-                2.0 / 3.0,
-                DEFAULT_MARGIN
-            ));
+            c_matrix[[0, 0]]
+                .re
+                .assert_approx_eq(1.0 / 3.0, DEFAULT_MARGIN, "c_matrix", "[0,0]");
+            c_matrix[[1, 1]]
+                .re
+                .assert_approx_eq(1.0 / 3.0, DEFAULT_MARGIN, "c_matrix", "[1,1]");
+            c_matrix[[0, 1]]
+                .re
+                .assert_approx_eq(2.0 / 3.0, DEFAULT_MARGIN, "c_matrix", "[0,1]");
+            c_matrix[[1, 0]]
+                .re
+                .assert_approx_eq(2.0 / 3.0, DEFAULT_MARGIN, "c_matrix", "[1,0]");
         }
 
         #[test]
@@ -409,8 +401,7 @@ mod element_capacitor_tests {
             for i in 0..freqs.len() {
                 let z = cap.z_at(&freq, i);
                 let expected = 1.0 / (Complex64::I * 2.0 * PI * freqs[i] * 1e-12);
-                assert!(approx_eq!(f64, z.re, expected.re, RELAXED_MARGIN));
-                assert!(approx_eq!(f64, z.im, expected.im, RELAXED_MARGIN));
+                z.assert_approx_eq(expected, RELAXED_MARGIN, "z", "");
             }
         }
 
@@ -454,24 +445,24 @@ mod element_capacitor_tests {
 
             // Check structure is consistent across frequencies
             for i in 0..2 {
-                assert!(approx_eq!(
-                    f64,
-                    net[[i, 0, 0]].re,
+                net[[i, 0, 0]].re.assert_approx_eq(
                     1.0 / 3.0,
-                    DEFAULT_MARGIN
-                ));
-                assert!(approx_eq!(
-                    f64,
-                    net[[i, 1, 1]].re,
+                    DEFAULT_MARGIN,
+                    "net",
+                    format!("[{i},0,0]").as_str(),
+                );
+                net[[i, 1, 1]].re.assert_approx_eq(
                     1.0 / 3.0,
-                    DEFAULT_MARGIN
-                ));
-                assert!(approx_eq!(
-                    f64,
-                    net[[i, 0, 1]].re,
+                    DEFAULT_MARGIN,
+                    "net",
+                    format!("[{i},1,1]").as_str(),
+                );
+                net[[i, 0, 1]].re.assert_approx_eq(
                     2.0 / 3.0,
-                    DEFAULT_MARGIN
-                ));
+                    DEFAULT_MARGIN,
+                    "net",
+                    format!("[{i},0,1]").as_str(),
+                );
             }
         }
     }

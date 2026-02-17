@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 use crate::{
     error::MinimizerError,
-    num::RFFloat,
+    num::{Abs, RealScalar, ScalarConst},
     pts::{Matrix, Points1, Points2, Pts},
 };
 use dyn_clone::DynClone;
@@ -68,13 +68,13 @@ dyn_clone::clone_trait_object!(<T> ObjHessFn<T>);
 pub struct SingleDimFn<T, F>(pub F, std::marker::PhantomData<T>)
 where
     F: Fn(&T) -> T + Clone,
-    T: RFFloat;
+    T: RealScalar;
 
 // Convenience constructors
 impl<T, F> SingleDimFn<T, F>
 where
     F: Fn(&T) -> T + Clone,
-    T: RFFloat,
+    T: RealScalar,
 {
     pub fn new(f: F) -> Self {
         SingleDimFn(f, std::marker::PhantomData)
@@ -85,7 +85,7 @@ where
 impl<T, F> ObjFn<T> for SingleDimFn<T, F>
 where
     F: Fn(&T) -> T + Clone,
-    T: RFFloat,
+    T: RealScalar,
 {
     fn call(&self, x: &Points1<T>) -> T {
         // Take the first element for single-dim functions
@@ -103,14 +103,14 @@ pub struct SingleDimDerFn<T, F, DF>(pub F, pub DF, std::marker::PhantomData<T>)
 where
     F: Fn(&T) -> T + Clone,
     DF: Fn(&T) -> T + Clone,
-    T: RFFloat;
+    T: RealScalar;
 
 // Convenience constructors
 impl<T, F, DF> SingleDimDerFn<T, F, DF>
 where
     F: Fn(&T) -> T + Clone,
     DF: Fn(&T) -> T + Clone,
-    T: RFFloat,
+    T: RealScalar,
 {
     pub fn new(f: F, df: DF) -> Self {
         SingleDimDerFn(f, df, std::marker::PhantomData)
@@ -122,7 +122,7 @@ impl<T, F, DF> ObjFn<T> for SingleDimDerFn<T, F, DF>
 where
     F: Fn(&T) -> T + Clone,
     DF: Fn(&T) -> T + Clone,
-    T: RFFloat,
+    T: RealScalar,
 {
     fn call(&self, x: &Points1<T>) -> T {
         // Take the first element for single-dim functions
@@ -138,7 +138,7 @@ impl<T, F, DF> ObjDerFn<T> for SingleDimDerFn<T, F, DF>
 where
     F: Fn(&T) -> T + Clone,
     DF: Fn(&T) -> T + Clone,
-    T: RFFloat,
+    T: RealScalar,
 {
     fn df(&self, x: &Points1<T>) -> T {
         // Take the first element for single-dim functions
@@ -155,13 +155,13 @@ where
 pub struct MultiDimFn<T, F>(pub F, std::marker::PhantomData<T>)
 where
     F: Fn(&Points1<T>) -> T + Clone,
-    T: RFFloat;
+    T: RealScalar;
 
 // Convenience constructors
 impl<T, F> MultiDimFn<T, F>
 where
     F: Fn(&Points1<T>) -> T + Clone,
-    T: RFFloat,
+    T: RealScalar,
 {
     pub fn new(f: F) -> Self {
         MultiDimFn(f, std::marker::PhantomData)
@@ -172,7 +172,7 @@ where
 impl<T, F> ObjFn<T> for MultiDimFn<T, F>
 where
     F: Fn(&Points1<T>) -> T + Clone,
-    T: RFFloat,
+    T: RealScalar,
 {
     fn call(&self, x: &Points1<T>) -> T {
         (self.0)(x)
@@ -187,7 +187,7 @@ where
 impl<T, F> ObjDerFn<T> for MultiDimFn<T, F>
 where
     F: Fn(&Points1<T>) -> T + Clone,
-    T: RFFloat,
+    T: RealScalar,
 {
     fn df(&self, x: &Points1<T>) -> T {
         (self.0)(x)
@@ -204,14 +204,14 @@ pub struct MultiDimGradFn<T, F, GF>(pub F, pub GF, std::marker::PhantomData<T>)
 where
     F: Fn(&Points1<T>) -> T + Clone,
     GF: Fn(&Points1<T>) -> Points1<T> + Clone,
-    T: RFFloat;
+    T: RealScalar;
 
 // Convenience constructors
 impl<T, F, GF> MultiDimGradFn<T, F, GF>
 where
     F: Fn(&Points1<T>) -> T + Clone,
     GF: Fn(&Points1<T>) -> Points1<T> + Clone,
-    T: RFFloat,
+    T: RealScalar,
 {
     pub fn new(f: F, gf: GF) -> Self {
         MultiDimGradFn(f, gf, std::marker::PhantomData)
@@ -223,7 +223,7 @@ impl<T, F, GF> ObjFn<T> for MultiDimGradFn<T, F, GF>
 where
     F: Fn(&Points1<T>) -> T + Clone,
     GF: Fn(&Points1<T>) -> Points1<T> + Clone,
-    T: RFFloat,
+    T: RealScalar,
 {
     fn call(&self, x: &Points1<T>) -> T {
         (self.0)(x)
@@ -238,7 +238,7 @@ impl<T, F, GF> ObjGradFn<T> for MultiDimGradFn<T, F, GF>
 where
     F: Fn(&Points1<T>) -> T + Clone,
     GF: Fn(&Points1<T>) -> Points1<T> + Clone,
-    T: RFFloat,
+    T: RealScalar,
 {
     fn grad(&self, x: &Points1<T>) -> Points1<T> {
         (self.1)(x)
@@ -254,7 +254,7 @@ where
 pub struct MultiDimNumGradFn<T, F>
 where
     F: Fn(&Points1<T>) -> T + Clone,
-    T: RFFloat,
+    T: RealScalar,
 {
     f: F,
     step: T,
@@ -265,7 +265,7 @@ where
 impl<T, F> MultiDimNumGradFn<T, F>
 where
     F: Fn(&Points1<T>) -> T + Clone,
-    T: RFFloat,
+    T: RealScalar,
     for<'a, 'b> &'a Points1<T>: std::ops::Add<&'b T, Output = Points1<T>>,
     for<'a, 'b> &'a Points1<T>: std::ops::Sub<&'b T, Output = Points1<T>>,
     for<'a> &'a T: std::ops::Mul<f64, Output = T>,
@@ -274,7 +274,7 @@ where
     pub fn new(f: F, step: Option<T>, n: usize) -> Self {
         Self {
             f,
-            step: step.unwrap_or(T::from_f64(1e-8)),
+            step: step.unwrap_or(<T as From<f64>>::from(1e-8)),
             n,
         }
     }
@@ -286,10 +286,10 @@ where
         let mut f_minus_h = Points1::zeros(self.n);
 
         for i in 0..self.n {
-            x_plus_h[i] += &self.step;
+            x_plus_h[i] += self.step;
             f_plus_h[i] = (self.f)(&x_plus_h);
 
-            x_minus_h[i] -= &self.step;
+            x_minus_h[i] -= self.step;
             f_minus_h[i] = (self.f)(&x_minus_h);
         }
 
@@ -301,7 +301,7 @@ where
 impl<T, F> ObjFn<T> for MultiDimNumGradFn<T, F>
 where
     F: Fn(&Points1<T>) -> T + Clone,
-    T: RFFloat,
+    T: RealScalar,
 {
     fn call(&self, x: &Points1<T>) -> T {
         (self.f)(x)
@@ -315,7 +315,7 @@ where
 impl<T, F> ObjGradFn<T> for MultiDimNumGradFn<T, F>
 where
     F: Fn(&Points1<T>) -> T + Clone,
-    T: RFFloat,
+    T: RealScalar,
     for<'a, 'b> &'a Points1<T>: std::ops::Add<&'b T, Output = Points1<T>>,
     for<'a, 'b> &'a Points1<T>: std::ops::Sub<&'b T, Output = Points1<T>>,
     for<'a> &'a T: std::ops::Mul<f64, Output = T>,
@@ -337,7 +337,7 @@ where
     F: Fn(&Points1<T>) -> T + Clone,
     GF: Fn(&Points1<T>) -> Points1<T> + Clone,
     HF: Fn(&Points1<T>) -> Points2<T> + Clone,
-    T: RFFloat;
+    T: RealScalar;
 
 // Convenience constructors
 impl<T, F, GF, HF> MultiDimHessFn<T, F, GF, HF>
@@ -345,7 +345,7 @@ where
     F: Fn(&Points1<T>) -> T + Clone,
     GF: Fn(&Points1<T>) -> Points1<T> + Clone,
     HF: Fn(&Points1<T>) -> Points2<T> + Clone,
-    T: RFFloat,
+    T: RealScalar,
 {
     pub fn new(f: F, gf: GF, hf: Option<HF>) -> Self {
         MultiDimHessFn(f, gf, hf, std::marker::PhantomData)
@@ -358,7 +358,7 @@ where
     F: Fn(&Points1<T>) -> T + Clone,
     GF: Fn(&Points1<T>) -> Points1<T> + Clone,
     HF: Fn(&Points1<T>) -> Points2<T> + Clone,
-    T: RFFloat,
+    T: RealScalar,
 {
     fn call(&self, x: &Points1<T>) -> T {
         (self.0)(x)
@@ -374,7 +374,7 @@ where
     F: Fn(&Points1<T>) -> T + Clone,
     GF: Fn(&Points1<T>) -> Points1<T> + Clone,
     HF: Fn(&Points1<T>) -> Points2<T> + Clone,
-    T: RFFloat,
+    T: RealScalar,
 {
     fn grad(&self, x: &Points1<T>) -> Points1<T> {
         (self.1)(x)
@@ -390,7 +390,7 @@ where
     F: Fn(&Points1<T>) -> T + Clone,
     GF: Fn(&Points1<T>) -> Points1<T> + Clone,
     HF: Fn(&Points1<T>) -> Points2<T> + Clone,
-    T: RFFloat,
+    T: RealScalar + Abs<Output = T> + std::iter::Sum,
 {
     fn hess(&self, x: &Points1<T>) -> Points2<T> {
         match self.2.clone() {
@@ -411,16 +411,14 @@ where
 #[derive(Clone)]
 pub struct F1dim<T>
 where
-    T: RFFloat,
+    T: RealScalar,
 {
     f: Box<dyn ObjFn<T>>,
 }
 
 impl<T> F1dim<T>
 where
-    T: RFFloat,
-    for<'a> &'a T: std::ops::Add<T, Output = T>,
-    for<'a, 'b> &'a T: std::ops::Mul<&'b T, Output = T>,
+    T: RealScalar,
 {
     pub fn new<F>(f: F) -> Self
     where
@@ -442,7 +440,7 @@ where
         let test_point: Points1<T> = point
             .iter()
             .zip(direction.iter())
-            .map(|(p, d)| p + t * d)
+            .map(|(p, d)| *p + *t * *d)
             .collect();
         let value = self.f.call(&test_point);
         if !value.is_finite() {
@@ -454,7 +452,7 @@ where
 
 impl<T> ObjFn<T> for F1dim<T>
 where
-    T: RFFloat,
+    T: RealScalar,
 {
     fn call(&self, x: &Points1<T>) -> T {
         self.f.call(x)
@@ -469,14 +467,14 @@ where
 #[derive(Clone)]
 pub struct GF1dim<T>
 where
-    T: RFFloat,
+    T: RealScalar,
 {
     f: Box<dyn ObjGradFn<T>>,
 }
 
 impl<T> GF1dim<T>
 where
-    T: RFFloat,
+    T: RealScalar,
 {
     pub fn new<F>(f: F) -> Self
     where
@@ -492,7 +490,7 @@ where
 
 impl<T> ObjFn<T> for GF1dim<T>
 where
-    T: RFFloat,
+    T: RealScalar,
 {
     fn call(&self, x: &Points1<T>) -> T {
         self.f.call(x)
@@ -505,7 +503,7 @@ where
 
 impl<T> ObjGradFn<T> for GF1dim<T>
 where
-    T: RFFloat,
+    T: RealScalar,
 {
     fn grad(&self, x: &Points1<T>) -> Points1<T> {
         self.f.grad(x)
@@ -520,7 +518,7 @@ where
 #[derive(Clone)]
 pub struct HF1dim<T>
 where
-    T: RFFloat,
+    T: RealScalar,
 {
     f: Box<dyn ObjHessFn<T>>,
     ieq: Vec<Box<dyn Constraint<T>>>,
@@ -530,10 +528,7 @@ where
 
 impl<T> HF1dim<T>
 where
-    T: RFFloat,
-    for<'a> &'a T: std::ops::Div<T, Output = T>,
-    for<'a, 'b> &'a T: std::ops::Mul<&'b T, Output = T>,
-    for<'a, 'b> &'a T: std::ops::Div<&'b T, Output = T>,
+    T: RealScalar + ScalarConst + std::iter::Sum,
 {
     pub fn new<F>(
         f: F,
@@ -578,8 +573,8 @@ where
         // Add barrier terms for ieq
         for constraint in &self.ieq {
             let val = constraint.evaluate(x);
-            if val >= T::from_f64(-1e-12) {
-                return T::from_f64(f64::INFINITY); // Outside feasible region
+            if val >= <T as From<f64>>::from(-1e-12) {
+                return T::INFINITY; // Outside feasible region
             }
             result -= self.mu.clone() * val.ln();
         }
@@ -594,14 +589,14 @@ where
         // Add barrier gradient terms
         for constraint in &self.ieq {
             let val = constraint.evaluate(x);
-            if val >= T::from_f64(-1e-12) {
-                return Points1::from_vec(vec![T::from_f64(f64::INFINITY); n]); // Outside feasible region
+            if val >= <T as From<f64>>::from(-1e-12) {
+                return Points1::from_vec(vec![T::INFINITY; n]); // Outside feasible region
             }
             let constraint_grad = constraint.gradient(x);
             let factor = (-self.mu.clone()) / val;
 
             for i in 0..n {
-                grad[i] += &factor * &constraint_grad[i];
+                grad[i] += factor * constraint_grad[i];
             }
         }
 
@@ -615,24 +610,25 @@ where
         // Add barrier Hessian terms
         for constraint in &self.ieq {
             let val = constraint.evaluate(x);
-            if val >= T::from_f64(-1e-12) {
+            if val >= <T as From<f64>>::from(-1e-12) {
                 // Return identity matrix with large diagonal (penalty)
                 let mut penalty_hess = Points2::<T>::eye(n);
-                penalty_hess *= &Points2::<T>::from_shape_fn((n, n), |(_, _)| T::from_f64(1e6));
+                penalty_hess *=
+                    &Points2::<T>::from_shape_fn((n, n), |(_, _)| <T as From<f64>>::from(1e6));
                 return penalty_hess;
             }
 
             let constraint_grad = constraint.gradient(x);
             let constraint_hess = constraint.hessian(x);
 
-            let factor1 = -self.mu.clone() / &val;
-            let factor2 = &self.mu / (&val * &val);
+            let factor1 = -self.mu / val;
+            let factor2 = self.mu / (val * val);
 
             // Add second derivative terms
             for i in 0..n {
                 for j in 0..n {
-                    hess[[i, j]] += &factor1 * &constraint_hess[[i, j]]
-                        + &factor2 * &constraint_grad[i] * &constraint_grad[j];
+                    hess[[i, j]] += factor1 * constraint_hess[[i, j]]
+                        + factor2 * constraint_grad[i] * constraint_grad[j];
                 }
             }
         }
@@ -643,10 +639,7 @@ where
 
 impl<T> ObjFn<T> for HF1dim<T>
 where
-    T: RFFloat,
-    for<'a> &'a T: std::ops::Div<T, Output = T>,
-    for<'a, 'b> &'a T: std::ops::Mul<&'b T, Output = T>,
-    for<'a, 'b> &'a T: std::ops::Div<&'b T, Output = T>,
+    T: RealScalar + ScalarConst + std::iter::Sum,
 {
     fn call(&self, x: &Points1<T>) -> T {
         self.objective(x)
@@ -659,10 +652,7 @@ where
 
 impl<T> ObjGradFn<T> for HF1dim<T>
 where
-    T: RFFloat,
-    for<'a> &'a T: std::ops::Div<T, Output = T>,
-    for<'a, 'b> &'a T: std::ops::Mul<&'b T, Output = T>,
-    for<'a, 'b> &'a T: std::ops::Div<&'b T, Output = T>,
+    T: RealScalar + ScalarConst + std::iter::Sum,
 {
     fn grad(&self, x: &Points1<T>) -> Points1<T> {
         self.gradient(x)
@@ -675,10 +665,7 @@ where
 
 impl<T> ObjHessFn<T> for HF1dim<T>
 where
-    T: RFFloat,
-    for<'a> &'a T: std::ops::Div<T, Output = T>,
-    for<'a, 'b> &'a T: std::ops::Mul<&'b T, Output = T>,
-    for<'a, 'b> &'a T: std::ops::Div<&'b T, Output = T>,
+    T: RealScalar + ScalarConst + std::iter::Sum,
 {
     fn hess(&self, x: &Points1<T>) -> Points2<T> {
         self.hess(x)
@@ -692,7 +679,7 @@ where
 /// Constraint definition
 pub trait Constraint<T>: DynClone
 where
-    T: RFFloat,
+    T: RealScalar,
 {
     fn evaluate(&self, x: &Points1<T>) -> T;
     fn gradient(&self, x: &Points1<T>) -> Points1<T>;
@@ -704,7 +691,7 @@ dyn_clone::clone_trait_object!(<T> Constraint<T>);
 #[derive(Clone)]
 pub struct LinearConstraint<T>
 where
-    T: RFFloat,
+    T: RealScalar,
 {
     pub a: Points1<T>,
     pub b: T,
@@ -713,7 +700,7 @@ where
 
 impl<T> LinearConstraint<T>
 where
-    T: RFFloat,
+    T: RealScalar,
 {
     pub fn new(a: &Points1<T>, b: &T, is_equality: bool) -> Self {
         Self {
@@ -734,7 +721,7 @@ where
 
 impl<T> Constraint<T> for LinearConstraint<T>
 where
-    T: RFFloat,
+    T: RealScalar + std::iter::Sum,
 {
     fn evaluate(&self, x: &Points1<T>) -> T {
         self.a
@@ -742,7 +729,7 @@ where
             .zip(x.iter())
             .map(|(ai, xi)| ai.clone() * xi.clone())
             .sum::<T>()
-            + &self.b
+            + self.b
     }
 
     fn gradient(&self, _x: &Points1<T>) -> Points1<T> {
@@ -757,7 +744,7 @@ where
 
 impl<T> fmt::Debug for LinearConstraint<T>
 where
-    T: RFFloat,
+    T: RealScalar,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.is_equality {
@@ -779,7 +766,7 @@ where
 #[derive(Clone)]
 pub struct QuadraticConstraint<T>
 where
-    T: RFFloat,
+    T: RealScalar,
 {
     pub q: Points2<T>,
     pub a: Points1<T>,
@@ -789,7 +776,7 @@ where
 
 impl<T> QuadraticConstraint<T>
 where
-    T: RFFloat,
+    T: RealScalar,
 {
     pub fn new(q: &Points2<T>, a: &Points1<T>, b: &T, is_equality: bool) -> Self {
         Self {
@@ -803,7 +790,7 @@ where
 
 impl<T> Constraint<T> for QuadraticConstraint<T>
 where
-    T: RFFloat,
+    T: RealScalar,
 {
     fn evaluate(&self, x: &Points1<T>) -> T {
         let n = x.len();
@@ -811,13 +798,13 @@ where
 
         // Linear term: a^T x
         for i in 0..n {
-            result += self.a[i].clone() * x[i].clone();
+            result += self.a[i] * x[i];
         }
 
         // Quadratic term: x^T Q x
         for i in 0..n {
             for j in 0..n {
-                result += x[i].clone() * self.q[[i, j]].clone() * x[j].clone();
+                result += x[i].clone() * self.q[[i, j]] * x[j];
             }
         }
 
@@ -831,7 +818,7 @@ where
         // Add 2 * Q * x (assuming Q is symmetric)
         for i in 0..n {
             for j in 0..n {
-                grad[i] += T::from_f64(2.0) * self.q[[i, j]].clone() * x[j].clone();
+                grad[i] += <T as From<f64>>::from(2.0) * self.q[[i, j]] * x[j];
             }
         }
 
@@ -845,7 +832,7 @@ where
 
         for i in 0..n {
             for j in 0..n {
-                hess[[i, j]] = T::from_f64(2.0) * self.q[[i, j]].clone();
+                hess[[i, j]] = <T as From<f64>>::from(2.0) * self.q[[i, j]];
             }
         }
 
@@ -855,7 +842,7 @@ where
 
 impl<T> fmt::Debug for QuadraticConstraint<T>
 where
-    T: RFFloat,
+    T: RealScalar,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.is_equality {
@@ -879,7 +866,7 @@ pub fn create_box_constraints<T>(
     upper: &Points1<T>,
 ) -> Vec<Box<dyn Constraint<T>>>
 where
-    T: RFFloat + 'static,
+    T: RealScalar + 'static + std::iter::Sum,
 {
     let mut constraints = Vec::new();
 
@@ -887,7 +874,7 @@ where
         // x_i ≥ l becomes -x_i + l ≤ 0
         if l.is_finite() {
             let mut a = Points1::<T>::zeros(lower.len());
-            a[i] = T::from_f64(-1.0);
+            a[i] = <T as From<f64>>::from(-1.0);
             constraints
                 .push(Box::new(LinearConstraint::<T>::inequality(&a, l)) as Box<dyn Constraint<T>>);
         }
@@ -895,7 +882,7 @@ where
         // x_i ≤ u becomes x_i - u ≤ 0
         if u.is_finite() {
             let mut a = Points1::<T>::zeros(lower.len());
-            a[i] = T::from_f64(1.0);
+            a[i] = <T as From<f64>>::from(1.0);
             let neg_u = -u.clone();
             constraints
                 .push(Box::new(LinearConstraint::<T>::inequality(&a, &neg_u))
@@ -993,7 +980,7 @@ where
 // }
 pub trait Minimizer<T>
 where
-    T: RFFloat,
+    T: RealScalar,
 {
     type Options;
     type Result;
@@ -1005,7 +992,7 @@ where
 // Helper function for outer product
 fn outer<T>(a: &Points1<T>, b: &Points1<T>) -> Points2<T>
 where
-    T: RFFloat,
+    T: RealScalar,
     for<'a, 'b> &'a T: std::ops::Mul<&'b T, Output = T>,
 {
     let n = a.len();
@@ -1025,36 +1012,33 @@ where
 #[derive(Debug)]
 pub(crate) struct Vector<T>
 where
-    T: RFFloat,
+    T: RealScalar,
 {
     _phantom: std::marker::PhantomData<T>,
 }
 
 impl<T> Vector<T>
 where
-    T: RFFloat,
-    for<'a, 'b> &'a T: std::ops::Add<&'b T, Output = T>,
-    for<'a, 'b> &'a T: std::ops::Sub<&'b T, Output = T>,
-    for<'a, 'b> &'a T: std::ops::Mul<&'b T, Output = T>,
+    T: RealScalar + std::iter::Sum,
 {
     fn dot_product(a: &Points1<T>, b: &Points1<T>) -> T {
-        a.iter().zip(b.iter()).map(|(x, y)| x * y).sum()
+        a.iter().zip(b.iter()).map(|(&x, &y)| x * y).sum()
     }
 
     fn vector_norm(v: &Points1<T>) -> T {
-        v.iter().map(|x| x * x).sum::<T>().sqrt()
+        v.iter().map(|&x| x * x).sum::<T>().sqrt()
     }
 
     fn vector_add(a: &Points1<T>, b: &Points1<T>) -> Points1<T> {
-        a.iter().zip(b.iter()).map(|(x, y)| x + y).collect()
+        a.iter().zip(b.iter()).map(|(&x, &y)| x + y).collect()
     }
 
     fn vector_subtract(a: &Points1<T>, b: &Points1<T>) -> Points1<T> {
-        a.iter().zip(b.iter()).map(|(x, y)| x - y).collect()
+        a.iter().zip(b.iter()).map(|(&x, &y)| x - y).collect()
     }
 
-    fn scalar_vector_multiply(scalar: &T, vector: &Points1<T>) -> Points1<T> {
-        vector.iter().map(|x| scalar * x).collect()
+    fn scalar_vector_multiply(scalar: T, vector: &Points1<T>) -> Points1<T> {
+        vector.iter().map(|&x| scalar * x).collect()
     }
 }
 
@@ -1062,7 +1046,7 @@ where
 #[derive(Debug)]
 pub(crate) struct Vertex<T>
 where
-    T: RFFloat,
+    T: RealScalar,
 {
     pub(crate) point: Points1<T>,
     pub(crate) value: T,
@@ -1070,7 +1054,7 @@ where
 
 impl<T> Vertex<T>
 where
-    T: RFFloat,
+    T: RealScalar,
 {
     pub(crate) fn new<F>(point: &Points1<T>, f: &F) -> Result<Self, MinimizerError>
     where
@@ -1105,7 +1089,7 @@ where
 #[derive(Debug)]
 struct LineSearchResult<T>
 where
-    T: RFFloat,
+    T: RealScalar,
 {
     alpha: T,
     f_new: T,
@@ -1124,17 +1108,17 @@ pub struct WolfeParams<T> {
 
 impl<T> WolfeParams<T>
 where
-    T: RFFloat,
+    T: RealScalar,
 {
     /// Parameters optimized for BFGS method
     /// - Strong curvature condition for good Hessian approximation
     /// - Standard Armijo parameter
     pub fn for_bfgs() -> Self {
         WolfeParams {
-            c1: T::from_f64(1e-4), // Standard Armijo parameter
-            c2: T::from_f64(0.9),  // Strong curvature condition for BFGS
-            max_step: T::from_f64(10.0),
-            min_step: T::from_f64(1e-12),
+            c1: <T as From<f64>>::from(1e-4), // Standard Armijo parameter
+            c2: <T as From<f64>>::from(0.9),  // Strong curvature condition for BFGS
+            max_step: <T as From<f64>>::from(10.0),
+            min_step: <T as From<f64>>::from(1e-12),
         }
     }
 
@@ -1143,10 +1127,10 @@ where
     /// - Suitable for large-scale problems
     pub fn for_lbfgs() -> Self {
         WolfeParams {
-            c1: T::from_f64(1e-4),
-            c2: T::from_f64(0.1), // More relaxed for L-BFGS efficiency
-            max_step: T::from_f64(10.0),
-            min_step: T::from_f64(1e-12),
+            c1: <T as From<f64>>::from(1e-4),
+            c2: <T as From<f64>>::from(0.1), // More relaxed for L-BFGS efficiency
+            max_step: <T as From<f64>>::from(10.0),
+            min_step: <T as From<f64>>::from(1e-12),
         }
     }
 
@@ -1155,10 +1139,10 @@ where
     /// - Balance between BFGS and L-BFGS
     pub fn for_dfp() -> Self {
         WolfeParams {
-            c1: T::from_f64(1e-4),
-            c2: T::from_f64(0.4), // Intermediate value for DFP
-            max_step: T::from_f64(10.0),
-            min_step: T::from_f64(1e-12),
+            c1: <T as From<f64>>::from(1e-4),
+            c2: <T as From<f64>>::from(0.4), // Intermediate value for DFP
+            max_step: <T as From<f64>>::from(10.0),
+            min_step: <T as From<f64>>::from(1e-12),
         }
     }
 
@@ -1167,10 +1151,10 @@ where
     /// - Often only uses Armijo condition
     pub fn for_sr1() -> Self {
         WolfeParams {
-            c1: T::from_f64(1e-4),
-            c2: T::from_f64(0.1), // Very relaxed for SR1
-            max_step: T::from_f64(10.0),
-            min_step: T::from_f64(1e-12),
+            c1: <T as From<f64>>::from(1e-4),
+            c2: <T as From<f64>>::from(0.1), // Very relaxed for SR1
+            max_step: <T as From<f64>>::from(10.0),
+            min_step: <T as From<f64>>::from(1e-12),
         }
     }
 
@@ -1178,10 +1162,10 @@ where
     /// - Stricter conditions for robustness
     pub fn conservative() -> Self {
         WolfeParams {
-            c1: T::from_f64(1e-6),      // Stricter Armijo condition
-            c2: T::from_f64(0.95),      // Very strict curvature condition
-            max_step: T::from_f64(1.0), // Smaller maximum step
-            min_step: T::from_f64(1e-15),
+            c1: <T as From<f64>>::from(1e-6),      // Stricter Armijo condition
+            c2: <T as From<f64>>::from(0.95),      // Very strict curvature condition
+            max_step: <T as From<f64>>::from(1.0), // Smaller maximum step
+            min_step: <T as From<f64>>::from(1e-15),
         }
     }
 
@@ -1189,10 +1173,10 @@ where
     /// - More relaxed conditions for speed
     pub fn aggressive() -> Self {
         WolfeParams {
-            c1: T::from_f64(1e-2),        // More relaxed Armijo condition
-            c2: T::from_f64(0.1),         // Relaxed curvature condition
-            max_step: T::from_f64(100.0), // Larger maximum step
-            min_step: T::from_f64(1e-10),
+            c1: <T as From<f64>>::from(1e-2), // More relaxed Armijo condition
+            c2: <T as From<f64>>::from(0.1),  // Relaxed curvature condition
+            max_step: <T as From<f64>>::from(100.0), // Larger maximum step
+            min_step: <T as From<f64>>::from(1e-10),
         }
     }
 
@@ -1220,15 +1204,15 @@ where
 
 impl<T> Default for WolfeParams<T>
 where
-    T: RFFloat,
+    T: RealScalar,
 {
     fn default() -> Self {
         Self {
-            c1: T::from_f64(1e-4),
+            c1: <T as From<f64>>::from(1e-4),
             // c2: 0.9, // Higher value for conjugate gradient
-            c2: T::from_f64(0.1), // Lower value for quasi-Newton (vs 0.9 for CG)
-            max_step: T::from_f64(1e6),
-            min_step: T::from_f64(1e-12),
+            c2: <T as From<f64>>::from(0.1), // Lower value for quasi-Newton (vs 0.9 for CG)
+            max_step: <T as From<f64>>::from(1e6),
+            min_step: <T as From<f64>>::from(1e-12),
         }
     }
 }

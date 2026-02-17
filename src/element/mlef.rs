@@ -2,8 +2,7 @@ use crate::{
     define_mlin_calcs,
     element::{Distributed, Elem, ElemType, msub::Msub},
     frequency::{FreqArray, Frequency, new_frequency},
-    point,
-    pts::{Points, Pts},
+    pts::Points,
     scale::Scale,
     unit::{Unit, UnitValue, Unitized},
 };
@@ -55,7 +54,7 @@ impl Default for Mlef {
 impl Elem for Mlef {
     // todo!("fix c value for true mlef response");
     fn c(&self, _freq: &Frequency) -> Points<Complex64, Ix2> {
-        // point![
+        // points![
         //     Complex64,
         //     [
         //         Complex64::ZERO,
@@ -66,7 +65,7 @@ impl Elem for Mlef {
         //         Complex64::ZERO
         //     ]
         // ]
-        point![Complex64, [Complex64::ZERO]]
+        points![[Complex64::ZERO]]
     }
 
     fn c_at(&self, freq: &Frequency, j: usize, k: usize) -> Complex64 {

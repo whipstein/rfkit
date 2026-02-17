@@ -3,17 +3,18 @@
 use crate::{
     error::MinimizerError,
     minimize::{Brent, F1dim, ObjFn},
-    num::RFFloat,
+    num::Abs,
     pts::{Matrix, Points, Points1, Points2, Pts},
 };
 use ndarray::prelude::*;
+use num_traits::Float;
 use std::fmt;
 
 /// Result of Powell's method optimization
 #[derive(Debug, Clone)]
 pub struct PowellResult<T>
 where
-    T: RFFloat,
+    T: Float,
 {
     xmin: Points1<T>,
     fmin: T,
@@ -27,7 +28,7 @@ where
 
 impl<T> PowellResult<T>
 where
-    T: RFFloat,
+    T: Float,
 {
     pub fn xmin(&self) -> Points1<T> {
         self.xmin.clone()
@@ -87,7 +88,7 @@ where
 
 impl<T> Powell<T>
 where
-    T: RFFloat + 'static,
+    T: Float + Abs<Output = T> + 'static,
     for<'a, 'b> &'a T: std::ops::Add<&'b T, Output = T>,
     for<'a, 'b> &'a T: std::ops::Sub<&'b T, Output = T>,
     for<'a, 'b> &'a T: std::ops::Mul<&'b T, Output = T>,
@@ -195,7 +196,7 @@ where
         //     .collect();
 
         let mut x = x_scaled.to_owned();
-        let mut f_current = self.f.call(&(&x / &scl));
+        let mut f_current = self.f.call(&x / &scl);
         if !f_current.is_finite() {
             return Err(MinimizerError::FunctionEvaluationError);
         }
@@ -250,7 +251,7 @@ where
             history.push(f_current.clone());
 
             // Check for convergence
-            let relative_improvement = improve / (f_old.abs() + 1e-14);
+            let relative_improvement = improve / (f_old.abs() + 1e-14.into());
             if relative_improvement < tol {
                 self.xmin = &x / &scl;
                 self.fmin = f_current.clone();
@@ -268,7 +269,7 @@ where
             }
 
             // Compute extrapolated point
-            let x_extrapolated = Points1::from_shape_fn(n, |i| 2.0 * &x[i] - &x_old[i]);
+            let x_extrapolated = Points1::from_shape_fn(n, |i| 2.0 * &x[i] - x_old[i]);
             // let mut x_extrapolated = vec![0.0; n];
             // for i in 0..n {
             //     x_extrapolated[i] = 2.0 * x[i] - x_old[i];
@@ -282,8 +283,8 @@ where
 
             // Test whether to keep new direction
             let condition1 = f_extrapolated < f_old;
-            let temp = 2.0 * (&f_old - 2.0 * &f_current + &f_extrapolated);
-            let condition2 = temp * (&f_old - &f_current - &delta_f_max).powi(2);
+            let temp = 2.0 * (&f_old - 2.0 * &f_current + f_extrapolated);
+            let condition2 = temp * (&f_old - &f_current - delta_f_max).powi(2);
             let condition3 = delta_f_max * (&f_old - &f_extrapolated).powi(2);
 
             if condition1 && condition2 < condition3 {
@@ -408,7 +409,7 @@ where
         });
 
         let mut x = x_scaled.to_owned();
-        let mut f_current = self.f.call(&(&x / &scl));
+        let mut f_current = self.f.call(&x / &scl);
         if !f_current.is_finite() {
             return Err(MinimizerError::FunctionEvaluationError);
         }
@@ -454,7 +455,7 @@ where
                 }
                 fn_evals += 1;
 
-                let delta_f = f_current - &f_new;
+                let delta_f = f_current - f_new;
                 if delta_f > delta_f_max {
                     delta_f_max = delta_f;
                     max_decrease_index = i;
@@ -468,7 +469,7 @@ where
             history.push(f_current.clone());
 
             // Check for convergence
-            let relative_improvement = improve / (f_old.abs() + 1e-14);
+            let relative_improvement = improve / (f_old.abs() + 1e-14.into());
             if relative_improvement < tol {
                 self.xmin = &x / &scl;
                 self.fmin = f_current.clone();
@@ -490,7 +491,7 @@ where
             // for i in 0..n {
             //     x_extrapolated[i] = 2.0 * x[i] - x_old[i];
             // }
-            let x_extrapolated = Points1::from_shape_fn(n, |i| 2.0 * &x[i] - &x_old[i]);
+            let x_extrapolated = Points1::from_shape_fn(n, |i| 2.0 * &x[i] - x_old[i]);
 
             let f_extrapolated = self.f.call(&(&x_extrapolated / &scl));
             if !f_extrapolated.is_finite() {
@@ -499,8 +500,8 @@ where
             fn_evals += 1;
 
             let condition1 = f_extrapolated < f_old;
-            let temp = 2.0 * (&f_old - 2.0 * &f_current + &f_extrapolated);
-            let condition2 = temp * (&f_old - &f_current - &delta_f_max).powi(2);
+            let temp = 2.0 * (&f_old - 2.0 * &f_current + f_extrapolated);
+            let condition2 = temp * (&f_old - &f_current - delta_f_max).powi(2);
             let condition3 = delta_f_max * (f_old - f_extrapolated).powi(2);
 
             if condition1 && condition2 < condition3 {
@@ -635,7 +636,7 @@ where
 
 impl<T> fmt::Debug for Powell<T>
 where
-    T: RFFloat,
+    T: Float,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
@@ -1540,12 +1541,12 @@ mod minimize_powell_tests {
 
     mod myfloat_tests {
         use super::*;
-        use crate::num::MyFloat;
+        use twofloat::TwoFloat;
 
         #[test]
         fn test_2d_quadratic() {
             // f(x,y) = (x-2)² + (y+1)²
-            let func = |x: &Points1<MyFloat>| (&x[0] - 2.0).powi(2) + (&x[1] + 1.0).powi(2);
+            let func = |x: &Points1<TwoFloat>| (&x[0] - 2.0).powi(2) + (&x[1] + 1.0).powi(2);
             let objective = MultiDimFn::new(func);
             let mut powell = Powell::new(objective);
 
@@ -1571,7 +1572,7 @@ mod minimize_powell_tests {
 
         #[test]
         fn test_rosenbrock() {
-            let rosenbrock = |x: &Points1<MyFloat>| {
+            let rosenbrock = |x: &Points1<TwoFloat>| {
                 (1.0 - &x[0]).powi(2) + 100.0 * (&x[1] - x[0].powi(2)).powi(2)
             };
             let objective = MultiDimFn::new(rosenbrock);
@@ -1579,7 +1580,7 @@ mod minimize_powell_tests {
 
             let result = powell
                 .powell_method(
-                    &array![MyFloat::new(-1.2), 1.0.into()].into(),
+                    &array![TwoFloat::new(-1.2), 1.0.into()].into(),
                     None,
                     Some(1e-6.into()),
                     Some(1000),
@@ -1598,13 +1599,13 @@ mod minimize_powell_tests {
         #[test]
         fn test_3d_sphere() {
             // f(x,y,z) = x² + y² + z²
-            let sphere = |x: &Points1<MyFloat>| x.iter().map(|xi| xi * xi).sum();
+            let sphere = |x: &Points1<TwoFloat>| x.iter().map(|xi| xi * xi).sum();
             let objective = MultiDimFn::new(sphere);
             let mut powell = Powell::new(objective);
 
             let result = powell
                 .minimize(
-                    &array![1.0.into(), 2.0.into(), MyFloat::new(-1.0)].into(),
+                    &array![1.0.into(), 2.0.into(), TwoFloat::new(-1.0)].into(),
                     None,
                     None,
                     None,

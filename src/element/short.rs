@@ -1,7 +1,6 @@
 use crate::{
     element::{Elem, ElemType, Lumped},
     frequency::{FreqArray, Frequency},
-    point,
     pts::{Points, Pts},
     scale::Scale,
     unit::{Unit, UnitValue, Unitized},
@@ -22,8 +21,7 @@ impl Short {
         Self {
             id: id,
             nodes: nodes,
-            c: point![
-                Complex64,
+            c: points![
                 [c64(0.0, 0.0), c64(1.0, 0.0)],
                 [c64(1.0, 0.0), c64(0.0, 0.0)]
             ],
@@ -41,8 +39,7 @@ impl Default for Short {
         Self {
             id: "S0".to_string(),
             nodes: [1, 2],
-            c: point![
-                Complex64,
+            c: points![
                 [c64(0.0, 0.0), c64(1.0, 0.0)],
                 [c64(1.0, 0.0), c64(0.0, 0.0)]
             ],

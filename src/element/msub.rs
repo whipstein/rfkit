@@ -2,7 +2,6 @@
 use crate::{
     element::{Distributed, Elem, ElemType, Lumped},
     frequency::{FreqArray, Frequency, new_frequency},
-    point,
     pts::{Points, Pts},
     scale::Scale,
     unit::{Unit, UnitValBuilder, UnitValue, Unitized},
@@ -292,7 +291,7 @@ mod element_msub_tests {
     use super::*;
     use crate::frequency::{FreqArray, FrequencyBuilder};
     use crate::unit::UnitValBuilder;
-    use crate::util::{comp_num, comp_pts_ix2, comp_pts_ix3, comp_vec_c64};
+    use crate::util::{comp_pts_ix2, comp_pts_ix3, comp_vec_c64};
     use float_cmp::*;
 
     const DEFAULT_MARGIN: F64Margin = F64Margin {
