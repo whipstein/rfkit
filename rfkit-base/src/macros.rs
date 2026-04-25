@@ -1,0 +1,222 @@
+/// Create an **[`Points`]** with three dimensions.
+///
+/// ```
+/// use rfkit_base::prelude::*;
+///
+/// let a = points![
+///     [[1.0, 2.0], [3.0, 4.0]],
+///     [[5.0, 6.0], [7.0, 8.0]]
+/// ];
+///
+/// assert_eq!(a.dim(), (2, 2, 2));
+/// ```
+///
+/// This macro uses `vec![]`, and has the same ownership semantics;
+/// elements are moved into the resulting `Array`.
+///
+#[macro_export]
+macro_rules! points {
+    // ($t: ty, $([$([$($x:expr),* $(,)*]),+ $(,)*]),+ $(,)*) => {{
+    //     // $crate::points::Points::<$t>::new(ndarray::Array3::from(vec![$([$([$($x,)*],)*],)*]))
+    //     $crate::pts::Points::<$t, ndarray::Ix3>::new(ndarray::Array3::from(vec![$([$([$($x,)*],)*],)*]))
+    // }};
+
+    ($([$([$($x:expr),* $(,)*]),+ $(,)*]),+ $(,)*) => {{
+        $crate::pts::Points3::new(ndarray::Array3::from(vec![$([$([$($x,)*],)*],)*]))
+    }};
+    ($([$($x:expr),* $(,)*]),+ $(,)*) => {{
+        $crate::pts::Points2::from(ndarray::Array2::from(vec![$([$($x,)*],)*]))
+    }};
+    ($($x:expr),* $(,)*) => {{
+        $crate::pts::Points::from(ndarray::Array::from(vec![$($x,)*]))
+    }};
+
+}
+
+/// Forward a method to an inherent method or a base trait method.
+#[macro_export]
+macro_rules! forward {
+    ($( Self :: $method:ident ( self $( , $arg:ident : $ty:ty )* ) -> $ret:ty ; )*)
+        => {$(
+            #[inline]
+            fn $method(self $( , $arg : $ty )* ) -> $ret {
+                Self::$method(self $( , $arg )* )
+            }
+        )*};
+    ($( $base:ident :: $method:ident ( self $( , $arg:ident : $ty:ty )* ) -> $ret:ty ; )*)
+        => {$(
+            #[inline]
+            fn $method(self $( , $arg : $ty )* ) -> $ret {
+                <Self as $base>::$method(self $( , $arg )* )
+            }
+        )*};
+    ($( $base:ident :: $method:ident ( $( $arg:ident : $ty:ty ),* ) -> $ret:ty ; )*)
+        => {$(
+            #[inline]
+            fn $method( $( $arg : $ty ),* ) -> $ret {
+                <Self as $base>::$method( $( $arg ),* )
+            }
+        )*};
+    ($( $imp:path as $method:ident ( self $( , $arg:ident : $ty:ty )* ) -> $ret:ty ; )*)
+        => {$(
+            #[inline]
+            fn $method(self $( , $arg : $ty )* ) -> $ret {
+                $imp(self $( , $arg )* )
+            }
+        )*};
+}
+
+#[cfg(test)]
+mod macros_tests {
+    use num_complex::{Complex64, c64};
+
+    #[test]
+    fn test_point() {
+        let test = points![
+            [
+                c64(-0.4285714285714286, 0.0),
+                c64(1.4285714285714284, 0.0),
+                Complex64::ZERO,
+                Complex64::ZERO,
+            ],
+            [
+                c64(0.5714285714285714, 0.0),
+                c64(0.4285714285714284, 0.0),
+                Complex64::ZERO,
+                Complex64::ZERO
+            ],
+            [
+                Complex64::ZERO,
+                Complex64::ZERO,
+                c64(-0.4285714285714286, 0.0),
+                c64(1.4285714285714284, 0.0),
+            ],
+            [
+                Complex64::ZERO,
+                Complex64::ZERO,
+                c64(0.5714285714285714, 0.0),
+                c64(0.4285714285714284, 0.0),
+            ]
+        ];
+
+        assert_eq!(test[[0, 0]].re, -0.4285714285714286);
+        assert_eq!(test[[0, 1]].re, 1.4285714285714284);
+        assert_eq!(test[[1, 1]].re, 0.4285714285714284);
+        assert_eq!(test[[2, 1]].re, 0.0);
+    }
+
+    #[test]
+    fn test_points() {
+        let test = points![
+            [
+                [
+                    c64(-0.4285714285714286, 0.0),
+                    c64(1.4285714285714284, 0.0),
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                ],
+                [
+                    c64(0.5714285714285714, 0.0),
+                    c64(0.4285714285714284, 0.0),
+                    Complex64::ZERO,
+                    Complex64::ZERO
+                ],
+                [
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    c64(-0.4285714285714286, 0.0),
+                    c64(1.4285714285714284, 0.0),
+                ],
+                [
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    c64(0.5714285714285714, 0.0),
+                    c64(0.4285714285714284, 0.0),
+                ]
+            ],
+            [
+                [
+                    c64(-0.4285714285714286, 0.0),
+                    c64(1.4285714285714284, 0.0),
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                ],
+                [
+                    c64(0.5714285714285714, 0.0),
+                    c64(0.4285714285714284, 0.0),
+                    Complex64::ZERO,
+                    Complex64::ZERO
+                ],
+                [
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    c64(-0.4285714285714286, 0.0),
+                    c64(1.4285714285714284, 0.0),
+                ],
+                [
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    c64(0.5714285714285714, 0.0),
+                    c64(0.4285714285714284, 0.0),
+                ]
+            ],
+            [
+                [
+                    c64(-0.4285714285714286, 0.0),
+                    c64(1.4285714285714284, 0.0),
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                ],
+                [
+                    c64(0.5714285714285714, 0.0),
+                    c64(0.4285714285714284, 0.0),
+                    Complex64::ZERO,
+                    Complex64::ZERO
+                ],
+                [
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    c64(-0.4285714285714286, 0.0),
+                    c64(1.4285714285714284, 0.0),
+                ],
+                [
+                    Complex64::ZERO,
+                    Complex64::ZERO,
+                    c64(0.5714285714285714, 0.0),
+                    c64(0.4285714285714284, 0.0),
+                ]
+            ]
+        ];
+
+        assert_eq!(test[[0, 0, 0]].re, -0.4285714285714286);
+        assert_eq!(test[[0, 0, 1]].re, 1.4285714285714284);
+        assert_eq!(test[[1, 1, 1]].re, 0.4285714285714284);
+        assert_eq!(test[[2, 2, 1]].re, 0.0);
+
+        let test = points![
+            [
+                [-0.4285714285714286, 1.4285714285714284, 0.0, 0.0],
+                [0.5714285714285714, 0.4285714285714284, 0.0, 0.0],
+                [0.0, 0.0, -0.4285714285714286, 1.4285714285714284],
+                [0.0, 0.0, 0.5714285714285714, 0.4285714285714284]
+            ],
+            [
+                [-0.4285714285714286, 1.4285714285714284, 0.0, 0.0],
+                [0.5714285714285714, 0.4285714285714284, 0.0, 0.0],
+                [0.0, 0.0, -0.4285714285714286, 1.4285714285714284],
+                [0.0, 0.0, 0.5714285714285714, 0.4285714285714284]
+            ],
+            [
+                [-0.4285714285714286, 1.4285714285714284, 0.0, 0.0],
+                [0.5714285714285714, 0.4285714285714284, 0.0, 0.0],
+                [0.0, 0.0, -0.4285714285714286, 1.4285714285714284],
+                [0.0, 0.0, 0.5714285714285714, 0.4285714285714284]
+            ]
+        ];
+
+        assert_eq!(test[[0, 0, 0]], -0.4285714285714286);
+        assert_eq!(test[[0, 0, 1]], 1.4285714285714284);
+        assert_eq!(test[[1, 1, 1]], 0.4285714285714284);
+        assert_eq!(test[[2, 2, 1]], 0.0);
+    }
+}

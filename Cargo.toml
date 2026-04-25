@@ -1,21 +1,26 @@
-[package]
-name = "rfkit"
+[workspace]
+members = [
+    "rfkit-base",
+    "rfkit-minimize",
+    "rfkit-network",
+    "rfkit-circuit",
+    "rfkit",
+]
+resolver = "2"
+
+[workspace.package]
 version = "0.4.0"
 edition = "2024"
 
-[profile.release]
-codegen-units=1
-lto="fat"
-panic="abort"
-
-[dependencies]
+[workspace.dependencies]
+# External dependencies shared across crates
 anyhow = "1.0.98"
 approx = "0.5.1"
 dyn-clone = "1.0.19"
 fastrand = "2.0"
 float-cmp = "0.10.0"
 ndarray = { version = "0.17.1", features = ["blas", "matrixmultiply-threading", "rayon", "serde"] }
-ndarray-linalg = { version = "0.18.0", features = ["openblas-static"] }
+ndarray-linalg = { version = "0.18.0", features = ["openblas-system"] }
 ndarray-rand = "0.16.0"
 num = { version = "0.4.3", features = ["serde"] }
 num-complex = "0.4.6"
@@ -30,13 +35,16 @@ serde_json = "1.0.140"
 simple-error = "0.3.1"
 twofloat = { path = "../twofloat", features = ["serde"] }
 
-[dev-dependencies]
-criterion = { version = "0.5", features = ["html_reports"] }
-fastrand = "2.0"
+# Internal workspace crates
+rfkit-base = { path = "rfkit-base" }
+rfkit-minimize = { path = "rfkit-minimize" }
+rfkit-network = { path = "rfkit-network" }
+rfkit-circuit = { path = "rfkit-circuit" }
 
-[[bench]]
-name = "nelder_mead_benchmarks"
-harness = false
+[profile.release]
+codegen-units = 1
+lto = "fat"
+panic = "abort"
 
 [profile.bench]
 debug = true

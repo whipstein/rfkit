@@ -1,0 +1,4 @@
+[profile.ci]
+fail-fast = false
+leak-timeout = "1s"
+failure-output = "final"

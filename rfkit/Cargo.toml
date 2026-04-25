@@ -1,0 +1,20 @@
+[package]
+name = "rfkit"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+rfkit-base.workspace = true
+rfkit-minimize.workspace = true
+rfkit-network.workspace = true
+rfkit-circuit.workspace = true
+
+[[bench]]
+name = "nelder_mead_benchmarks"
+harness = false
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+fastrand.workspace = true
+ndarray.workspace = true
+num-complex.workspace = true

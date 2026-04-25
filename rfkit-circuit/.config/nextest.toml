@@ -1,0 +1,8 @@
+[profile.ci]
+fail-fast = false
+leak-timeout = "1s"
+failure-output = "final"
+
+[profile.ci-extended]
+inherits = "ci"
+default-filer = "all()"
