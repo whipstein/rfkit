@@ -1079,7 +1079,7 @@ checksum = "7a2d987857b319362043e95f5353c0535c1f58eec5336fdfcf626430af7def58"
 
 [[package]]
 name = "rfkit"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "criterion",
  "fastrand",
@@ -1093,7 +1093,7 @@ dependencies = [
 
 [[package]]
 name = "rfkit-base"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "approx",
  "ndarray",
@@ -1107,7 +1107,7 @@ dependencies = [
 
 [[package]]
 name = "rfkit-circuit"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "anyhow",
  "dyn-clone",
@@ -1124,7 +1124,7 @@ dependencies = [
 
 [[package]]
 name = "rfkit-minimize"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "criterion",
  "dyn-clone",
@@ -1145,7 +1145,7 @@ dependencies = [
 
 [[package]]
 name = "rfkit-network"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "anyhow",
  "ndarray",
