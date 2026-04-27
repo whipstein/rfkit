@@ -1,11 +1,10 @@
 #![allow(unused)]
-use crate::element::{Distributed, Elem, ElemType, Lumped};
+use super::*;
 use ndarray::{IntoDimension, prelude::*};
 use num_complex::Complex;
 use num_traits::{ConstOne, ConstZero};
 use rfkit_base::prelude::*;
 use serde::Serialize;
-// use serde_json::error::Category;
 use std::{f64::consts::PI, fmt};
 
 #[derive(Clone, Debug, PartialEq)]

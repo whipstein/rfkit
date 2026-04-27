@@ -1,4 +1,4 @@
-use crate::element::{Elem, ElemType, Q};
+use super::*;
 use ndarray::{IntoDimension, prelude::*};
 use num_complex::Complex;
 use rfkit_base::prelude::*;
@@ -230,9 +230,14 @@ impl<T: RealScalar> Elem<T> for Transformer<T> {
     }
 }
 
-#[derive(Clone)]
-pub struct TransformerBuilder<T: RealScalar> {
-    id: String,
+pub type TransformerBuilder<T> = ElementBuilder<T, TransformerSpec, ConcreteElement, 2>;
+pub type TransformerElementBuilder<T> = ElementBuilder<T, TransformerSpec, TopLevelElement, 2>;
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct TransformerSpec;
+
+#[derive(Clone, Debug)]
+pub struct TransformerParams<T: RealScalar> {
     n: Option<T>,
     km: Option<T>,
     m: Option<ScalarUnitValue<T>>,
@@ -240,167 +245,62 @@ pub struct TransformerBuilder<T: RealScalar> {
     l2: Option<ScalarUnitValue<T>>,
     q1: Option<Q<T>>,
     q2: Option<Q<T>>,
-    nodes: Option<[usize; 2]>,
-    z0: Complex<T>,
 }
 
-impl<T: RealScalar> TransformerBuilder<T> {
-    pub fn new() -> Self {
-        TransformerBuilder::default()
+impl<T: RealScalar> Default for TransformerParams<T> {
+    fn default() -> Self {
+        Self {
+            n: None,
+            km: None,
+            m: None,
+            l1: None,
+            l2: None,
+            q1: None,
+            q2: None,
+        }
     }
+}
 
-    pub fn id(mut self, id: &str) -> Self {
-        self.id = id.to_string();
-        self
-    }
+impl<T: RealScalar> ElementSpec<T, 2> for TransformerSpec {
+    type Params = TransformerParams<T>;
+    type Concrete = Transformer<T>;
 
-    pub fn n(mut self, n: T) -> Self {
-        self.n = Some(n);
-        self
-    }
+    const NAME: &'static str = "TransformerBuilder";
+    const DEFAULT_ID: &'static str = "T0";
 
-    pub fn km(mut self, km: T) -> Self {
-        self.km = Some(km);
-        self
-    }
-
-    pub fn m(mut self, ind: &ScalarUnitValue<T>) -> Self {
-        self.m = Some(ind.clone());
-        self
-    }
-
-    pub fn m_val(mut self, ind: T) -> Self {
-        self.m = match self.m {
-            Some(mut x) => {
-                x.set_val(&ind);
-                Some(x)
-            }
-            None => Some(ScalarUnitValue::new(&ind, Scale::Base, Unit::Henry)),
-        };
-        self
-    }
-
-    pub fn m_val_scaled(mut self, ind: T, scale: Scale) -> Self {
-        self.m = match self.m {
-            Some(mut x) => {
-                x.set_scale(scale);
-                x.set_val_scaled(&ind);
-                Some(x)
-            }
-            None => Some(ScalarUnitValue::new_scaled(&ind, scale, Unit::Henry)),
-        };
-        self
-    }
-
-    pub fn l1(mut self, ind: &ScalarUnitValue<T>) -> Self {
-        self.l1 = Some(ind.clone());
-        self
-    }
-
-    pub fn l1_val(mut self, ind: T) -> Self {
-        self.l1 = match self.l1 {
-            Some(mut x) => {
-                x.set_val(&ind);
-                Some(x)
-            }
-            None => Some(ScalarUnitValue::new(&ind, Scale::Base, Unit::Henry)),
-        };
-        self
-    }
-
-    pub fn l1_val_scaled(mut self, ind: T, scale: Scale) -> Self {
-        self.l1 = match self.l1 {
-            Some(mut x) => {
-                x.set_scale(scale);
-                x.set_val_scaled(&ind);
-                Some(x)
-            }
-            None => Some(ScalarUnitValue::new_scaled(&ind, scale, Unit::Henry)),
-        };
-        self
-    }
-
-    pub fn l2(mut self, ind: &ScalarUnitValue<T>) -> Self {
-        self.l2 = Some(ind.clone());
-        self
-    }
-
-    pub fn l2_val(mut self, ind: T) -> Self {
-        self.l2 = match self.l2 {
-            Some(mut x) => {
-                x.set_val(&ind);
-                Some(x)
-            }
-            None => Some(ScalarUnitValue::new(&ind, Scale::Base, Unit::Henry)),
-        };
-        self
-    }
-
-    pub fn l2_val_scaled(mut self, ind: T, scale: Scale) -> Self {
-        self.l2 = match self.l2 {
-            Some(mut x) => {
-                x.set_scale(scale);
-                x.set_val_scaled(&ind);
-                Some(x)
-            }
-            None => Some(ScalarUnitValue::new_scaled(&ind, scale, Unit::Henry)),
-        };
-        self
-    }
-
-    pub fn q1(mut self, q: &Q<T>) -> Self {
-        self.q1 = Some(q.clone());
-        self
-    }
-
-    pub fn q2(mut self, q: &Q<T>) -> Self {
-        self.q2 = Some(q.clone());
-        self
-    }
-
-    pub fn nodes(mut self, nodes: [usize; 2]) -> Self {
-        self.nodes = Some(nodes);
-        self
-    }
-
-    pub fn z0(mut self, z0: Complex<T>) -> Self {
-        self.z0 = z0;
-        self
-    }
-
-    pub fn build(mut self) -> Result<Transformer<T>, String> {
-        let elem = "TransformerBuilder";
-        let l1 = self.l1.ok_or(format!("{elem}: l1 is required"))?;
-        let nodes = self.nodes.ok_or(format!("{elem}: nodes is required"))?;
-        if self.n.is_none() && self.l2.is_none() {
+    fn build_concrete(
+        id: String,
+        mut params: Self::Params,
+        nodes: [usize; 2],
+        z0: Complex<T>,
+    ) -> Result<Self::Concrete, String> {
+        let elem = <Self as ElementSpec<T, 2>>::NAME;
+        let l1 = params.l1.take().ok_or(format!("{elem}: l1 is required"))?;
+        if params.n.is_none() && params.l2.is_none() {
             return Err(format!(
                 "{elem}: Must specify either n or l2 to completely define a Transformer"
             ));
         }
-        if self.km.is_none() && self.m.is_none() {
+        if params.km.is_none() && params.m.is_none() {
             return Err(format!(
                 "{elem}: Must specify either km or m to completely define a Transformer"
             ));
         }
 
-        match (self.n, self.l2) {
-            (Some(n), None) => {
-                let mut l2 = l1.clone();
-                l2.set_val(&(l1.val() / n.powi(2)));
-                self.l2 = Some(l2);
-            }
-            _ => (),
+        if let (Some(n), None) = (params.n, params.l2.as_ref()) {
+            let mut l2 = l1.clone();
+            l2.set_val(&(l1.val() / n.powi(2)));
+            params.l2 = Some(l2);
         }
-        match (self.km, self.m) {
-            (None, Some(m)) => {
-                self.km = Some(m.val() / l1.val());
+        if params.km.is_none() {
+            if let Some(m) = params.m.as_ref() {
+                params.km = Some(m.val() / l1.val());
             }
-            _ => (),
         }
 
-        let km = self.km.unwrap();
-        let l2 = self.l2.unwrap();
-        let m = match self.m {
+        let km = params.km.unwrap();
+        let l2 = params.l2.take().unwrap();
+        let m = match params.m.take() {
             Some(m) => m,
             None => {
                 ScalarUnitValue::new(&(km * (l1.val() * l2.val()).sqrt()), l1.scale(), l1.unit())
@@ -414,32 +314,130 @@ impl<T: RealScalar> TransformerBuilder<T> {
         }
 
         Ok(Transformer::new(
-            self.id.to_owned().as_str(),
+            id.as_str(),
             km,
             l1,
             l2,
-            self.q1,
-            self.q2,
+            params.q1,
+            params.q2,
             nodes,
-            self.z0,
+            z0,
         ))
     }
 }
 
-impl<T: RealScalar> Default for TransformerBuilder<T> {
-    fn default() -> Self {
-        Self {
-            id: "T0".to_string(),
-            n: None,
-            km: None,
-            m: None,
-            l1: None,
-            l2: None,
-            q1: None,
-            q2: None,
-            nodes: None,
-            z0: Complex::new(50.0.into(), T::ZERO),
-        }
+impl<T, M> ElementBuilder<T, TransformerSpec, M, 2>
+where
+    T: RealScalar,
+    M: ElementBuildMode<T, Transformer<T>>,
+{
+    pub fn n(mut self, n: T) -> Self {
+        self.params.n = Some(n);
+        self
+    }
+
+    pub fn km(mut self, km: T) -> Self {
+        self.params.km = Some(km);
+        self
+    }
+
+    pub fn m(mut self, ind: &ScalarUnitValue<T>) -> Self {
+        self.params.m = Some(ind.clone());
+        self
+    }
+
+    pub fn m_val(mut self, ind: T) -> Self {
+        self.params.m = match self.params.m {
+            Some(mut x) => {
+                x.set_val(&ind);
+                Some(x)
+            }
+            None => Some(ScalarUnitValue::new(&ind, Scale::Base, Unit::Henry)),
+        };
+        self
+    }
+
+    pub fn m_val_scaled(mut self, ind: T, scale: Scale) -> Self {
+        self.params.m = match self.params.m {
+            Some(mut x) => {
+                x.set_scale(scale);
+                x.set_val_scaled(&ind);
+                Some(x)
+            }
+            None => Some(ScalarUnitValue::new_scaled(&ind, scale, Unit::Henry)),
+        };
+        self
+    }
+
+    pub fn l1(mut self, ind: &ScalarUnitValue<T>) -> Self {
+        self.params.l1 = Some(ind.clone());
+        self
+    }
+
+    pub fn l1_val(mut self, ind: T) -> Self {
+        self.params.l1 = match self.params.l1 {
+            Some(mut x) => {
+                x.set_val(&ind);
+                Some(x)
+            }
+            None => Some(ScalarUnitValue::new(&ind, Scale::Base, Unit::Henry)),
+        };
+        self
+    }
+
+    pub fn l1_val_scaled(mut self, ind: T, scale: Scale) -> Self {
+        self.params.l1 = match self.params.l1 {
+            Some(mut x) => {
+                x.set_scale(scale);
+                x.set_val_scaled(&ind);
+                Some(x)
+            }
+            None => Some(ScalarUnitValue::new_scaled(&ind, scale, Unit::Henry)),
+        };
+        self
+    }
+
+    pub fn l2(mut self, ind: &ScalarUnitValue<T>) -> Self {
+        self.params.l2 = Some(ind.clone());
+        self
+    }
+
+    pub fn l2_val(mut self, ind: T) -> Self {
+        self.params.l2 = match self.params.l2 {
+            Some(mut x) => {
+                x.set_val(&ind);
+                Some(x)
+            }
+            None => Some(ScalarUnitValue::new(&ind, Scale::Base, Unit::Henry)),
+        };
+        self
+    }
+
+    pub fn l2_val_scaled(mut self, ind: T, scale: Scale) -> Self {
+        self.params.l2 = match self.params.l2 {
+            Some(mut x) => {
+                x.set_scale(scale);
+                x.set_val_scaled(&ind);
+                Some(x)
+            }
+            None => Some(ScalarUnitValue::new_scaled(&ind, scale, Unit::Henry)),
+        };
+        self
+    }
+
+    pub fn q1(mut self, q: &Q<T>) -> Self {
+        self.params.q1 = Some(q.clone());
+        self
+    }
+
+    pub fn q2(mut self, q: &Q<T>) -> Self {
+        self.params.q2 = Some(q.clone());
+        self
+    }
+
+    pub fn z0(mut self, z0: Complex<T>) -> Self {
+        self.z0 = z0;
+        self
     }
 }
 
@@ -564,61 +562,64 @@ impl<T: RealScalar> Elem<T> for IdealTransformer<T> {
     }
 }
 
-#[derive(Clone)]
-pub struct IdealTransformerBuilder<T: RealScalar> {
-    id: String,
+pub type IdealTransformerBuilder<T> = ElementBuilder<T, IdealTransformerSpec, ConcreteElement, 2>;
+pub type IdealTransformerElementBuilder<T> =
+    ElementBuilder<T, IdealTransformerSpec, TopLevelElement, 2>;
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct IdealTransformerSpec;
+
+#[derive(Clone, Debug)]
+pub struct IdealTransformerParams<T: RealScalar> {
     n: Option<T>,
-    nodes: Option<[usize; 2]>,
-    z0: Complex<T>,
 }
 
-impl<T: RealScalar> IdealTransformerBuilder<T> {
-    pub fn new() -> Self {
-        Self::default()
+impl<T: RealScalar> Default for IdealTransformerParams<T> {
+    fn default() -> Self {
+        Self { n: None }
     }
+}
 
-    pub fn id(mut self, id: &str) -> Self {
-        self.id = id.to_string();
-        self
+impl<T: RealScalar> ElementSpec<T, 2> for IdealTransformerSpec {
+    type Params = IdealTransformerParams<T>;
+    type Concrete = IdealTransformer<T>;
+
+    const NAME: &'static str = "IdealTransformerBuilder";
+    const DEFAULT_ID: &'static str = "T0";
+
+    fn build_concrete(
+        id: String,
+        params: Self::Params,
+        nodes: [usize; 2],
+        z0: Complex<T>,
+    ) -> Result<Self::Concrete, String> {
+        let n = params
+            .n
+            .ok_or_else(|| format!("{}: n is required", <Self as ElementSpec<T, 2>>::NAME))?;
+
+        Ok(IdealTransformer {
+            id,
+            n,
+            nodes,
+            c: IdealTransformer::default_c(n),
+            z0,
+        })
     }
+}
 
+impl<T, M> ElementBuilder<T, IdealTransformerSpec, M, 2>
+where
+    T: RealScalar,
+    M: ElementBuildMode<T, IdealTransformer<T>>,
+{
     pub fn n(mut self, n: T) -> Self {
-        self.n = Some(n);
-        self
-    }
-
-    pub fn nodes(mut self, nodes: [usize; 2]) -> Self {
-        self.nodes = Some(nodes);
+        self.params.n = Some(n);
         self
     }
 
     pub fn z0(mut self, z0: Complex<T>) -> Self {
         self.z0 = z0;
         self
-    }
-
-    pub fn build(self) -> Result<IdealTransformer<T>, String> {
-        let elem = "IdealTransformerBuilder";
-        let n = self.n.ok_or(format!("{elem}: n is required"))?;
-        let nodes = self.nodes.ok_or(format!("{elem}: nodes is required"))?;
-        Ok(IdealTransformer {
-            id: self.id,
-            n,
-            nodes,
-            c: IdealTransformer::default_c(n),
-            z0: self.z0,
-        })
-    }
-}
-
-impl<T: RealScalar> Default for IdealTransformerBuilder<T> {
-    fn default() -> Self {
-        Self {
-            id: "T0".to_string(),
-            n: None,
-            nodes: None,
-            z0: Complex::new(50.0.into(), T::ZERO),
-        }
     }
 }
 
@@ -1089,7 +1090,6 @@ mod element_transformer_tests {
 
     mod transformer_comprehensive_tests {
         use super::*;
-        use crate::element::q::{QBuilder, QMode};
 
         // Helper function to create a default frequency for tests
         fn test_freq() -> ArrayUnitValue<f64> {

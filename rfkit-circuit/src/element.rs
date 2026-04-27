@@ -7,7 +7,7 @@ use serde::{
     Serialize,
     ser::{SerializeStruct, Serializer},
 };
-use std::{fmt, str::FromStr};
+use std::{fmt, marker::PhantomData, str::FromStr};
 
 pub mod capacitor;
 pub mod ground;
@@ -23,19 +23,131 @@ pub mod short;
 pub mod transformer;
 
 pub use self::{
-    capacitor::{Capacitor, CapacitorBuilder},
-    ground::Ground,
-    inductor::{Inductor, InductorBuilder},
+    capacitor::{Capacitor, CapacitorBuilder, CapacitorElementBuilder, CapacitorSpec},
+    ground::{Ground, GroundBuilder, GroundElementBuilder, GroundSpec},
+    inductor::{Inductor, InductorBuilder, InductorElementBuilder, InductorSpec},
     // mbend::{Mbend, MbendBuilder},
-    mlef::{Mlef, MlefBuilder},
-    mlin::{Mlin, MlinBuilder},
+    mlef::{Mlef, MlefBuilder, MlefElementBuilder, MlefSpec},
+    mlin::{Mlin, MlinBuilder, MlinElementBuilder, MlinSpec},
     msub::{Msub, MsubBuilder},
-    port::{Port, PortBuilder},
+    port::{Port, PortBuilder, PortElementBuilder, PortSpec},
     q::{Q, QBuilder, QMode},
-    resistor::{Resistor, ResistorBuilder},
-    short::Short,
-    transformer::{IdealTransformer, IdealTransformerBuilder, Transformer, TransformerBuilder},
+    resistor::{Resistor, ResistorBuilder, ResistorElementBuilder, ResistorSpec},
+    short::{Short, ShortBuilder, ShortElementBuilder, ShortSpec},
+    transformer::{
+        IdealTransformer, IdealTransformerBuilder, IdealTransformerElementBuilder,
+        IdealTransformerSpec, Transformer, TransformerBuilder, TransformerElementBuilder,
+        TransformerSpec,
+    },
 };
+
+pub trait ElementSpec<T: RealScalar, const N: usize> {
+    type Params: Default;
+    type Concrete;
+
+    const NAME: &'static str;
+    const DEFAULT_ID: &'static str;
+
+    fn default_z0() -> Complex<T> {
+        Complex::new(50.0.into(), T::ZERO)
+    }
+
+    fn build_concrete(
+        id: String,
+        params: Self::Params,
+        nodes: [usize; N],
+        z0: Complex<T>,
+    ) -> Result<Self::Concrete, String>;
+}
+
+pub trait ElementBuildMode<T: RealScalar, E> {
+    type Output;
+
+    fn finish(element: E) -> Self::Output;
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ConcreteElement;
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct TopLevelElement;
+
+impl<T: RealScalar, E> ElementBuildMode<T, E> for ConcreteElement {
+    type Output = E;
+
+    fn finish(element: E) -> Self::Output {
+        element
+    }
+}
+
+impl<T, E> ElementBuildMode<T, E> for TopLevelElement
+where
+    T: RealScalar,
+    Element<T>: From<E>,
+{
+    type Output = Element<T>;
+
+    fn finish(element: E) -> Self::Output {
+        element.into()
+    }
+}
+
+#[derive(Clone)]
+pub struct ElementBuilder<T, S, M, const N: usize>
+where
+    T: RealScalar,
+    S: ElementSpec<T, N>,
+{
+    pub(crate) id: String,
+    pub(crate) params: S::Params,
+    pub(crate) nodes: Option<[usize; N]>,
+    pub(crate) z0: Complex<T>,
+    _spec: PhantomData<(S, M)>,
+}
+
+impl<T, S, M, const N: usize> ElementBuilder<T, S, M, N>
+where
+    T: RealScalar,
+    S: ElementSpec<T, N>,
+    M: ElementBuildMode<T, S::Concrete>,
+{
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn id(mut self, id: &str) -> Self {
+        self.id = id.to_string();
+        self
+    }
+
+    pub fn nodes(mut self, nodes: [usize; N]) -> Self {
+        self.nodes = Some(nodes);
+        self
+    }
+
+    pub fn build(self) -> Result<M::Output, String> {
+        let nodes = self
+            .nodes
+            .ok_or_else(|| format!("{}: nodes is required", S::NAME))?;
+        S::build_concrete(self.id, self.params, nodes, self.z0).map(M::finish)
+    }
+}
+
+impl<T, S, M, const N: usize> Default for ElementBuilder<T, S, M, N>
+where
+    T: RealScalar,
+    S: ElementSpec<T, N>,
+{
+    fn default() -> Self {
+        Self {
+            id: S::DEFAULT_ID.to_string(),
+            params: S::Params::default(),
+            nodes: None,
+            z0: S::default_z0(),
+            _spec: PhantomData,
+        }
+    }
+}
 
 #[derive(Copy, Clone, Debug, Default, PartialEq, Serialize)]
 pub enum ElemType {
@@ -247,6 +359,54 @@ pub enum Element<T: RealScalar> {
 }
 
 impl<T: RealScalar> Element<T> {
+    pub fn builder<S, const N: usize>() -> ElementBuilder<T, S, TopLevelElement, N>
+    where
+        S: ElementSpec<T, N>,
+        TopLevelElement: ElementBuildMode<T, S::Concrete>,
+    {
+        ElementBuilder::new()
+    }
+
+    pub fn capacitor() -> ElementBuilder<T, CapacitorSpec, TopLevelElement, 2> {
+        ElementBuilder::new()
+    }
+
+    pub fn ground() -> ElementBuilder<T, GroundSpec, TopLevelElement, 1> {
+        ElementBuilder::new()
+    }
+
+    pub fn ideal_transformer() -> ElementBuilder<T, IdealTransformerSpec, TopLevelElement, 2> {
+        ElementBuilder::new()
+    }
+
+    pub fn inductor() -> ElementBuilder<T, InductorSpec, TopLevelElement, 2> {
+        ElementBuilder::new()
+    }
+
+    pub fn mlef() -> ElementBuilder<T, MlefSpec, TopLevelElement, 1> {
+        ElementBuilder::new()
+    }
+
+    pub fn mlin() -> ElementBuilder<T, MlinSpec, TopLevelElement, 2> {
+        ElementBuilder::new()
+    }
+
+    pub fn port() -> ElementBuilder<T, PortSpec, TopLevelElement, 1> {
+        ElementBuilder::new()
+    }
+
+    pub fn resistor() -> ElementBuilder<T, ResistorSpec, TopLevelElement, 2> {
+        ElementBuilder::new()
+    }
+
+    pub fn short() -> ElementBuilder<T, ShortSpec, TopLevelElement, 2> {
+        ElementBuilder::new()
+    }
+
+    pub fn transformer() -> ElementBuilder<T, TransformerSpec, TopLevelElement, 2> {
+        ElementBuilder::new()
+    }
+
     pub fn val(&self) -> T {
         match self {
             Element::Capacitor(elem) => elem.val(),
@@ -276,477 +436,6 @@ impl<T: RealScalar> Serialize for Element<T> {
 //     // variants: [Capacitor, Ground, IdealTransformer, Inductor, Mbend, Mlef, Mlin, Port, Resistor, Short, Transformer]
 //     variants: [Capacitor, Ground, IdealTransformer, Inductor, Mlef, Mlin, Port, Resistor, Short, Transformer]
 // );
-
-// /// Builder design pattern for Element
-// ///
-// /// ## Example
-// /// ```
-// /// use ndarray::prelude::*;
-// /// use rfkit_circuit::prelude::*;
-// ///
-// /// let elem1 = ElementBuilder::new().id("L1").unitval_val_scaled(1.0, Scale::Nano).nodes(vec![1,2]).build();
-// ///
-// /// let elem2 = ElementBuilder::new().id("P1").z(50_f64.into()).nodes(vec![1]).build();
-// /// ```
-// #[derive(Default)]
-// pub struct ElementBuilder<T: RealScalar> {
-//     id: String,
-//     unitval: ScalarUnitValue<T>,
-//     val: T,
-//     n: Option<T>,
-//     km: Option<T>,
-//     m: Option<ScalarUnitValue<T>>,
-//     l1: ScalarUnitValue<T>,
-//     l2: Option<ScalarUnitValue<T>>,
-//     q: Option<Q<T>>,
-//     q1: Option<Q<T>>,
-//     q2: Option<Q<T>>,
-//     width: ScalarUnitValue<T>,
-//     length: ScalarUnitValue<T>,
-//     gamma: Complex<T>,
-//     miter: T,
-//     sub: Msub<T>,
-//     er: T,
-//     tand: T,
-//     height: ScalarUnitValue<T>,
-//     thickness: ScalarUnitValue<T>,
-//     freq: ScalarUnitValue<T>,
-//     z: Complex<T>,
-//     nodes: Vec<usize>,
-//     elemtype: ElemType,
-//     z0: Complex<T>,
-// }
-
-// impl<T: RealScalar> ElementBuilder<T> {
-//     pub fn new() -> Self {
-//         ElementBuilder {
-//             id: "".to_string(),
-//             unitval: ScalarUnitValue::default(),
-//             val: T::ONE,
-//             n: None,
-//             km: None,
-//             m: None,
-//             l1: *ScalarUnitValue::default().set_unit(Unit::Henry),
-//             l2: None,
-//             q: None,
-//             q1: None,
-//             q2: None,
-//             width: *ScalarUnitValue::default().set_unit(Unit::Meter),
-//             length: *ScalarUnitValue::default().set_unit(Unit::Meter),
-//             gamma: Complex::ZERO,
-//             miter: T::ZERO,
-//             sub: Msub::default(),
-//             er: T::ONE,
-//             tand: T::ZERO,
-//             height: *ScalarUnitValue::default().set_unit(Unit::Meter),
-//             thickness: *ScalarUnitValue::default().set_unit(Unit::Meter),
-//             freq: *ScalarUnitValue::default().set_unit(Unit::Hz),
-//             z: Complex::ZERO,
-//             nodes: vec![],
-//             elemtype: ElemType::None,
-//             z0: Complex::new(50.0.into(), T::ZERO),
-//         }
-//     }
-
-//     /// Provide element id
-//     pub fn id(mut self, id: &str) -> Self {
-//         self.id = id.to_string();
-//         self
-//     }
-
-//     /// Provide element type
-//     pub fn elem(mut self, elemtype: ElemType) -> Self {
-//         self.elemtype = elemtype;
-//         self
-//     }
-
-//     /// Provide element value in base unit
-//     pub fn unitval_val(mut self, val: T) -> Self {
-//         self.unitval.set_val(&val);
-//         self
-//     }
-
-//     /// Provide element value in scaled unit
-//     pub fn unitval_val_scaled(mut self, val: T, unit: Scale) -> Self {
-//         self.unitval.set_scale(unit);
-//         self.unitval.set_val_scaled(&val);
-//         self
-//     }
-
-//     /// Provide element UnitValue
-//     pub fn unitval(mut self, val: ScalarUnitValue<T>) -> Self {
-//         self.unitval = val;
-//         self
-//     }
-
-//     /// Provide element value
-//     pub fn val(mut self, val: T) -> Self {
-//         self.val = val;
-//         if self.elemtype == ElemType::IdealTransformer {
-//             self.n = Some(val);
-//         }
-//         self
-//     }
-
-//     /// Provide element N for Transformer
-//     pub fn n(mut self, val: T) -> Self {
-//         self.n = Some(val);
-//         self
-//     }
-
-//     /// Provide element km for Transformer
-//     pub fn km(mut self, km: T) -> Self {
-//         self.km = Some(km);
-//         self
-//     }
-
-//     /// Provide element M for Transformer
-//     pub fn m(mut self, ind: ScalarUnitValue<T>) -> Self {
-//         self.m = Some(ind);
-//         self
-//     }
-
-//     /// Provide element M for Transformer
-//     pub fn m_val(mut self, ind: T) -> Self {
-//         let _ = *self
-//             .m
-//             .get_or_insert(*ScalarUnitValue::default().set_unit(Unit::Henry))
-//             .set_val(&ind);
-//         self
-//     }
-
-//     /// Provide element M for Transformer
-//     pub fn m_val_scaled(mut self, ind: T, scale: Scale) -> Self {
-//         let _ = *self
-//             .m
-//             .get_or_insert(*ScalarUnitValue::default().set_unit(Unit::Henry))
-//             .set_scale(scale);
-//         let _ = *self
-//             .m
-//             .get_or_insert(*ScalarUnitValue::default().set_unit(Unit::Henry))
-//             .set_val_scaled(&ind);
-//         self
-//     }
-
-//     /// Provide element L1 for Transformer
-//     pub fn l1(mut self, ind: ScalarUnitValue<T>) -> Self {
-//         self.l1 = ind;
-//         self
-//     }
-
-//     /// Provide element L1 for Transformer
-//     pub fn l1_val(mut self, ind: T) -> Self {
-//         self.l1.set_val(&ind);
-//         self
-//     }
-
-//     /// Provide element L1 for Transformer
-//     pub fn l1_val_scaled(mut self, ind: T, scale: Scale) -> Self {
-//         self.l1.set_scale(scale);
-//         self.l1.set_val_scaled(&ind);
-//         self
-//     }
-
-//     /// Provide element L2 for Transformer
-//     pub fn l2(mut self, ind: ScalarUnitValue<T>) -> Self {
-//         self.l2 = Some(ind);
-//         self
-//     }
-
-//     /// Provide element L2 for Transformer
-//     pub fn l2_val(mut self, ind: T) -> Self {
-//         let _ = *self
-//             .l2
-//             .get_or_insert(*ScalarUnitValue::default().set_unit(Unit::Henry))
-//             .set_val(&ind);
-//         self
-//     }
-
-//     /// Provide element L2 for Transformer
-//     pub fn l2_val_scaled(mut self, ind: T, scale: Scale) -> Self {
-//         let _ = *self
-//             .l2
-//             .get_or_insert(*ScalarUnitValue::default().set_unit(Unit::Henry))
-//             .set_scale(scale);
-//         let _ = *self
-//             .l2
-//             .get_or_insert(*ScalarUnitValue::default().set_unit(Unit::Henry))
-//             .set_val_scaled(&ind);
-//         self
-//     }
-
-//     /// Provide element Q or both Q1 & Q2 for Transformer
-//     pub fn q(mut self, val: Q<T>) -> Self {
-//         self.q = Some(val.clone());
-//         self.q1 = Some(val.clone());
-//         self.q2 = Some(val);
-//         self
-//     }
-
-//     /// Provide element Q1 for Transformer
-//     pub fn q1(mut self, val: Q<T>) -> Self {
-//         self.q1 = Some(val);
-//         self
-//     }
-
-//     /// Provide element Q1 for Transformer
-//     pub fn q1_val(mut self, q: T) -> Self {
-//         let _ = self.q1.get_or_insert(Q::default()).set_q(q);
-//         if let Some(val) = self.q1.as_mut() {
-//             val.set_fq(&self.freq);
-//         }
-//         self
-//     }
-
-//     /// Provide element Q2 for Transformer
-//     pub fn q2(mut self, val: Q<T>) -> Self {
-//         self.q2 = Some(val);
-//         self
-//     }
-
-//     /// Provide element Q2 for Transformer
-//     pub fn q2_val(mut self, q: T) -> Self {
-//         let _ = self.q2.get_or_insert(Q::default()).set_q(q);
-//         if let Some(val) = self.q2.as_mut() {
-//             val.set_fq(&self.freq);
-//         }
-//         self
-//     }
-
-//     /// Provide scale for element
-//     pub fn scale(mut self, scale: Scale) -> Self {
-//         self.unitval.set_scale(scale);
-//         self
-//     }
-
-//     /// Provide unit for element
-//     pub fn unit(mut self, unit: Unit) -> Self {
-//         self.unitval.set_unit(unit);
-//         self
-//     }
-
-//     /// Provide element width in base unit
-//     pub fn width_val(mut self, val: T) -> Self {
-//         self.width.set_val(&val);
-//         self
-//     }
-
-//     /// Provide element width in scaled unit
-//     pub fn width_scaled(mut self, val: T, unit: Scale) -> Self {
-//         self.width.set_scale(unit);
-//         self.width.set_val_scaled(&val);
-//         self
-//     }
-
-//     /// Provide element width UnitValue
-//     pub fn width(mut self, val: ScalarUnitValue<T>) -> Self {
-//         self.width = val;
-//         self
-//     }
-
-//     /// Provide width scale for element
-//     pub fn width_scale(mut self, scale: Scale) -> Self {
-//         self.width.set_scale(scale);
-//         self
-//     }
-
-//     /// Provide width unit for element
-//     pub fn width_unit(mut self, unit: Unit) -> Self {
-//         self.width.set_unit(unit);
-//         self
-//     }
-
-//     /// Provide element length in base unit
-//     pub fn length_val(mut self, val: T) -> Self {
-//         self.length.set_val(&val);
-//         self
-//     }
-
-//     /// Provide element length in scaled unit
-//     pub fn length_scaled(mut self, val: T, unit: Scale) -> Self {
-//         self.length.set_scale(unit);
-//         self.length.set_val_scaled(&val);
-//         self
-//     }
-
-//     /// Provide element length UnitValue
-//     pub fn length(mut self, val: ScalarUnitValue<T>) -> Self {
-//         self.length = val;
-//         self
-//     }
-
-//     /// Provide length scale for element
-//     pub fn length_scale(mut self, scale: Scale) -> Self {
-//         self.length.set_scale(scale);
-//         self
-//     }
-
-//     /// Provide length unit for element
-//     pub fn length_unit(mut self, unit: Unit) -> Self {
-//         self.length.set_unit(unit);
-//         self
-//     }
-
-//     /// Provide gamma value in line
-//     pub fn gamma(mut self, val: Complex<T>) -> Self {
-//         self.gamma = val;
-//         self
-//     }
-
-//     /// Is bend mitered?
-//     pub fn miter(mut self, miter: T) -> Self {
-//         self.miter = miter;
-//         self
-//     }
-
-//     /// Provide substrate element for element
-//     pub fn sub(mut self, val: &Msub<T>) -> Self {
-//         self.sub = val.clone();
-//         self
-//     }
-
-//     /// Provide er value for substrate
-//     pub fn er(mut self, val: T) -> Self {
-//         self.er = val;
-//         self
-//     }
-
-//     /// Provide er Frequency
-//     pub fn freq(mut self, freq: ScalarUnitValue<T>) -> Self {
-//         self.freq = freq.clone();
-//         if self.q1.is_some() {
-//             if let Some(val) = self.q1.as_mut() {
-//                 val.set_fq(&self.freq);
-//             }
-//         }
-//         if self.q2.is_some() {
-//             if let Some(val) = self.q2.as_mut() {
-//                 val.set_fq(&self.freq);
-//             }
-//         }
-//         self
-//     }
-
-//     /// Provide element value in impedance
-//     pub fn z(mut self, val: Complex<T>) -> Self {
-//         self.z = val;
-//         self
-//     }
-
-//     /// Provide z0 value in impedance
-//     pub fn z0(mut self, val: Complex<T>) -> Self {
-//         self.z0 = val;
-//         self
-//     }
-
-//     /// Provide nodes for element
-//     pub fn nodes(mut self, nodes: Vec<usize>) -> Self {
-//         self.nodes = nodes;
-//         self
-//     }
-
-//     pub fn build(self) -> Result<Element<T>, String> {
-//         let elem = "ElementBuilder";
-//         match self.elemtype {
-//             ElemType::Capacitor => Ok(Element::Capacitor(
-//                 CapacitorBuilder::new()
-//                     .id(self.id.as_str())
-//                     .cap(&self.unitval)
-//                     .nodes(self.nodes.try_into().unwrap())
-//                     .z0(self.z0)
-//                     .build()?,
-//             )),
-//             ElemType::Ground => Ok(Element::Ground(Ground::new())),
-//             ElemType::IdealTransformer => Ok(Element::IdealTransformer(
-//                 IdealTransformerBuilder::new()
-//                     .id(self.id.as_str())
-//                     .n(self.n.unwrap())
-//                     .nodes(self.nodes.try_into().unwrap())
-//                     .z0(self.z0)
-//                     .build()?,
-//             )),
-//             ElemType::Inductor => Ok(Element::Inductor(
-//                 InductorBuilder::new()
-//                     .id(self.id.as_str())
-//                     .ind(&self.unitval)
-//                     .q(self.q)
-//                     .nodes(self.nodes.try_into().unwrap())
-//                     .z0(self.z0)
-//                     .build()?,
-//             )),
-//             // ElemType::Mbend => Ok(Element::Mbend(
-//             //     MbendBuilder::new()
-//             //         .id(self.id.as_str())
-//             //         .width(self.width)
-//             //         .miter(self.miter)
-//             //         .sub(&self.sub)
-//             //         .nodes(self.nodes.try_into().unwrap())
-//             //         .build()?,
-//             // )),
-//             ElemType::Mlef => Ok(Element::Mlef(
-//                 MlefBuilder::new()
-//                     .id(self.id.as_str())
-//                     .width(&self.width)
-//                     .sub(&self.sub)
-//                     .nodes(self.nodes.try_into().unwrap())
-//                     .build()?,
-//             )),
-//             ElemType::Mlin => Ok(Element::Mlin(
-//                 MlinBuilder::new()
-//                     .id(self.id.as_str())
-//                     .width(&self.width)
-//                     .length(&self.length)
-//                     .sub(&self.sub)
-//                     .nodes(self.nodes.try_into().unwrap())
-//                     .build()?,
-//             )),
-//             ElemType::Port => Ok(Element::Port(
-//                 PortBuilder::new()
-//                     .id(self.id.as_str())
-//                     .z(self.z)
-//                     .nodes(self.nodes.try_into().unwrap())
-//                     .build()?,
-//             )),
-//             ElemType::Resistor => Ok(Element::Resistor(
-//                 ResistorBuilder::new()
-//                     .id(self.id.as_str())
-//                     .res(&self.unitval)
-//                     .nodes(self.nodes.try_into().unwrap())
-//                     .z0(self.z0)
-//                     .build()?,
-//             )),
-//             ElemType::Short => Ok(Element::Short(Short::new(
-//                 self.id,
-//                 self.nodes.try_into().unwrap(),
-//                 self.z0,
-//             ))),
-//             ElemType::Transformer => {
-//                 let n = self.n.ok_or(format!("{elem}: n is required"))?;
-//                 let km = self.km.ok_or(format!("{elem}: km is required"))?;
-//                 let m = self.m.ok_or(format!("{elem}: m is required"))?;
-//                 let l2 = self.l2.ok_or(format!("{elem}: l2 is required"))?;
-//                 let q1 = self.q1.ok_or(format!("{elem}: q1 is required"))?;
-//                 let q2 = self.q2.ok_or(format!("{elem}: q2 is required"))?;
-//                 Ok(Element::Transformer(
-//                     TransformerBuilder::new()
-//                         .id(self.id.as_str())
-//                         // .freq(&self.freq)
-//                         .n(n)
-//                         .km(km)
-//                         .m(&m)
-//                         .l1(&self.l1)
-//                         .l2(&l2)
-//                         .q1(&q1)
-//                         .q2(&q2)
-//                         .nodes(self.nodes.try_into().unwrap())
-//                         .z0(self.z0)
-//                         .build()?,
-//                 ))
-//             }
-//             _ => Err("No element".to_string()),
-//         }
-//     }
-// }
 
 /// Calculate exponent in radians for use in exp(-gamma * L) MLIN calculations
 pub fn mlin_exp<T: RealScalar>(len: ScalarUnitValue<T>, gamma: Complex<T>) -> Complex<T> {
@@ -1394,6 +1083,84 @@ mod element_tests {
             assert_eq!(res1.val(), 100.0);
             assert_eq!(res2.val(), 100.0);
             assert_ne!(res1.id(), res2.id());
+        }
+
+        #[test]
+        fn test_top_level_element_builders() {
+            let sub = MsubBuilder::new()
+                .er(4.5)
+                .tand(0.02)
+                .height_val_scaled(1.6, Scale::Milli)
+                .thickness_val_scaled(1.0, Scale::Micro)
+                .build()
+                .unwrap();
+
+            let elements = vec![
+                Element::<f64>::capacitor()
+                    .val_scaled(1.0, Scale::Pico)
+                    .nodes([1, 2])
+                    .build()
+                    .unwrap(),
+                Element::<f64>::resistor()
+                    .val(50.0)
+                    .nodes([1, 2])
+                    .build()
+                    .unwrap(),
+                Element::<f64>::inductor()
+                    .val_scaled(1.0, Scale::Nano)
+                    .nodes([1, 2])
+                    .build()
+                    .unwrap(),
+                Element::<f64>::port()
+                    .z(c64(50.0, 0.0))
+                    .nodes([1])
+                    .build()
+                    .unwrap(),
+                Element::<f64>::ground().nodes([0]).build().unwrap(),
+                Element::<f64>::short().nodes([1, 2]).build().unwrap(),
+                Element::<f64>::ideal_transformer()
+                    .n(2.0)
+                    .nodes([1, 2])
+                    .build()
+                    .unwrap(),
+                Element::<f64>::transformer()
+                    .n(1.0)
+                    .km(0.5)
+                    .l1_val(5e-12)
+                    .nodes([1, 2])
+                    .build()
+                    .unwrap(),
+                Element::<f64>::mlin()
+                    .width_val_scaled(3.0, Scale::Milli)
+                    .length_val_scaled(10.0, Scale::Milli)
+                    .sub(&sub)
+                    .nodes([1, 2])
+                    .build()
+                    .unwrap(),
+                Element::<f64>::mlef()
+                    .width_val_scaled(3.0, Scale::Milli)
+                    .sub(&sub)
+                    .nodes([1])
+                    .build()
+                    .unwrap(),
+            ];
+
+            let elem_types: Vec<ElemType> = elements.iter().map(|elem| elem.elem()).collect();
+            assert_eq!(
+                elem_types,
+                vec![
+                    ElemType::Capacitor,
+                    ElemType::Resistor,
+                    ElemType::Inductor,
+                    ElemType::Port,
+                    ElemType::Ground,
+                    ElemType::Short,
+                    ElemType::IdealTransformer,
+                    ElemType::Transformer,
+                    ElemType::Mlin,
+                    ElemType::Mlef,
+                ]
+            );
         }
     }
 

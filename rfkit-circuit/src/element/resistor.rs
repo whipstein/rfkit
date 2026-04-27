@@ -1,4 +1,4 @@
-use crate::element::{Elem, ElemType, Lumped};
+use super::*;
 use ndarray::{IntoDimension, prelude::*};
 use num_complex::Complex;
 use rfkit_base::prelude::*;
@@ -139,31 +139,62 @@ impl<T: RealScalar> Lumped<T> for Resistor<T> {
     }
 }
 
-#[derive(Clone)]
-pub struct ResistorBuilder<T: RealScalar> {
-    id: String,
+pub type ResistorBuilder<T> = ElementBuilder<T, ResistorSpec, ConcreteElement, 2>;
+pub type ResistorElementBuilder<T> = ElementBuilder<T, ResistorSpec, TopLevelElement, 2>;
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ResistorSpec;
+
+#[derive(Clone, Debug)]
+pub struct ResistorParams<T: RealScalar> {
     res: Option<ScalarUnitValue<T>>,
-    nodes: Option<[usize; 2]>,
-    z0: Complex<T>,
 }
 
-impl<T: RealScalar> ResistorBuilder<T> {
-    pub fn new() -> Self {
-        ResistorBuilder::default()
+impl<T: RealScalar> Default for ResistorParams<T> {
+    fn default() -> Self {
+        Self { res: None }
     }
+}
 
-    pub fn id(mut self, id: &str) -> Self {
-        self.id = id.to_string();
-        self
+impl<T: RealScalar> ElementSpec<T, 2> for ResistorSpec {
+    type Params = ResistorParams<T>;
+    type Concrete = Resistor<T>;
+
+    const NAME: &'static str = "ResistorBuilder";
+    const DEFAULT_ID: &'static str = "R0";
+
+    fn build_concrete(
+        id: String,
+        params: Self::Params,
+        nodes: [usize; 2],
+        z0: Complex<T>,
+    ) -> Result<Self::Concrete, String> {
+        let res = params
+            .res
+            .ok_or_else(|| format!("{}: res is required", <Self as ElementSpec<T, 2>>::NAME))?;
+
+        Ok(Resistor {
+            id,
+            res,
+            nodes,
+            c: Resistor::default_c(),
+            z0,
+        })
     }
+}
 
+impl<T, M> ElementBuilder<T, ResistorSpec, M, 2>
+where
+    T: RealScalar,
+    M: ElementBuildMode<T, Resistor<T>>,
+{
     pub fn res(mut self, res: &ScalarUnitValue<T>) -> Self {
-        self.res = Some(res.clone());
+        self.params.res = Some(res.clone());
         self
     }
 
     pub fn val(mut self, res: T) -> Self {
-        self.res = match self.res {
+        self.params.res = match self.params.res {
             Some(mut x) => {
                 x.set_val(&res);
                 Some(x)
@@ -174,7 +205,7 @@ impl<T: RealScalar> ResistorBuilder<T> {
     }
 
     pub fn val_scaled(mut self, res: T, scale: Scale) -> Self {
-        self.res = match self.res {
+        self.params.res = match self.params.res {
             Some(mut x) => {
                 x.set_scale(scale);
                 x.set_val_scaled(&res);
@@ -185,38 +216,9 @@ impl<T: RealScalar> ResistorBuilder<T> {
         self
     }
 
-    pub fn nodes(mut self, nodes: [usize; 2]) -> Self {
-        self.nodes = Some(nodes);
-        self
-    }
-
     pub fn z0(mut self, z0: Complex<T>) -> Self {
         self.z0 = z0;
         self
-    }
-
-    pub fn build(self) -> Result<Resistor<T>, String> {
-        let elem = "ResistorBuilder";
-        let res = self.res.ok_or(format!("{elem}: res is required"))?;
-        let nodes = self.nodes.ok_or(format!("{elem}: nodes is required"))?;
-        Ok(Resistor {
-            id: self.id,
-            res,
-            nodes,
-            c: Resistor::default_c(),
-            z0: self.z0,
-        })
-    }
-}
-
-impl<T: RealScalar> Default for ResistorBuilder<T> {
-    fn default() -> Self {
-        Self {
-            id: "R0".to_string(),
-            res: None,
-            nodes: None,
-            z0: Complex::new(50.0.into(), T::ZERO),
-        }
     }
 }
 

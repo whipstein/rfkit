@@ -1,4 +1,4 @@
-use crate::element::{Elem, ElemType, Lumped, Q, QMode};
+use super::*;
 use ndarray::{IntoDimension, prelude::*};
 use num_complex::Complex;
 use rfkit_base::prelude::*;
@@ -188,32 +188,64 @@ impl<T: RealScalar> Lumped<T> for Capacitor<T> {
     }
 }
 
-#[derive(Clone)]
-pub struct CapacitorBuilder<T: RealScalar> {
-    id: String,
+pub type CapacitorBuilder<T> = ElementBuilder<T, CapacitorSpec, ConcreteElement, 2>;
+pub type CapacitorElementBuilder<T> = ElementBuilder<T, CapacitorSpec, TopLevelElement, 2>;
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct CapacitorSpec;
+
+#[derive(Clone, Debug)]
+pub struct CapacitorParams<T: RealScalar> {
     cap: Option<ScalarUnitValue<T>>,
     q: Option<Q<T>>,
-    nodes: Option<[usize; 2]>,
-    z0: Complex<T>,
 }
 
-impl<T: RealScalar> CapacitorBuilder<T> {
-    pub fn new() -> Self {
-        CapacitorBuilder::default()
+impl<T: RealScalar> Default for CapacitorParams<T> {
+    fn default() -> Self {
+        Self { cap: None, q: None }
     }
+}
 
-    pub fn id(mut self, id: &str) -> Self {
-        self.id = id.to_string();
-        self
+impl<T: RealScalar> ElementSpec<T, 2> for CapacitorSpec {
+    type Params = CapacitorParams<T>;
+    type Concrete = Capacitor<T>;
+
+    const NAME: &'static str = "CapacitorBuilder";
+    const DEFAULT_ID: &'static str = "C0";
+
+    fn build_concrete(
+        id: String,
+        params: Self::Params,
+        nodes: [usize; 2],
+        z0: Complex<T>,
+    ) -> Result<Self::Concrete, String> {
+        let cap = params
+            .cap
+            .ok_or_else(|| format!("{}: cap is required", <Self as ElementSpec<T, 2>>::NAME))?;
+
+        Ok(Capacitor {
+            id,
+            cap,
+            q: params.q,
+            nodes,
+            c: Capacitor::default_c(),
+            z0,
+        })
     }
+}
 
+impl<T, M> ElementBuilder<T, CapacitorSpec, M, 2>
+where
+    T: RealScalar,
+    M: ElementBuildMode<T, Capacitor<T>>,
+{
     pub fn cap(mut self, cap: &ScalarUnitValue<T>) -> Self {
-        self.cap = Some(cap.clone());
+        self.params.cap = Some(cap.clone());
         self
     }
 
     pub fn val(mut self, cap: T) -> Self {
-        self.cap = match self.cap {
+        self.params.cap = match self.params.cap {
             Some(mut x) => {
                 x.set_val(&cap);
                 Some(x)
@@ -224,7 +256,7 @@ impl<T: RealScalar> CapacitorBuilder<T> {
     }
 
     pub fn val_scaled(mut self, cap: T, scale: Scale) -> Self {
-        self.cap = match self.cap {
+        self.params.cap = match self.params.cap {
             Some(mut x) => {
                 x.set_scale(scale);
                 x.set_val_scaled(&cap);
@@ -236,44 +268,13 @@ impl<T: RealScalar> CapacitorBuilder<T> {
     }
 
     pub fn q(mut self, q: Option<Q<T>>) -> Self {
-        self.q = q;
-        self
-    }
-
-    pub fn nodes(mut self, nodes: [usize; 2]) -> Self {
-        self.nodes = Some(nodes);
+        self.params.q = q;
         self
     }
 
     pub fn z0(mut self, z0: Complex<T>) -> Self {
         self.z0 = z0;
         self
-    }
-
-    pub fn build(self) -> Result<Capacitor<T>, String> {
-        let elem = "CapacitorBuilder";
-        let cap = self.cap.ok_or(format!("{elem}: cap is required"))?;
-        let nodes = self.nodes.ok_or(format!("{elem}: nodes is required"))?;
-        Ok(Capacitor {
-            id: self.id,
-            cap,
-            q: self.q,
-            nodes,
-            c: Capacitor::default_c(),
-            z0: self.z0,
-        })
-    }
-}
-
-impl<T: RealScalar> Default for CapacitorBuilder<T> {
-    fn default() -> Self {
-        Self {
-            id: "C0".to_string(),
-            cap: None,
-            q: None,
-            nodes: None,
-            z0: Complex::new(50.0.into(), T::ZERO),
-        }
     }
 }
 
@@ -339,6 +340,27 @@ mod element_capacitor_tests {
             assert_eq!(cap.id(), "C0");
             assert_eq!(cap.nodes(), vec![1, 2]);
             assert_eq!(cap.unit(), Unit::Farad);
+        }
+
+        #[test]
+        fn test_top_level_element_capacitor_builder() {
+            let elem: crate::element::Element<f64> = crate::element::Element::capacitor()
+                .id("C1")
+                .val_scaled(2.0, Scale::Pico)
+                .nodes([1, 2])
+                .build()
+                .unwrap();
+
+            assert_eq!(elem.elem(), ElemType::Capacitor);
+            assert_eq!(elem.nodes(), vec![1, 2]);
+            match elem {
+                crate::element::Element::Capacitor(cap) => {
+                    assert_eq!(cap.id(), "C1");
+                    assert_eq!(cap.val_scaled(), 2.0);
+                    assert_eq!(cap.scale(), Scale::Pico);
+                }
+                _ => panic!("expected capacitor element"),
+            }
         }
 
         #[test]

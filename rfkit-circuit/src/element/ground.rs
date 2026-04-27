@@ -1,4 +1,4 @@
-use crate::element::{Elem, ElemType, Term};
+use super::*;
 use ndarray::{IntoDimension, prelude::*};
 use num_complex::Complex;
 use rfkit_base::prelude::*;
@@ -15,6 +15,10 @@ pub struct Ground<T: RealScalar> {
 impl<T: RealScalar> Ground<T> {
     pub fn new() -> Ground<T> {
         Ground::default()
+    }
+
+    pub fn builder() -> GroundBuilder<T> {
+        GroundBuilder::new()
     }
 
     pub fn name(&self) -> &String {
@@ -86,6 +90,46 @@ impl<T: RealScalar> Term<T> for Ground<T> {
 
     fn set_val(&mut self, val: Complex<T>) {
         self.z = val;
+    }
+}
+
+pub type GroundBuilder<T> = ElementBuilder<T, GroundSpec, ConcreteElement, 1>;
+pub type GroundElementBuilder<T> = ElementBuilder<T, GroundSpec, TopLevelElement, 1>;
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct GroundSpec;
+
+impl<T: RealScalar> ElementSpec<T, 1> for GroundSpec {
+    type Params = ();
+    type Concrete = Ground<T>;
+
+    const NAME: &'static str = "GroundBuilder";
+    const DEFAULT_ID: &'static str = "gnd";
+
+    fn default_z0() -> Complex<T> {
+        Complex::ZERO
+    }
+
+    fn build_concrete(
+        id: String,
+        _params: Self::Params,
+        nodes: [usize; 1],
+        z0: Complex<T>,
+    ) -> Result<Self::Concrete, String> {
+        Ok(Ground {
+            id,
+            z: Complex::ZERO,
+            node: nodes,
+            c: Ground::default_c(),
+            z0,
+        })
+    }
+}
+
+impl<T: RealScalar, M> ElementBuilder<T, GroundSpec, M, 1> {
+    pub fn z0(mut self, z0: Complex<T>) -> Self {
+        self.z0 = z0;
+        self
     }
 }
 

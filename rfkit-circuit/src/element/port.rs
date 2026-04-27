@@ -1,4 +1,4 @@
-use crate::element::{Elem, ElemType, Term};
+use super::*;
 use ndarray::{IntoDimension, prelude::*};
 use num_complex::Complex;
 use rfkit_base::prelude::*;
@@ -96,40 +96,42 @@ impl<T: RealScalar> Term<T> for Port<T> {
     }
 }
 
-#[derive(Clone)]
-pub struct PortBuilder<T: RealScalar> {
-    id: String,
+pub type PortBuilder<T> = ElementBuilder<T, PortSpec, ConcreteElement, 1>;
+pub type PortElementBuilder<T> = ElementBuilder<T, PortSpec, TopLevelElement, 1>;
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct PortSpec;
+
+#[derive(Clone, Debug)]
+pub struct PortParams<T: RealScalar> {
     z: Option<Complex<T>>,
-    nodes: Option<[usize; 1]>,
-    z0: Complex<T>,
 }
 
-impl<T: RealScalar> PortBuilder<T> {
-    pub fn new() -> Self {
-        PortBuilder::default()
+impl<T: RealScalar> Default for PortParams<T> {
+    fn default() -> Self {
+        Self { z: None }
     }
+}
 
-    pub fn id(mut self, id: &str) -> Self {
-        self.id = id.to_string();
-        self
-    }
+impl<T: RealScalar> ElementSpec<T, 1> for PortSpec {
+    type Params = PortParams<T>;
+    type Concrete = Port<T>;
 
-    pub fn z(mut self, z: Complex<T>) -> Self {
-        self.z = Some(z);
-        self
-    }
+    const NAME: &'static str = "PortBuilder";
+    const DEFAULT_ID: &'static str = "C0";
 
-    pub fn nodes(mut self, node: [usize; 1]) -> Self {
-        self.nodes = Some(node);
-        self
-    }
+    fn build_concrete(
+        id: String,
+        params: Self::Params,
+        nodes: [usize; 1],
+        _z0: Complex<T>,
+    ) -> Result<Self::Concrete, String> {
+        let z = params
+            .z
+            .ok_or_else(|| format!("{}: z is required", <Self as ElementSpec<T, 1>>::NAME))?;
 
-    pub fn build(self) -> Result<Port<T>, String> {
-        let elem = "PortBuilder";
-        let z = self.z.ok_or(format!("{elem}: z is required"))?;
-        let nodes = self.nodes.ok_or(format!("{elem}: nodes is required"))?;
         Ok(Port {
-            id: self.id,
+            id,
             z,
             nodes,
             c: Port::default_c(),
@@ -137,14 +139,14 @@ impl<T: RealScalar> PortBuilder<T> {
     }
 }
 
-impl<T: RealScalar> Default for PortBuilder<T> {
-    fn default() -> Self {
-        Self {
-            id: "C0".to_string(),
-            z: None,
-            nodes: None,
-            z0: Complex::new(50.0.into(), T::ZERO),
-        }
+impl<T, M> ElementBuilder<T, PortSpec, M, 1>
+where
+    T: RealScalar,
+    M: ElementBuildMode<T, Port<T>>,
+{
+    pub fn z(mut self, z: Complex<T>) -> Self {
+        self.params.z = Some(z);
+        self
     }
 }
 

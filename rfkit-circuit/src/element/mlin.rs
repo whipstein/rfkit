@@ -1,7 +1,4 @@
-use crate::{
-    define_mlin_calcs,
-    element::{Distributed, Elem, ElemType, Msub, mlin_exp},
-};
+use super::*;
 use ndarray::{IntoDimension, prelude::*};
 use num_complex::Complex;
 use rfkit_base::prelude::*;
@@ -66,7 +63,7 @@ impl<T: RealScalar> Mlin<T> {
     }
 }
 
-define_mlin_calcs!(Mlin);
+crate::define_mlin_calcs!(Mlin);
 
 impl<T: RealScalar> Default for Mlin<T> {
     fn default() -> Self {
@@ -158,35 +155,74 @@ impl<T: RealScalar> fmt::Display for Mlin<T> {
     }
 }
 
-#[derive(Clone)]
-pub struct MlinBuilder<T: RealScalar> {
-    id: String,
+pub type MlinBuilder<T> = ElementBuilder<T, MlinSpec, ConcreteElement, 2>;
+pub type MlinElementBuilder<T> = ElementBuilder<T, MlinSpec, TopLevelElement, 2>;
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct MlinSpec;
+
+#[derive(Clone, Debug)]
+pub struct MlinParams<T: RealScalar> {
     width: Option<ScalarUnitValue<T>>,
     length: Option<ScalarUnitValue<T>>,
     gamma: Option<Complex<T>>,
     sub: Option<Msub<T>>,
-    nodes: Option<[usize; 2]>,
     z0: Option<T>,
     freq: Option<ScalarUnitValue<T>>,
 }
 
-impl<T: RealScalar> MlinBuilder<T> {
-    pub fn new() -> Self {
-        MlinBuilder::default()
+impl<T: RealScalar> Default for MlinParams<T> {
+    fn default() -> Self {
+        Self {
+            width: None,
+            length: None,
+            gamma: None,
+            sub: None,
+            z0: None,
+            freq: None,
+        }
     }
+}
 
-    pub fn id(mut self, id: &str) -> Self {
-        self.id = id.to_string();
-        self
+impl<T: RealScalar> ElementSpec<T, 2> for MlinSpec {
+    type Params = MlinParams<T>;
+    type Concrete = Mlin<T>;
+
+    const NAME: &'static str = "MlinBuilder";
+    const DEFAULT_ID: &'static str = "ML0";
+
+    fn build_concrete(
+        id: String,
+        params: Self::Params,
+        nodes: [usize; 2],
+        _z0: Complex<T>,
+    ) -> Result<Self::Concrete, String> {
+        let elem = <Self as ElementSpec<T, 2>>::NAME;
+        let length = params.length.ok_or(format!("{elem}: length is required"))?;
+        let sub = params.sub.ok_or(format!("{elem}: sub is required"))?;
+        let width = params.width.ok_or(format!("{elem}: width is required"))?;
+        Ok(Mlin {
+            id,
+            width,
+            length,
+            sub,
+            nodes,
+        })
     }
+}
 
+impl<T, M> ElementBuilder<T, MlinSpec, M, 2>
+where
+    T: RealScalar,
+    M: ElementBuildMode<T, Mlin<T>>,
+{
     pub fn width(mut self, val: &ScalarUnitValue<T>) -> Self {
-        self.width = Some(val.clone());
+        self.params.width = Some(val.clone());
         self
     }
 
     pub fn width_val(mut self, val: T) -> Self {
-        self.width = match self.width {
+        self.params.width = match self.params.width {
             Some(mut x) => {
                 x.set_val(&val);
                 Some(x)
@@ -197,7 +233,7 @@ impl<T: RealScalar> MlinBuilder<T> {
     }
 
     pub fn width_val_scaled(mut self, val: T, scale: Scale) -> Self {
-        self.width = match self.width {
+        self.params.width = match self.params.width {
             Some(mut x) => {
                 x.set_scale(scale);
                 x.set_val_scaled(&val);
@@ -209,7 +245,7 @@ impl<T: RealScalar> MlinBuilder<T> {
     }
 
     pub fn width_scale(mut self, val: Scale) -> Self {
-        self.width = match self.width {
+        self.params.width = match self.params.width {
             Some(mut x) => {
                 x.set_scale(val);
                 Some(x)
@@ -220,7 +256,7 @@ impl<T: RealScalar> MlinBuilder<T> {
     }
 
     pub fn width_unit(mut self, val: Unit) -> Self {
-        self.width = match self.width {
+        self.params.width = match self.params.width {
             Some(mut x) => {
                 x.set_unit(val);
                 Some(x)
@@ -231,12 +267,12 @@ impl<T: RealScalar> MlinBuilder<T> {
     }
 
     pub fn length(mut self, val: &ScalarUnitValue<T>) -> Self {
-        self.length = Some(val.clone());
+        self.params.length = Some(val.clone());
         self
     }
 
     pub fn length_val(mut self, val: T) -> Self {
-        self.length = match self.length {
+        self.params.length = match self.params.length {
             Some(mut x) => {
                 x.set_val(&val);
                 Some(x)
@@ -247,7 +283,7 @@ impl<T: RealScalar> MlinBuilder<T> {
     }
 
     pub fn length_val_scaled(mut self, val: T, scale: Scale) -> Self {
-        self.length = match self.length {
+        self.params.length = match self.params.length {
             Some(mut x) => {
                 x.set_scale(scale);
                 x.set_val_scaled(&val);
@@ -259,7 +295,7 @@ impl<T: RealScalar> MlinBuilder<T> {
     }
 
     pub fn length_scale(mut self, val: Scale) -> Self {
-        self.length = match self.length {
+        self.params.length = match self.params.length {
             Some(mut x) => {
                 x.set_scale(val);
                 Some(x)
@@ -270,7 +306,7 @@ impl<T: RealScalar> MlinBuilder<T> {
     }
 
     pub fn length_unit(mut self, val: Unit) -> Self {
-        self.length = match self.length {
+        self.params.length = match self.params.length {
             Some(mut x) => {
                 x.set_unit(val);
                 Some(x)
@@ -282,131 +318,25 @@ impl<T: RealScalar> MlinBuilder<T> {
 
     /// Provide gamma value in line
     pub fn gamma(mut self, val: Complex<T>) -> Self {
-        self.gamma = Some(val);
+        self.params.gamma = Some(val);
         self
     }
 
     pub fn sub(mut self, val: &Msub<T>) -> Self {
-        self.sub = Some(val.clone());
-        self
-    }
-
-    pub fn nodes(mut self, nodes: [usize; 2]) -> Self {
-        self.nodes = Some(nodes);
+        self.params.sub = Some(val.clone());
         self
     }
 
     pub fn z0(mut self, z0: T, freq: ScalarUnitValue<T>) -> Self {
-        self.z0 = Some(z0);
-        self.freq = Some(freq.clone());
+        self.params.z0 = Some(z0);
+        self.params.freq = Some(freq.clone());
         self
-    }
-
-    pub fn build(self) -> Result<Mlin<T>, String> {
-        let elem = "MlinBuilder";
-        let length = self.length.ok_or(format!("{elem}: length is required"))?;
-        let sub = self.sub.ok_or(format!("{elem}: sub is required"))?;
-        let nodes = self.nodes.ok_or(format!("{elem}: nodes is required"))?;
-        // let l_scale = self.length.unwrap().scale();
-        // let l_unit = self.length.unwrap().unit();
-        // match (self.z0, self.width) {
-        //     (Some(z0_tgt), _) => {
-        //         let freq = self.freq.ok_or("if using z0, freq is required")?;
-        //         let lb: Array1<T> = array![1e-6.into()];
-        //         let ub: Array1<T> = array![10e-6.into()];
-        //         let vals: Array1<T> = array![(ub[0] + lb[0]) / 2.0];
-        //         let scale: Array1<T> = array![1.0 / l_scale.multiplier()];
-        //         let mlin = Mlin {
-        //             id: self.id.clone(),
-        //             width: UnitValueBuilder::new()
-        //                 .val(&vals[0])
-        //                 .scale(l_scale)
-        //                 .unit(l_unit)
-        //                 .build()
-        //                 .unwrap(),
-        //             length: length,
-        //             sub: sub.clone(),
-        //             nodes: nodes,
-        //         };
-
-        //         fn eval_f_mlin<T, U>(
-        //             vals: Array1<T>,
-        //             mut mlin: Mlin<T>,
-        //             z0_tgt: T,
-        //             freq: &U,
-        //         ) -> U::ROutput
-        //         where
-        //             T: RealScalar,
-        //             U: UnitValue<T> + Frequency<T> + MapScalar<T>,
-        //         {
-        //             freq.map_scalar_to_real(|f| {
-        //                 mlin.set_width_val(vals[0]);
-        //                 let z0 = mlin.z0(f);
-        //                 println!(
-        //                     "\n\nz0_tgt = {}\nz0 = {}\nerr = {}\nmlin = {}\n\n",
-        //                     z0_tgt,
-        //                     z0,
-        //                     (z0 - z0_tgt) / z0_tgt,
-        //                     mlin
-        //                 );
-
-        //                 (z0 - z0_tgt) / z0_tgt
-        //             })
-        //         }
-
-        //         Ok(Mlin {
-        //             id: self.id,
-        //             width: UnitValueBuilder::new()
-        //                 .val(test.x()[0])
-        //                 .scale(l_scale)
-        //                 .unit(l_unit)
-        //                 .build()
-        //                 .unwrap(),
-        //             length: length,
-        //             sub: sub,
-        //             nodes: nodes,
-        //         })
-        //     }
-        //     (None, Some(width)) => Ok(Mlin {
-        //         id: self.id,
-        //         width,
-        //         length,
-        //         sub,
-        //         nodes,
-        //     }),
-        //     (None, None) => Err("width or z0 must be specified".to_string()),
-        // }
-
-        let width = self.width.ok_or(format!("{elem}: width is required"))?;
-        Ok(Mlin {
-            id: self.id,
-            width,
-            length,
-            sub,
-            nodes,
-        })
-    }
-}
-
-impl<T: RealScalar> Default for MlinBuilder<T> {
-    fn default() -> Self {
-        Self {
-            id: "ML0".to_string(),
-            width: None,
-            length: None,
-            gamma: None,
-            sub: None,
-            nodes: None,
-            z0: None,
-            freq: None,
-        }
     }
 }
 
 #[cfg(test)]
 mod element_mlin_tests {
     use super::*;
-    use crate::element::msub::MsubBuilder;
     use num_complex::{Complex64, c64};
 
     const DEFAULT_MARGIN: NumMargin<f64> = NumMargin {

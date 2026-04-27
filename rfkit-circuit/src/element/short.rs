@@ -1,4 +1,4 @@
-use crate::element::{Elem, ElemType, Lumped};
+use super::*;
 use ndarray::{IntoDimension, prelude::*};
 use num_complex::Complex;
 use rfkit_base::prelude::*;
@@ -19,6 +19,10 @@ impl<T: RealScalar> Short<T> {
             c: Short::default_c(),
             z0: z0,
         }
+    }
+
+    pub fn builder() -> ShortBuilder<T> {
+        ShortBuilder::new()
     }
 
     pub fn name(&self) -> &String {
@@ -115,5 +119,40 @@ impl<T: RealScalar> Lumped<T> for Short<T> {
 
     fn set_scale(&mut self, _scale: Scale) {
         ();
+    }
+}
+
+pub type ShortBuilder<T> = ElementBuilder<T, ShortSpec, ConcreteElement, 2>;
+pub type ShortElementBuilder<T> = ElementBuilder<T, ShortSpec, TopLevelElement, 2>;
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ShortSpec;
+
+impl<T: RealScalar> ElementSpec<T, 2> for ShortSpec {
+    type Params = ();
+    type Concrete = Short<T>;
+
+    const NAME: &'static str = "ShortBuilder";
+    const DEFAULT_ID: &'static str = "S0";
+
+    fn build_concrete(
+        id: String,
+        _params: Self::Params,
+        nodes: [usize; 2],
+        z0: Complex<T>,
+    ) -> Result<Self::Concrete, String> {
+        Ok(Short {
+            id,
+            nodes,
+            c: Short::default_c(),
+            z0,
+        })
+    }
+}
+
+impl<T: RealScalar, M> ElementBuilder<T, ShortSpec, M, 2> {
+    pub fn z0(mut self, z0: Complex<T>) -> Self {
+        self.z0 = z0;
+        self
     }
 }

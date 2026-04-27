@@ -1,7 +1,4 @@
-use crate::{
-    define_mlin_calcs,
-    element::{Distributed, Elem, ElemType, Msub},
-};
+use super::*;
 use ndarray::{IntoDimension, prelude::*};
 use num_complex::{Complex, ComplexFloat};
 use rfkit_base::prelude::*;
@@ -63,7 +60,7 @@ impl<T: RealScalar> Mlef<T> {
     }
 }
 
-define_mlin_calcs!(Mlef);
+crate::define_mlin_calcs!(Mlef);
 
 impl<T: RealScalar> Default for Mlef<T> {
     fn default() -> Self {
@@ -145,31 +142,68 @@ impl<T: RealScalar> Distributed<T> for Mlef<T> {
     }
 }
 
-#[derive(Clone)]
-pub struct MlefBuilder<T: RealScalar> {
-    id: String,
+pub type MlefBuilder<T> = ElementBuilder<T, MlefSpec, ConcreteElement, 1>;
+pub type MlefElementBuilder<T> = ElementBuilder<T, MlefSpec, TopLevelElement, 1>;
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct MlefSpec;
+
+#[derive(Clone, Debug)]
+pub struct MlefParams<T: RealScalar> {
     width: Option<ScalarUnitValue<T>>,
     sub: Option<Msub<T>>,
-    nodes: Option<[usize; 1]>,
 }
 
-impl<T: RealScalar> MlefBuilder<T> {
-    pub fn new() -> Self {
-        MlefBuilder::default()
+impl<T: RealScalar> Default for MlefParams<T> {
+    fn default() -> Self {
+        Self {
+            width: None,
+            sub: None,
+        }
     }
+}
 
-    pub fn id(mut self, id: &str) -> Self {
-        self.id = id.to_string();
-        self
+impl<T: RealScalar> ElementSpec<T, 1> for MlefSpec {
+    type Params = MlefParams<T>;
+    type Concrete = Mlef<T>;
+
+    const NAME: &'static str = "MlefBuilder";
+    const DEFAULT_ID: &'static str = "ML0";
+
+    fn build_concrete(
+        id: String,
+        params: Self::Params,
+        nodes: [usize; 1],
+        _z0: Complex<T>,
+    ) -> Result<Self::Concrete, String> {
+        let width = params
+            .width
+            .ok_or_else(|| format!("{}: width is required", <Self as ElementSpec<T, 1>>::NAME))?;
+        let sub = params
+            .sub
+            .ok_or_else(|| format!("{}: sub is required", <Self as ElementSpec<T, 1>>::NAME))?;
+
+        Ok(Mlef {
+            id,
+            width,
+            sub,
+            nodes,
+        })
     }
+}
 
+impl<T, M> ElementBuilder<T, MlefSpec, M, 1>
+where
+    T: RealScalar,
+    M: ElementBuildMode<T, Mlef<T>>,
+{
     pub fn width(mut self, val: &ScalarUnitValue<T>) -> Self {
-        self.width = Some(val.clone());
+        self.params.width = Some(val.clone());
         self
     }
 
     pub fn width_val(mut self, val: T) -> Self {
-        self.width = match self.width {
+        self.params.width = match self.params.width {
             Some(mut x) => {
                 x.set_val(&val);
                 Some(x)
@@ -180,7 +214,7 @@ impl<T: RealScalar> MlefBuilder<T> {
     }
 
     pub fn width_val_scaled(mut self, val: T, scale: Scale) -> Self {
-        self.width = match self.width {
+        self.params.width = match self.params.width {
             Some(mut x) => {
                 x.set_scale(scale);
                 x.set_val_scaled(&val);
@@ -192,7 +226,7 @@ impl<T: RealScalar> MlefBuilder<T> {
     }
 
     pub fn width_scale(mut self, val: Scale) -> Self {
-        self.width = match self.width {
+        self.params.width = match self.params.width {
             Some(mut x) => {
                 x.set_scale(val);
                 Some(x)
@@ -203,7 +237,7 @@ impl<T: RealScalar> MlefBuilder<T> {
     }
 
     pub fn width_unit(mut self, val: Unit) -> Self {
-        self.width = match self.width {
+        self.params.width = match self.params.width {
             Some(mut x) => {
                 x.set_unit(val);
                 Some(x)
@@ -214,44 +248,14 @@ impl<T: RealScalar> MlefBuilder<T> {
     }
 
     pub fn sub(mut self, val: &Msub<T>) -> Self {
-        self.sub = Some(val.clone());
+        self.params.sub = Some(val.clone());
         self
-    }
-
-    pub fn nodes(mut self, nodes: [usize; 1]) -> Self {
-        self.nodes = Some(nodes);
-        self
-    }
-
-    pub fn build(self) -> Result<Mlef<T>, String> {
-        let elem = "MlefBuilder";
-        let width = self.width.ok_or(format!("{elem}: width is required"))?;
-        let sub = self.sub.ok_or(format!("{elem}: sub is required"))?;
-        let nodes = self.nodes.ok_or(format!("{elem}: nodes is required"))?;
-        Ok(Mlef {
-            id: self.id,
-            width,
-            sub,
-            nodes,
-        })
-    }
-}
-
-impl<T: RealScalar> Default for MlefBuilder<T> {
-    fn default() -> Self {
-        Self {
-            id: "ML0".to_string(),
-            width: None,
-            sub: None,
-            nodes: None,
-        }
     }
 }
 
 #[cfg(test)]
 mod element_mlef_tests {
     use super::*;
-    use crate::element::msub::MsubBuilder;
 
     const DEFAULT_MARGIN: NumMargin<f64> = NumMargin {
         epsilon: 1e-10,

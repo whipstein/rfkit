@@ -13,8 +13,13 @@ pub use crate::circuit::Circuit;
 
 #[doc(no_inline)]
 pub use crate::element::{
-    Capacitor, CapacitorBuilder, Distributed, Elem, ElemType, Element, Ground, IdealTransformer,
-    IdealTransformerBuilder, Inductor, InductorBuilder, Mlef, MlefBuilder, Mlin, MlinBuilder, Msub,
-    MsubBuilder, Port, PortBuilder, Q, QBuilder, QMode, Resistor, ResistorBuilder, Short,
-    Transformer, TransformerBuilder,
+    Capacitor, CapacitorBuilder, CapacitorElementBuilder, CapacitorSpec, ConcreteElement,
+    Distributed, Elem, ElemType, Element, ElementBuildMode, ElementBuilder, ElementSpec, Ground,
+    GroundBuilder, GroundElementBuilder, GroundSpec, IdealTransformer, IdealTransformerBuilder,
+    IdealTransformerElementBuilder, IdealTransformerSpec, Inductor, InductorBuilder,
+    InductorElementBuilder, InductorSpec, Mlef, MlefBuilder, MlefElementBuilder, MlefSpec, Mlin,
+    MlinBuilder, MlinElementBuilder, MlinSpec, Msub, MsubBuilder, Port, PortBuilder,
+    PortElementBuilder, PortSpec, Q, QBuilder, QMode, Resistor, ResistorBuilder,
+    ResistorElementBuilder, ResistorSpec, Short, ShortBuilder, ShortElementBuilder, ShortSpec,
+    TopLevelElement, Transformer, TransformerBuilder, TransformerElementBuilder, TransformerSpec,
 };
